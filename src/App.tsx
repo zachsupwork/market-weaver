@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import Index from "./pages/Index";
 import MarketDetail from "./pages/MarketDetail";
 import Admin from "./pages/Admin";
+import PolymarketSettings from "./pages/PolymarketSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/market/:slug" element={<MarketDetail />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/settings/polymarket" element={<PolymarketSettings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, BarChart3, Settings } from 'lucide-react';
+import { Activity, BarChart3, Settings, Key } from 'lucide-react';
 
 export function AppHeader() {
   return (
@@ -27,6 +27,13 @@ export function AppHeader() {
           >
             <Settings className="h-4 w-4 inline mr-1.5" />
             Admin
+          </Link>
+          <Link
+            to="/settings/polymarket"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+          >
+            <Key className="h-4 w-4 inline mr-1.5" />
+            API Keys
           </Link>
         </nav>
       </div>
