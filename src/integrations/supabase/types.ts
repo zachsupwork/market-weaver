@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      polymarket_secrets: {
+        Row: {
+          auth_tag: string
+          created_at: string
+          id: string
+          iv: string
+          name: string
+          updated_at: string
+          value_encrypted: string
+        }
+        Insert: {
+          auth_tag: string
+          created_at?: string
+          id?: string
+          iv: string
+          name: string
+          updated_at?: string
+          value_encrypted: string
+        }
+        Update: {
+          auth_tag?: string
+          created_at?: string
+          id?: string
+          iv?: string
+          name?: string
+          updated_at?: string
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
