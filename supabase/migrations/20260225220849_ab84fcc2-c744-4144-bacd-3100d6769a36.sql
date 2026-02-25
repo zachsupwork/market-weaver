@@ -1,0 +1,1 @@
+ALTER TABLE public.polymarket_secrets ADD CONSTRAINT polymarket_secrets_name_unique UNIQUE (name);

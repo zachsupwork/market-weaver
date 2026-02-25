@@ -1,8 +1,17 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Activity, BarChart3, Settings, Key } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Activity, BarChart3, Settings, Key, Wallet, Radio } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const navItems = [
+  { to: "/", icon: BarChart3, label: "Markets" },
+  { to: "/live", icon: Radio, label: "Live" },
+  { to: "/portfolio", icon: Wallet, label: "Portfolio" },
+  { to: "/settings/polymarket", icon: Key, label: "API Keys" },
+];
 
 export function AppHeader() {
+  const location = useLocation();
+
   return (
     <header className="sticky top-0 z-50 glass border-b border-border">
       <div className="container flex h-14 items-center justify-between">
@@ -14,27 +23,21 @@ export function AppHeader() {
         </Link>
 
         <nav className="flex items-center gap-1">
-          <Link
-            to="/"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
-          >
-            <BarChart3 className="h-4 w-4 inline mr-1.5" />
-            Markets
-          </Link>
-          <Link
-            to="/admin"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
-          >
-            <Settings className="h-4 w-4 inline mr-1.5" />
-            Admin
-          </Link>
-          <Link
-            to="/settings/polymarket"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
-          >
-            <Key className="h-4 w-4 inline mr-1.5" />
-            API Keys
-          </Link>
+          {navItems.map(({ to, icon: Icon, label }) => (
+            <Link
+              key={to}
+              to={to}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                location.pathname === to
+                  ? "text-foreground bg-accent"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+            >
+              <Icon className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden sm:inline">{label}</span>
+            </Link>
+          ))}
         </nav>
       </div>
     </header>
