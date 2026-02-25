@@ -47,15 +47,28 @@ serve(async (req) => {
     );
     const creds = JSON.parse(credsJson);
 
-    // Test auth against Polymarket CLOB API
+    // Test auth against Polymarket CLOB API using the /auth/api-keys endpoint
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     
     try {
-      const testResponse = await fetch(`${clobHost}/auth/api-key`, {
+      // First verify CLOB host is reachable via public endpoint
+      const timeResponse = await fetch(`${clobHost}/time`);
+      if (!timeResponse.ok) {
+        return new Response(
+          JSON.stringify({ ok: false, error: `CLOB API unreachable (status ${timeResponse.status})` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Now test authenticated endpoint - derive API keys listing
+      const testResponse = await fetch(`${clobHost}/auth/api-keys`, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${creds.apiKey}`,
-          "Content-Type": "application/json",
+          "POLY_ADDRESS": creds.apiKey,
+          "POLY_SIGNATURE": creds.secret,
+          "POLY_TIMESTAMP": Math.floor(Date.now() / 1000).toString(),
+          "POLY_API_KEY": creds.apiKey,
+          "POLY_PASSPHRASE": creds.passphrase,
         },
       });
 
