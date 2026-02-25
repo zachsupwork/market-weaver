@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,9 @@ export default function PolymarketSettings() {
   const [deriving, setDeriving] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; placeholder?: boolean } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importForm, setImportForm] = useState({ apiKey: "", secret: "", passphrase: "", address: "" });
 
   const checkHealth = useCallback(async () => {
     setBackendStatus("loading");
@@ -107,11 +110,35 @@ export default function PolymarketSettings() {
         method: "POST",
       });
       if (error) throw error;
-      setTestResult({ ok: data?.ok ?? false, error: data?.error });
+      setTestResult({ ok: data?.ok ?? false, error: data?.error, placeholder: data?.placeholder });
     } catch (err: any) {
       setTestResult({ ok: false, error: err.message });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const importCreds = async () => {
+    if (!importForm.apiKey || !importForm.secret || !importForm.passphrase) {
+      toast({ title: "Missing fields", description: "API Key, Secret, and Passphrase are required.", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("polymarket-import-creds", {
+        method: "POST",
+        body: importForm,
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Import failed");
+      toast({ title: "Credentials Imported", description: "Real credentials stored successfully." });
+      setImportForm({ apiKey: "", secret: "", passphrase: "", address: "" });
+      setTestResult(null);
+      await checkCreds();
+    } catch (err: any) {
+      toast({ title: "Import Error", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -257,11 +284,59 @@ export default function PolymarketSettings() {
             {testing ? "Testing..." : "Test Auth"}
           </Button>
           {testResult && (
-            <div className={`flex items-center gap-2 text-sm ${testResult.ok ? "text-primary" : "text-destructive"}`}>
-              {testResult.ok ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-              {testResult.ok ? "Authentication successful" : testResult.error || "Authentication failed"}
+            <div className={`flex items-start gap-2 text-sm ${testResult.ok ? "text-primary" : "text-destructive"}`}>
+              {testResult.ok ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <XCircle className="h-4 w-4 mt-0.5" />}
+              <span>{testResult.ok ? "Authentication successful" : testResult.error || "Authentication failed"}</span>
             </div>
           )}
+          {testResult?.placeholder && (
+            <p className="text-xs text-muted-foreground mt-2">
+              The "Generate" button creates placeholder credentials for testing the storage flow.
+              To authenticate with Polymarket, import real credentials below or use the standalone API CLI.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Import Real Credentials */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Key className="h-4 w-4" /> Import Real Credentials
+          </CardTitle>
+          <CardDescription>
+            Paste real Polymarket CLOB API credentials derived externally (via L1 wallet signature).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2">
+            <Input
+              placeholder="API Key"
+              value={importForm.apiKey}
+              onChange={(e) => setImportForm(f => ({ ...f, apiKey: e.target.value }))}
+            />
+            <Input
+              placeholder="Secret (base64)"
+              type="password"
+              value={importForm.secret}
+              onChange={(e) => setImportForm(f => ({ ...f, secret: e.target.value }))}
+            />
+            <Input
+              placeholder="Passphrase"
+              type="password"
+              value={importForm.passphrase}
+              onChange={(e) => setImportForm(f => ({ ...f, passphrase: e.target.value }))}
+            />
+            <Input
+              placeholder="Wallet address (optional)"
+              value={importForm.address}
+              onChange={(e) => setImportForm(f => ({ ...f, address: e.target.value }))}
+            />
+          </div>
+          <Button onClick={importCreds} disabled={importing}>
+            {importing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Key className="h-4 w-4 mr-2" />}
+            {importing ? "Importing..." : "Import Credentials"}
+          </Button>
         </CardContent>
       </Card>
     </div>

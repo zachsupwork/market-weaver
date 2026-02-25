@@ -8,14 +8,35 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-token",
 };
 
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSign(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    base64ToBytes(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Edge functions are protected by Supabase infrastructure
-
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
       return new Response(
@@ -38,54 +59,76 @@ serve(async (req) => {
       );
     }
 
-    // Decrypt credentials
-    const credsJson = await decrypt(
-      data.value_encrypted,
-      data.iv,
-      data.auth_tag,
-      masterKey
-    );
+    const credsJson = await decrypt(data.value_encrypted, data.iv, data.auth_tag, masterKey);
     const creds = JSON.parse(credsJson);
 
-    // Test auth against Polymarket CLOB API using the /auth/api-keys endpoint
-    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
-    
-    try {
-      // First verify CLOB host is reachable via public endpoint
-      const timeResponse = await fetch(`${clobHost}/time`);
-      if (!timeResponse.ok) {
-        return new Response(
-          JSON.stringify({ ok: false, error: `CLOB API unreachable (status ${timeResponse.status})` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Now test authenticated endpoint - derive API keys listing
-      const testResponse = await fetch(`${clobHost}/auth/api-keys`, {
-        method: "GET",
-        headers: {
-          "POLY_ADDRESS": creds.apiKey,
-          "POLY_SIGNATURE": creds.secret,
-          "POLY_TIMESTAMP": Math.floor(Date.now() / 1000).toString(),
-          "POLY_API_KEY": creds.apiKey,
-          "POLY_PASSPHRASE": creds.passphrase,
-        },
-      });
-
-      if (testResponse.ok) {
-        return new Response(
-          JSON.stringify({ ok: true, message: "Authentication successful" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      } else {
-        return new Response(
-          JSON.stringify({ ok: false, error: `CLOB API returned ${testResponse.status}` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } catch (fetchErr) {
+    // Detect mock/placeholder credentials
+    if (creds.apiKey?.startsWith("pm_") || creds.note?.includes("edge function")) {
       return new Response(
-        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${fetchErr.message}` }),
+        JSON.stringify({
+          ok: false,
+          error: "Stored credentials are placeholders. Use the standalone API CLI (npm run polymarket:derive-cloud) to generate real L1-signed credentials, or import them manually.",
+          placeholder: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Test against real Polymarket CLOB API
+    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
+
+    // 1. Check reachability
+    try {
+      const timeRes = await fetch(`${clobHost}/time`);
+      if (!timeRes.ok) {
+        return new Response(
+          JSON.stringify({ ok: false, error: `CLOB API unreachable (${timeRes.status})` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${e.message}` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 2. Authenticated request with HMAC signing
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const method = "GET";
+    const path = "/auth/api-keys";
+    const signMessage = timestamp + method + path;
+
+    let signature: string;
+    try {
+      signature = await hmacSign(creds.secret, signMessage);
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `Failed to compute HMAC signature. Credentials may be malformed: ${e.message}` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const testRes = await fetch(`${clobHost}${path}`, {
+      method,
+      headers: {
+        "POLY_ADDRESS": creds.address || "",
+        "POLY_SIGNATURE": signature,
+        "POLY_TIMESTAMP": timestamp,
+        "POLY_API_KEY": creds.apiKey,
+        "POLY_PASSPHRASE": creds.passphrase,
+      },
+    });
+
+    if (testRes.ok) {
+      return new Response(
+        JSON.stringify({ ok: true, message: "Authentication successful" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else {
+      const body = await testRes.text();
+      return new Response(
+        JSON.stringify({ ok: false, error: `CLOB API returned ${testRes.status}: ${body.substring(0, 200)}` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
