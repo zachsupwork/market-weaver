@@ -22,8 +22,12 @@ serve(async (req) => {
     const tag = url.searchParams.get("tag");
     const text = url.searchParams.get("text");
 
+    const conditionId = url.searchParams.get("condition_id");
+
     let endpoint: string;
-    if (slug) {
+    if (conditionId) {
+      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=1`;
+    } else if (slug) {
       endpoint = `${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
     } else {
       const qs = new URLSearchParams();

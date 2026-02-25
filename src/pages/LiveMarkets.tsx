@@ -140,6 +140,11 @@ const LiveMarkets = () => {
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((market) => {
+                const marketId = market.condition_id || market.id || market.slug;
+                if (!marketId) {
+                  if (import.meta.env.DEV) console.warn("Market missing ID:", market.question);
+                  return null;
+                }
                 const prices = market.outcome_prices ? JSON.parse(market.outcome_prices) : [];
                 const outcomes = market.outcomes ? JSON.parse(market.outcomes) : [];
                 const yesPrice = prices[0] ? parseFloat(prices[0]) : null;
@@ -147,8 +152,8 @@ const LiveMarkets = () => {
 
                 return (
                   <Link
-                    key={market.condition_id}
-                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
+                    key={marketId}
+                    to={`/trade/${encodeURIComponent(marketId)}`}
                     className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary animate-slide-in"
                   >
                     <div className="flex items-start gap-3 mb-3">

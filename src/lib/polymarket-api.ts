@@ -106,6 +106,15 @@ export async function fetchMarketBySlug(slug: string): Promise<PolymarketMarket 
   return Array.isArray(data) ? data[0] ?? null : data;
 }
 
+export async function fetchMarketByConditionId(conditionId: string): Promise<PolymarketMarket | null> {
+  const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
+    headers: { "apikey": ANON_KEY },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data) ? data[0] ?? null : data;
+}
+
 export async function fetchOrderbook(tokenId: string): Promise<Orderbook | null> {
   const res = await fetch(`${fnUrl("polymarket-proxy-orderbook")}?token_id=${encodeURIComponent(tokenId)}`, {
     headers: { "apikey": ANON_KEY },
