@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMarketBySlug, type PolymarketMarket } from "@/lib/polymarket-api";
+import { fetchMarketByConditionId, type PolymarketMarket } from "@/lib/polymarket-api";
 import { OrderbookView } from "@/components/trading/OrderbookView";
 import { OrderTicket } from "@/components/trading/OrderTicket";
 import { ArrowLeft, BarChart3, Droplets, Calendar, Loader2, ExternalLink } from "lucide-react";
@@ -20,14 +20,7 @@ const Trade = () => {
   // Fetch market details. We use condition_id to query gamma API
   const { data: market, isLoading } = useQuery({
     queryKey: ["trade-market", conditionId],
-    queryFn: async (): Promise<PolymarketMarket | null> => {
-      // Try fetching by condition_id as slug
-      const result = await fetchMarketBySlug(conditionId || "");
-      if (result && (result.condition_id === conditionId || result.market_slug === conditionId)) {
-        return result;
-      }
-      return result;
-    },
+    queryFn: () => fetchMarketByConditionId(conditionId!),
     enabled: !!conditionId,
     staleTime: 15_000,
   });
@@ -43,7 +36,9 @@ const Trade = () => {
   if (!market) {
     return (
       <div className="container py-16 text-center">
-        <p className="text-muted-foreground">Market not found</p>
+        <p className="text-muted-foreground">
+          Market not found{conditionId ? ` (ID: ${conditionId.slice(0, 12)}…)` : ""}
+        </p>
         <Link to="/live" className="text-primary text-sm mt-2 inline-block hover:underline">
           ← Back to live markets
         </Link>
