@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "polymarket:derive": "tsx src/cli/derive.ts",
     "polymarket:derive-cloud": "tsx src/cli/derive-to-cloud.ts",
-    "polymarket:test": "tsx src/cli/test-auth.ts"
+    "polymarket:test": "tsx src/cli/test-auth.ts",
+    "polymarket:smoke": "tsx src/cli/smoke-test.ts"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.10.0",

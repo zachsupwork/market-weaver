@@ -55,52 +55,58 @@ Read more: [Setting up a custom domain](https://docs.lovable.dev/features/custom
 
 ---
 
-## Fixing Polymarket 401 / Placeholder Credentials
+## Polymarket Client Setup
 
-### The Problem
+PolyView is a rebranded Polymarket client that trades via the CLOB API using server-side credentials.
 
-The "Generate Credentials" button in the UI creates **placeholder** (fake) credentials to test the encryption/storage pipeline. These will always return a `401 Unauthorized` when tested against the Polymarket CLOB API.
+### Architecture
 
-### Solution: Get Real Credentials
+- **Frontend** fetches public market data directly from Polymarket Gamma API (proxied through backend functions for CORS)
+- **Trading operations** (place/cancel orders, positions) go through server-side functions that decrypt stored credentials and sign requests with HMAC-SHA256
+- **Private keys never leave the server** — all signing happens in edge functions or `apps/api`
 
-Real Polymarket CLOB API credentials require an **L1 wallet signature** using `ethers@5` and your `PM_PRIVATE_KEY`. There are three ways to obtain them:
+### Required Secrets
 
-#### Option 1: GitHub Actions (Recommended — no local setup)
+| Secret | Where | Description |
+|---|---|---|
+| `PM_PRIVATE_KEY` | GitHub + Cloud | Your Polygon wallet private key |
+| `MASTER_KEY` | GitHub + Cloud | AES-256-GCM encryption key (32+ chars) |
+| `SUPABASE_URL` | GitHub | Backend project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | GitHub | Service role key for DB writes |
+| `CHAIN_ID` | Optional | Default: `137` (Polygon mainnet) |
+| `CLOB_HOST` | Optional | Default: `https://clob.polymarket.com` |
+| `POLY_BUILDER_API_KEY` | Optional | Builder key for gasless tx + attribution |
+| `POLY_BUILDER_SECRET` | Optional | Builder secret |
+| `POLY_BUILDER_PASSPHRASE` | Optional | Builder passphrase |
 
-1. Add these **GitHub Secrets** to your repository:
-   | Secret | Description |
-   |---|---|
-   | `PM_PRIVATE_KEY` | Your Polymarket wallet private key |
-   | `MASTER_KEY` | AES-256-GCM encryption key (must match your backend secret) |
-   | `SUPABASE_URL` | Your Lovable Cloud / Supabase project URL |
-   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key for database writes |
-   | `CHAIN_ID` | (optional) Default: `137` (Polygon) |
-   | `CLOB_HOST` | (optional) Default: `https://clob.polymarket.com` |
+### Generating Real Credentials
 
-2. Go to **Actions** → **"Derive Polymarket API Credentials"** → **Run workflow**
+#### Option 1: GitHub Actions (Recommended)
+1. Add GitHub Secrets listed above
+2. Go to **Actions → "Derive Polymarket API Credentials" → Run workflow**
+3. The smoke test job verifies credentials work after derivation
 
-3. The workflow will derive real credentials, encrypt them, and store them in the database.
-
-4. Go to **Settings → Polymarket** in the UI and click **Test Auth** to verify.
-
-#### Option 2: Run CLI Locally
-
+#### Option 2: CLI
 ```bash
-cd apps/api
-cp .env.example .env
-# Fill in PM_PRIVATE_KEY, MASTER_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-npm install
+cd apps/api && npm install
+cp .env.example .env  # fill in values
 npm run polymarket:derive-cloud
+npm run polymarket:smoke
 ```
 
-#### Option 3: Import Manually
+#### Option 3: Manual Import
+Use the **Import Real Credentials** form in Settings → Polymarket
 
-If you've already derived credentials externally:
+### Running Locally
 
-1. Go to **Settings → Polymarket** in the UI
-2. Paste your `apiKey`, `secret`, `passphrase`, and `address` into the **Import Real Credentials** form
-3. Click **Import Credentials**
+```bash
+# Frontend
+npm install && npm run dev
 
-### Verifying
+# API server (for order placement)
+cd apps/api && npm install && npm run dev
+```
 
-After storing real credentials via any method, click **Test Auth**. It performs an HMAC-SHA256 signed request to the Polymarket CLOB API. A green success message confirms your credentials are working.
+### Fixing 401 Errors
+
+Placeholder credentials (generated via the UI "Generate Placeholder" button) are intentionally fake and will always return 401. Use one of the three methods above to store real credentials, then click **Test Auth** to verify.
