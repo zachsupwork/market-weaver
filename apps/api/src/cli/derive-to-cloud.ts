@@ -1,6 +1,7 @@
 import "dotenv/config";
 import pino from "pino";
 import { ethers } from "ethers";
+import { ClobClient } from "@polymarket/clob-client";
 import { encrypt } from "../lib/crypto.js";
 
 const log = pino({ transport: { target: "pino-pretty" } });
@@ -29,70 +30,16 @@ async function main() {
   log.info(`Wallet address: ${address}`);
 
   try {
-    // Try using @polymarket/clob-client if available
     let creds: { apiKey: string; secret: string; passphrase: string };
 
-    try {
-      const { ClobClient } = await import("@polymarket/clob-client");
-      log.info("Using @polymarket/clob-client for credential derivation...");
-      const client = new ClobClient(clobHost, chainId, wallet);
-      const result = await client.createOrDeriveApiKey();
-      creds = {
-        apiKey: result.apiKey || result.key,
-        secret: result.secret,
-        passphrase: result.passphrase,
-      };
-    } catch (importErr: any) {
-      log.warn(`@polymarket/clob-client not available (${importErr.message}), falling back to manual derivation...`);
-
-      // Manual L1 signature flow
-      // Step 1: Get nonce
-      const nonceRes = await fetch(`${clobHost}/auth/nonce`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!nonceRes.ok) {
-        throw new Error(`Failed to get nonce: ${nonceRes.status} ${await nonceRes.text()}`);
-      }
-      const nonce = await nonceRes.text();
-
-      // Step 2: Sign auth message
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-      const message = `Login to Polymarket\nTimestamp: ${timestamp}\nNonce: ${nonce}`;
-      const signature = await wallet.signMessage(message);
-
-      // Step 3: Derive API key
-      const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, signature, timestamp, nonce }),
-      });
-
-      if (!deriveRes.ok) {
-        log.warn("derive-api-key failed, trying create-api-key...");
-        const createRes = await fetch(`${clobHost}/auth/create-api-key`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, signature, timestamp, nonce }),
-        });
-        if (!createRes.ok) {
-          throw new Error(`Both derive and create API key failed: ${await createRes.text()}`);
-        }
-        const createData = await createRes.json();
-        creds = {
-          apiKey: createData.apiKey || createData.key,
-          secret: createData.secret,
-          passphrase: createData.passphrase,
-        };
-      } else {
-        const data = await deriveRes.json();
-        creds = {
-          apiKey: data.apiKey || data.key,
-          secret: data.secret,
-          passphrase: data.passphrase,
-        };
-      }
-    }
+    log.info("Using @polymarket/clob-client for credential derivation...");
+    const client = new ClobClient(clobHost, chainId, wallet);
+    const result = await client.createOrDeriveApiKey();
+    creds = {
+      apiKey: result.apiKey || result.key,
+      secret: result.secret,
+      passphrase: result.passphrase,
+    };
 
     log.info("✅ Real credentials derived successfully");
 
