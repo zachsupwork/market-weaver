@@ -1,0 +1,41 @@
+name: Derive Polymarket API Credentials
+
+on:
+  workflow_dispatch:
+    inputs:
+      print_creds:
+        description: 'Print credentials to logs (use with caution)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  derive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm install
+
+      - name: Derive and store Polymarket credentials
+        working-directory: apps/api
+        env:
+          PM_PRIVATE_KEY: ${{ secrets.PM_PRIVATE_KEY }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CHAIN_ID: ${{ secrets.CHAIN_ID || '137' }}
+          CLOB_HOST: ${{ secrets.CLOB_HOST || 'https://clob.polymarket.com' }}
+          PRINT_CREDS: ${{ github.event.inputs.print_creds }}
+        run: npm run polymarket:derive-cloud

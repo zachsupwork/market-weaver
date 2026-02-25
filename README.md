@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# Market Weaver / PolyView
 
 ## Project info
 
@@ -36,23 +36,7 @@ npm i
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
+## Technologies
 
 - Vite
 - TypeScript
@@ -60,14 +44,63 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
+## Deployment
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
 
-## Can I connect a custom domain to my Lovable project?
+## Custom Domain
 
-Yes, you can!
+Navigate to Project > Settings > Domains and click Connect Domain.
+Read more: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Fixing Polymarket 401 / Placeholder Credentials
+
+### The Problem
+
+The "Generate Credentials" button in the UI creates **placeholder** (fake) credentials to test the encryption/storage pipeline. These will always return a `401 Unauthorized` when tested against the Polymarket CLOB API.
+
+### Solution: Get Real Credentials
+
+Real Polymarket CLOB API credentials require an **L1 wallet signature** using `ethers@5` and your `PM_PRIVATE_KEY`. There are three ways to obtain them:
+
+#### Option 1: GitHub Actions (Recommended — no local setup)
+
+1. Add these **GitHub Secrets** to your repository:
+   | Secret | Description |
+   |---|---|
+   | `PM_PRIVATE_KEY` | Your Polymarket wallet private key |
+   | `MASTER_KEY` | AES-256-GCM encryption key (must match your backend secret) |
+   | `SUPABASE_URL` | Your Lovable Cloud / Supabase project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key for database writes |
+   | `CHAIN_ID` | (optional) Default: `137` (Polygon) |
+   | `CLOB_HOST` | (optional) Default: `https://clob.polymarket.com` |
+
+2. Go to **Actions** → **"Derive Polymarket API Credentials"** → **Run workflow**
+
+3. The workflow will derive real credentials, encrypt them, and store them in the database.
+
+4. Go to **Settings → Polymarket** in the UI and click **Test Auth** to verify.
+
+#### Option 2: Run CLI Locally
+
+```bash
+cd apps/api
+cp .env.example .env
+# Fill in PM_PRIVATE_KEY, MASTER_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+npm install
+npm run polymarket:derive-cloud
+```
+
+#### Option 3: Import Manually
+
+If you've already derived credentials externally:
+
+1. Go to **Settings → Polymarket** in the UI
+2. Paste your `apiKey`, `secret`, `passphrase`, and `address` into the **Import Real Credentials** form
+3. Click **Import Credentials**
+
+### Verifying
+
+After storing real credentials via any method, click **Test Auth**. It performs an HMAC-SHA256 signed request to the Polymarket CLOB API. A green success message confirms your credentials are working.

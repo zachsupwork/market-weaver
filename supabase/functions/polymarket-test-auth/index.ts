@@ -15,10 +15,6 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
 async function hmacSign(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -62,13 +58,19 @@ serve(async (req) => {
     const credsJson = await decrypt(data.value_encrypted, data.iv, data.auth_tag, masterKey);
     const creds = JSON.parse(credsJson);
 
-    // Detect mock/placeholder credentials
-    if (creds.apiKey?.startsWith("pm_") || creds.note?.includes("edge function")) {
+    // Detect placeholder credentials
+    const isPlaceholder =
+      creds.apiKey?.startsWith("pm_placeholder") ||
+      creds.note === "placeholder" ||
+      creds.note?.includes("edge function") ||
+      creds.note?.includes("Generated via edge function");
+
+    if (isPlaceholder) {
       return new Response(
         JSON.stringify({
           ok: false,
-          error: "Stored credentials are placeholders. Use the standalone API CLI (npm run polymarket:derive-cloud) to generate real L1-signed credentials, or import them manually.",
           placeholder: true,
+          error: "Stored credentials are placeholders (storage test only). To authenticate with Polymarket, either run the GitHub Action 'Derive Polymarket API Credentials' or import real credentials manually.",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -109,20 +111,21 @@ serve(async (req) => {
       );
     }
 
-    const testRes = await fetch(`${clobHost}${path}`, {
-      method,
-      headers: {
-        "POLY_ADDRESS": creds.address || "",
-        "POLY_SIGNATURE": signature,
-        "POLY_TIMESTAMP": timestamp,
-        "POLY_API_KEY": creds.apiKey,
-        "POLY_PASSPHRASE": creds.passphrase,
-      },
-    });
+    const headers: Record<string, string> = {
+      "POLY_API_KEY": creds.apiKey,
+      "POLY_PASSPHRASE": creds.passphrase,
+      "POLY_TIMESTAMP": timestamp,
+      "POLY_SIGNATURE": signature,
+    };
+    if (creds.address) {
+      headers["POLY_ADDRESS"] = creds.address;
+    }
+
+    const testRes = await fetch(`${clobHost}${path}`, { method, headers });
 
     if (testRes.ok) {
       return new Response(
-        JSON.stringify({ ok: true, message: "Authentication successful" }),
+        JSON.stringify({ ok: true, message: "Authentication successful — real credentials verified against CLOB API" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
