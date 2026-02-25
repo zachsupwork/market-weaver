@@ -15,9 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Activity, CheckCircle, XCircle, RefreshCw, Key, Shield, AlertTriangle, Loader2, Upload } from "lucide-react";
+import { Activity, CheckCircle, XCircle, RefreshCw, Key, Shield, AlertTriangle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -36,8 +34,6 @@ export default function PolymarketSettings() {
   const [rotating, setRotating] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importForm, setImportForm] = useState({ apiKey: "", secret: "", passphrase: "" });
 
   const checkHealth = useCallback(async () => {
     setBackendStatus("loading");
@@ -116,30 +112,6 @@ export default function PolymarketSettings() {
       setTestResult({ ok: false, error: err.message });
     } finally {
       setTesting(false);
-    }
-  };
-
-  const importCreds = async () => {
-    if (!importForm.apiKey || !importForm.secret || !importForm.passphrase) {
-      toast({ title: "Missing fields", description: "All three fields are required.", variant: "destructive" });
-      return;
-    }
-    setImporting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("polymarket-import-creds", {
-        method: "POST",
-        body: importForm,
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Failed to import credentials");
-      toast({ title: "Credentials Imported", description: `Stored at ${data.createdAt}` });
-      setImportForm({ apiKey: "", secret: "", passphrase: "" });
-      setTestResult(null);
-      await checkCreds();
-    } catch (err: any) {
-      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -230,54 +202,6 @@ export default function PolymarketSettings() {
           <Button onClick={deriveCreds} disabled={deriving}>
             {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Key className="h-4 w-4 mr-2" />}
             {deriving ? "Generating..." : "Generate Credentials"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Import Real Credentials */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Upload className="h-4 w-4" /> Import API Credentials
-          </CardTitle>
-          <CardDescription>
-            Paste real Polymarket CLOB API credentials derived from your L1 wallet. These will be encrypted and stored securely.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="import-apiKey">API Key</Label>
-            <Input
-              id="import-apiKey"
-              type="password"
-              placeholder="Your Polymarket API key"
-              value={importForm.apiKey}
-              onChange={(e) => setImportForm(f => ({ ...f, apiKey: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="import-secret">Secret</Label>
-            <Input
-              id="import-secret"
-              type="password"
-              placeholder="Your API secret"
-              value={importForm.secret}
-              onChange={(e) => setImportForm(f => ({ ...f, secret: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="import-passphrase">Passphrase</Label>
-            <Input
-              id="import-passphrase"
-              type="password"
-              placeholder="Your API passphrase"
-              value={importForm.passphrase}
-              onChange={(e) => setImportForm(f => ({ ...f, passphrase: e.target.value }))}
-            />
-          </div>
-          <Button onClick={importCreds} disabled={importing}>
-            {importing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-            {importing ? "Importing..." : "Import Credentials"}
           </Button>
         </CardContent>
       </Card>
