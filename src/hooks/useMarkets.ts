@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchMarkets, fetchMarketBySlug, type PolymarketMarket } from "@/lib/polymarket-api";
 
-export function useMarkets(params?: { limit?: number; offset?: number; closed?: boolean }) {
+export function useMarkets(params?: {
+  limit?: number;
+  offset?: number;
+  closed?: boolean;
+  tag?: string;
+  textQuery?: string;
+}) {
   return useQuery({
     queryKey: ["polymarket-markets", params],
     queryFn: () => fetchMarkets(params),

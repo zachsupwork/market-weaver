@@ -1,12 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Settings, Key, Wallet, Radio } from 'lucide-react';
+import { Activity, BarChart3, Wallet, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 const navItems = [
   { to: "/", icon: BarChart3, label: "Markets" },
   { to: "/live", icon: Radio, label: "Live" },
   { to: "/portfolio", icon: Wallet, label: "Portfolio" },
-  { to: "/settings/polymarket", icon: Key, label: "API Keys" },
 ];
 
 export function AppHeader() {
@@ -39,6 +39,12 @@ export function AppHeader() {
             </Link>
           ))}
         </nav>
+
+        <ConnectButton
+          chainStatus="none"
+          showBalance={false}
+          accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
+        />
       </div>
     </header>
   );

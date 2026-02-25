@@ -19,12 +19,23 @@ serve(async (req) => {
     const offset = url.searchParams.get("offset") || "0";
     const closed = url.searchParams.get("closed") || "false";
     const slug = url.searchParams.get("slug");
+    const tag = url.searchParams.get("tag");
+    const text = url.searchParams.get("text");
 
     let endpoint: string;
     if (slug) {
       endpoint = `${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
     } else {
-      endpoint = `${GAMMA_API}/markets?closed=${closed}&limit=${limit}&offset=${offset}&order=volume24hr&ascending=false`;
+      const qs = new URLSearchParams();
+      qs.set("closed", closed);
+      qs.set("limit", limit);
+      qs.set("offset", offset);
+      qs.set("order", "volume24hr");
+      qs.set("ascending", "false");
+      qs.set("active", "true");
+      if (tag) qs.set("tag", tag);
+      if (text) qs.set("_q", text);
+      endpoint = `${GAMMA_API}/markets?${qs}`;
     }
 
     const res = await fetch(endpoint, {

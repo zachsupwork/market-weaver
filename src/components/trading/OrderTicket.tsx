@@ -2,25 +2,37 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { placeOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wallet } from "lucide-react";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 interface OrderTicketProps {
   tokenId: string;
-  outcome: string; // "Yes" or "No"
+  outcome: string;
   currentPrice: number;
+  isTradable?: boolean;
 }
 
-export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps) {
+export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true }: OrderTicketProps) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [price, setPrice] = useState(currentPrice.toFixed(2));
   const [size, setSize] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { isConnected } = useAccount();
 
   const isYes = outcome === "Yes";
   const total = (parseFloat(price || "0") * parseFloat(size || "0")).toFixed(2);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isConnected) {
+      toast.error("Connect your wallet first");
+      return;
+    }
+    if (!isTradable) {
+      toast.error("This market is not currently tradable");
+      return;
+    }
     if (!size || parseFloat(size) <= 0) {
       toast.error("Enter a valid size");
       return;
@@ -47,13 +59,28 @@ export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-lg border border-border bg-card p-4"
-    >
+    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold mb-3">
         Trade <span className={isYes ? "text-yes" : "text-no"}>{outcome}</span>
       </h3>
+
+      {!isConnected && (
+        <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-center">
+          <Wallet className="h-5 w-5 text-primary mx-auto mb-2" />
+          <p className="text-xs text-muted-foreground mb-2">Connect wallet to trade</p>
+          <ConnectButton.Custom>
+            {({ openConnectModal }) => (
+              <button
+                type="button"
+                onClick={openConnectModal}
+                className="rounded-md bg-primary text-primary-foreground px-4 py-1.5 text-xs font-semibold hover:bg-primary/90 transition-all"
+              >
+                Connect Wallet
+              </button>
+            )}
+          </ConnectButton.Custom>
+        </div>
+      )}
 
       {/* Side toggle */}
       <div className="flex gap-1 mb-3">
@@ -93,7 +120,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps
           max="0.99"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+          disabled={!isConnected}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
       </div>
 
@@ -107,7 +135,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps
           value={size}
           onChange={(e) => setSize(e.target.value)}
           placeholder="0"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+          disabled={!isConnected}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
       </div>
 
@@ -119,7 +148,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps
 
       <button
         type="submit"
-        disabled={submitting || !size}
+        disabled={submitting || !size || !isConnected || !isTradable}
         className={cn(
           "w-full rounded-md py-2.5 text-sm font-bold transition-all disabled:opacity-50",
           side === "BUY"
@@ -129,6 +158,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice }: OrderTicketProps
       >
         {submitting ? (
           <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+        ) : !isConnected ? (
+          "Connect Wallet"
         ) : (
           `${side} ${outcome}`
         )}
