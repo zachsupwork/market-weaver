@@ -1,11 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchPositions } from "@/lib/polymarket-api";
+import { useAccount } from "wagmi";
+import { fetchPositionsByAddress } from "@/lib/polymarket-api";
 
 export function usePositions() {
-  return useQuery({
-    queryKey: ["polymarket-positions"],
-    queryFn: fetchPositions,
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+  const { address, isConnected } = useAccount();
+
+  return useQuery<any[]>({
+    queryKey: ["polymarket-positions", address],
+    queryFn: () => fetchPositionsByAddress(address!),
+    enabled: isConnected && !!address,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }

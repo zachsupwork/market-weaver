@@ -1,8 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, ExternalLink } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAccount } from "wagmi";
+import {
+  CATEGORIES,
+  type CategoryId,
+  inferCategory,
+  sortByTrending,
+} from "@/lib/market-categories";
+import type { PolymarketMarket } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -12,24 +20,109 @@ function formatVol(n: number): string {
 
 const LiveMarkets = () => {
   const [page, setPage] = useState(0);
-  const limit = 24;
+  const [category, setCategory] = useState<CategoryId>("trending");
+  const [search, setSearch] = useState("");
+  const limit = 100; // fetch more, filter client-side
   const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
+  const { isConnected } = useAccount();
+
+  const filtered = useMemo(() => {
+    if (!markets) return [];
+
+    let list = markets as (PolymarketMarket & { _inferredCategory?: CategoryId })[];
+
+    // Annotate with inferred category
+    list = list.map((m) => ({
+      ...m,
+      _inferredCategory: inferCategory({
+        category: m.category,
+        tags: typeof m.tags === "string" ? [] : m.tags,
+        question: m.question,
+      }),
+    }));
+
+    // Text search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (m) =>
+          m.question?.toLowerCase().includes(q) ||
+          m.description?.toLowerCase().includes(q)
+      );
+    }
+
+    // Category filter
+    if (category === "new") {
+      list = [...list].sort(
+        (a, b) =>
+          new Date(b.accepting_order_timestamp || b.end_date_iso || 0).getTime() -
+          new Date(a.accepting_order_timestamp || a.end_date_iso || 0).getTime()
+      );
+    } else if (category !== "trending") {
+      list = list.filter((m) => m._inferredCategory === category);
+    }
+
+    // Sort trending by volume
+    if (category === "trending" || category !== "new") {
+      list = sortByTrending(list);
+    }
+
+    return list;
+  }, [markets, category, search]);
 
   return (
     <div className="min-h-screen">
       <div className="container py-8">
-        <div className="mb-8">
+        {/* Header */}
+        <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
             <Activity className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold">Live Markets</h1>
-            <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+            <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes animate-pulse-yes">
               LIVE
             </span>
           </div>
           <p className="text-sm text-muted-foreground">
-            Real-time prediction markets from Polymarket — click to view orderbook and trade.
+            Active, tradable prediction markets — sorted by volume.
           </p>
         </div>
+
+        {/* Search */}
+        <div className="relative mb-4 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search markets..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+          />
+        </div>
+
+        {/* Category tabs */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => { setCategory(cat.id); setPage(0); }}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
+                category === cat.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-accent"
+              )}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Wallet CTA */}
+        {!isConnected && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 mb-6 text-sm text-muted-foreground">
+            <span className="text-primary font-semibold">Connect your wallet</span> to trade on these markets.
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-16">
@@ -43,15 +136,14 @@ const LiveMarkets = () => {
           </div>
         )}
 
-        {markets && (
+        {filtered.length > 0 && (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {markets.map((market) => {
+              {filtered.map((market) => {
                 const prices = market.outcome_prices ? JSON.parse(market.outcome_prices) : [];
                 const outcomes = market.outcomes ? JSON.parse(market.outcomes) : [];
                 const yesPrice = prices[0] ? parseFloat(prices[0]) : null;
                 const noPrice = prices[1] ? parseFloat(prices[1]) : null;
-                const slug = market.market_slug || market.condition_id;
 
                 return (
                   <Link
@@ -104,11 +196,9 @@ const LiveMarkets = () => {
                         <TrendingUp className="h-3 w-3" />
                         <span>{formatVol(market.liquidity_num || 0)} liq</span>
                       </div>
-                      {!market.accepting_orders && (
-                        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                          Paused
-                        </span>
-                      )}
+                      <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                        LIVE
+                      </span>
                     </div>
                   </Link>
                 );
@@ -128,13 +218,19 @@ const LiveMarkets = () => {
               </span>
               <button
                 onClick={() => setPage((p) => p + 1)}
-                disabled={!markets.length || markets.length < limit}
+                disabled={filtered.length < 20}
                 className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
               >
                 Next
               </button>
             </div>
           </>
+        )}
+
+        {!isLoading && filtered.length === 0 && (
+          <div className="text-center py-16 text-muted-foreground">
+            <p className="text-sm">No active markets found for this category.</p>
+          </div>
         )}
       </div>
     </div>
