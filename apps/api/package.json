@@ -12,6 +12,7 @@
     "polymarket:test": "tsx src/cli/test-auth.ts"
   },
   "dependencies": {
+    "@polymarket/clob-client": "^4.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ethers": "^5.7.2",
