@@ -59,27 +59,25 @@ serve(async (req) => {
       );
     }
 
-    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const method = "GET";
-    const path = "/data/positions";
-    const signature = await hmacSign(creds.secret, timestamp + method + path);
+    // Polymarket positions are on the Data API, not CLOB
+    // The Data API uses the wallet address, not HMAC auth
+    const dataApiHost = "https://data-api.polymarket.com";
+    const address = creds.address;
 
-    const hdrs: Record<string, string> = {
-      "POLY_API_KEY": creds.apiKey,
-      "POLY_PASSPHRASE": creds.passphrase,
-      "POLY_TIMESTAMP": timestamp,
-      "POLY_SIGNATURE": signature,
-      "Accept": "application/json",
-    };
-    if (creds.address) hdrs["POLY_ADDRESS"] = creds.address;
+    if (!address) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "No wallet address in stored credentials. Re-derive credentials." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const res = await fetch(`${clobHost}${path}`, { method, headers: hdrs });
+    // Fetch positions from Polymarket Data API (public, keyed by address)
+    const res = await fetch(`${dataApiHost}/positions?user=${address.toLowerCase()}`);
 
     if (!res.ok) {
       const body = await res.text();
       return new Response(
-        JSON.stringify({ ok: false, error: `CLOB ${res.status}: ${body.substring(0, 300)}` }),
+        JSON.stringify({ ok: false, error: `Data API ${res.status}: ${body.substring(0, 300)}` }),
         { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
