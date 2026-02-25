@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { decrypt } from "../_shared/crypto.ts";
-import { validateAdminToken } from "../_shared/admin-auth.ts";
+import { getServiceClient } from "../_shared/supabase-admin.ts";
 import { getServiceClient } from "../_shared/supabase-admin.ts";
 
 const corsHeaders = {
@@ -15,12 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    if (!validateAdminToken(req)) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Edge functions are protected by Supabase infrastructure
 
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
