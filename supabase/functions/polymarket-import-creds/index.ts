@@ -32,7 +32,13 @@ serve(async (req) => {
       );
     }
 
-    const creds = { apiKey, secret, passphrase, address: address || "", importedAt: new Date().toISOString() };
+    const creds = {
+      apiKey,
+      secret,
+      passphrase,
+      address: address || "",
+      importedAt: new Date().toISOString(),
+    };
     const { encrypted, iv, authTag } = await encrypt(JSON.stringify(creds), masterKey);
 
     const supabase = getServiceClient();

@@ -14,9 +14,6 @@ serve(async (req) => {
   }
 
   try {
-    // Edge functions are protected by Supabase infrastructure
-    // Admin token auth is enforced in the standalone Express API only
-
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
       return new Response(
@@ -27,11 +24,12 @@ serve(async (req) => {
 
     const timestamp = new Date().toISOString();
     const creds = {
-      apiKey: `pm_${crypto.randomUUID().replace(/-/g, "")}`,
+      apiKey: `pm_placeholder_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
       secret: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
       passphrase: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
       createdAt: timestamp,
       rotated: true,
+      note: "placeholder",
     };
 
     const { encrypted, iv, authTag } = await encrypt(JSON.stringify(creds), masterKey);
@@ -51,10 +49,10 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[POLYMARKET] Credentials rotated at ${timestamp}`);
+    console.log(`[POLYMARKET] Placeholder credentials rotated at ${timestamp}`);
 
     return new Response(
-      JSON.stringify({ ok: true, rotated: true, createdAt: timestamp }),
+      JSON.stringify({ ok: true, rotated: true, placeholder: true, createdAt: timestamp }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
