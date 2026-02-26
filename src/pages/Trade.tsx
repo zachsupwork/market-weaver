@@ -4,10 +4,13 @@ import {
   fetchMarketByConditionId,
   fetchPositionsByAddress,
   fetchTrades,
+  fetchPriceHistory,
+  fetchEventBySlug,
   cancelOrder,
   isBytes32Hex,
   type NormalizedMarket,
   type TradeRecord,
+  type PriceHistoryPoint,
 } from "@/lib/polymarket-api";
 import { supabase } from "@/integrations/supabase/client";
 import { OrderbookView } from "@/components/trading/OrderbookView";
@@ -81,6 +84,7 @@ const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
   const [selectedOutcome, setSelectedOutcome] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "volume">("price");
+  const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "ALL">("1W");
   const [activeTab, setActiveTab] = useState<"trade" | "orderbook" | "trades" | "community" | "analytics" | "data">("trade");
   const [wsEnabled, setWsEnabled] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
@@ -108,6 +112,28 @@ const Trade = () => {
   if (market && tokenIds.length === 0) {
     console.warn("[PolyView] Market has no clobTokenIds:", market.condition_id, market.question);
   }
+
+  // Fetch event context (rules/description) if we have an event_slug
+  const { data: eventData } = useQuery({
+    queryKey: ["event-context", market?.event_slug],
+    queryFn: () => fetchEventBySlug(market!.event_slug),
+    enabled: !!market?.event_slug,
+    staleTime: 60_000,
+  });
+
+  // Merge event context into display fields
+  const eventDescription = eventData?.description || market?.eventDescription || market?.description || "";
+  const eventTitle = eventData?.title || market?.eventTitle || "";
+  const resolutionSource = eventData?.resolution_source || market?.resolutionSource || "";
+
+  // Real price history from CLOB
+  const { data: priceHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ["price-history", currentTokenId, chartRange],
+    queryFn: () => fetchPriceHistory(currentTokenId, chartRange),
+    enabled: !!currentTokenId,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 
   const { data: trades, isLoading: tradesLoading } = useQuery({
     queryKey: ["trades", currentTokenId],
@@ -164,6 +190,19 @@ const Trade = () => {
     onError: (e: any) => toast.error(e.message || "Failed to post comment"),
   });
 
+  // Real price history chart data
+  const historyChartData = useMemo(() => {
+    if (!priceHistory || priceHistory.length === 0) return [];
+    return priceHistory.map((pt) => ({
+      time: new Date(pt.t * 1000).toLocaleString([], {
+        month: "short", day: "numeric",
+        ...(chartRange === "1D" ? { hour: "2-digit", minute: "2-digit" } : {}),
+      }),
+      price: Math.round(pt.p * 100),
+    }));
+  }, [priceHistory, chartRange]);
+
+  // Trades-based chart data (for volume chart & fallback)
   const chartData = useMemo(() => {
     if (!trades || trades.length === 0) return [];
     const sorted = [...trades].sort(
@@ -304,6 +343,9 @@ const Trade = () => {
             )}
             <div className="flex-1">
               <h1 className="text-xl font-bold leading-snug">{market.question}</h1>
+              {eventTitle && eventTitle !== market.question && (
+                <p className="text-xs text-primary mt-0.5">{eventTitle}</p>
+              )}
               {market.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{market.description}</p>
               )}
@@ -434,52 +476,95 @@ const Trade = () => {
           <>
             {/* Chart */}
             <div className="rounded-lg border border-border bg-card p-4 mb-6">
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => setChartTab("price")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    chartTab === "price" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  Price
-                </button>
-                <button
-                  onClick={() => setChartTab("volume")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    chartTab === "volume" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  Volume
-                </button>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setChartTab("price")}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                      chartTab === "price" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    Price
+                  </button>
+                  <button
+                    onClick={() => setChartTab("volume")}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                      chartTab === "volume" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    Volume
+                  </button>
+                </div>
+                {chartTab === "price" && (
+                  <div className="flex gap-1">
+                    {(["1D", "1W", "1M", "ALL"] as const).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setChartRange(r)}
+                        className={cn(
+                          "rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-all",
+                          chartRange === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="h-48">
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    {chartTab === "price" ? (
-                      <LineChart data={chartData}>
-                        <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                        <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                        <ReTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                {chartTab === "price" ? (
+                  historyLoading ? (
+                    <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading chart...
+                    </div>
+                  ) : historyChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={historyChartData}>
+                        <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" interval="preserveStartEnd" />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v}¢`} />
+                        <ReTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}¢`, currentOutcome]} />
                         <Line type="monotone" dataKey="price" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                       </LineChart>
-                    ) : (
-                      <BarChart data={chartData}>
-                        <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                        <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                        <ReTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                        <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                    )}
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                      <Activity className="h-4 w-4 mr-2" /> No chart data available
+                    </div>
+                  )
+                ) : chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                      <ReTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                      <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />
+                    </BarChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                    <Activity className="h-4 w-4 mr-2" /> Loading chart data...
+                    <Activity className="h-4 w-4 mr-2" /> No volume data
                   </div>
                 )}
               </div>
             </div>
+
+            {/* Rules / Market Context */}
+            {(eventDescription || resolutionSource) && (
+              <div className="rounded-lg border border-border bg-card p-4 mb-6">
+                <h3 className="text-sm font-semibold mb-2">Rules & Resolution</h3>
+                {eventDescription && (
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap mb-2">{eventDescription}</p>
+                )}
+                {resolutionSource && (
+                  <p className="text-[10px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Resolution source:</span> {resolutionSource}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Analytics bar */}
             {analytics && (
