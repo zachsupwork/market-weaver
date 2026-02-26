@@ -100,26 +100,40 @@ export async function fetchMarketByConditionId(conditionId: string): Promise<Nor
     return null;
   }
 
-  const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
-    headers: { "apikey": ANON_KEY },
-  });
-  if (!res.ok) return null;
-  const raw = await res.json();
-  const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
-
-  // Find the EXACT matching condition_id (case-insensitive hex comparison)
   const needle = conditionId.toLowerCase();
-  const match = list.find((m) => m.condition_id.toLowerCase() === needle);
-  if (!match) {
-    // If no match by normalized condition_id, try first result if it's the only one
-    if (list.length === 1) {
-      console.warn(`[PolyView] Using single result for condition_id=${conditionId}`);
-      return list[0];
+
+  // Attempt 1: query proxy with condition_id (proxy does server-side exact filtering)
+  try {
+    const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
+      headers: { "apikey": ANON_KEY },
+    });
+    if (res.ok) {
+      const raw = await res.json();
+      const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
+      const match = list.find((m) => m.condition_id.toLowerCase() === needle);
+      if (match) return match;
     }
-    console.warn(`[PolyView] No exact match for condition_id=${conditionId}, got ${list.length} results`);
-    return null;
+  } catch (e) {
+    console.warn("[PolyView] condition_id query failed:", e);
   }
-  return match;
+
+  // Attempt 2: search the broader market list for exact match
+  try {
+    const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?limit=200&offset=0&closed=false`, {
+      headers: { "apikey": ANON_KEY },
+    });
+    if (res.ok) {
+      const raw = await res.json();
+      const list = normalizeMarkets(Array.isArray(raw) ? raw : []);
+      const match = list.find((m) => m.condition_id.toLowerCase() === needle);
+      if (match) return match;
+    }
+  } catch (e) {
+    console.warn("[PolyView] Broad market search failed:", e);
+  }
+
+  console.warn(`[PolyView] Market not found for condition_id=${conditionId}`);
+  return null;
 }
 
 export async function fetchOrderbook(tokenId: string): Promise<Orderbook | null> {

@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      market_comments: {
+        Row: {
+          body: string
+          condition_id: string
+          created_at: string
+          display_name: string | null
+          id: string
+          user_address: string
+        }
+        Insert: {
+          body: string
+          condition_id: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          user_address: string
+        }
+        Update: {
+          body?: string
+          condition_id?: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          user_address?: string
+        }
+        Relationships: []
+      }
       polymarket_secrets: {
         Row: {
           auth_tag: string

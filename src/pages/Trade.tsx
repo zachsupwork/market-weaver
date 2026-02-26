@@ -1,13 +1,15 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchMarketByConditionId,
   fetchPositionsByAddress,
   fetchTrades,
+  cancelOrder,
   isBytes32Hex,
   type NormalizedMarket,
   type TradeRecord,
 } from "@/lib/polymarket-api";
+import { supabase } from "@/integrations/supabase/client";
 import { OrderbookView } from "@/components/trading/OrderbookView";
 import { OrderTicket } from "@/components/trading/OrderTicket";
 import { PositionCard } from "@/components/trading/PositionCard";
@@ -29,6 +31,9 @@ import {
   Code,
   ChevronDown,
   ChevronUp,
+  MessageSquare,
+  Send,
+  RefreshCw,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -76,15 +81,18 @@ const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
   const [selectedOutcome, setSelectedOutcome] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "volume">("price");
-  const [activeTab, setActiveTab] = useState<"trade" | "orderbook" | "trades" | "analytics" | "data">("trade");
+  const [activeTab, setActiveTab] = useState<"trade" | "orderbook" | "trades" | "community" | "analytics" | "data">("trade");
   const [wsEnabled, setWsEnabled] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentName, setCommentName] = useState("");
   const { isConnected, address } = useAccount();
+  const queryClient = useQueryClient();
 
   // Validate condition_id format
   const isValidId = conditionId ? isBytes32Hex(conditionId) : false;
 
-  const { data: market, isLoading } = useQuery({
+  const { data: market, isLoading, refetch: refetchMarket } = useQuery({
     queryKey: ["trade-market", conditionId],
     queryFn: () => fetchMarketByConditionId(conditionId!),
     enabled: !!conditionId && isValidId,
@@ -106,7 +114,7 @@ const Trade = () => {
     queryFn: () => fetchTrades(currentTokenId, 50),
     enabled: !!currentTokenId,
     staleTime: 5_000,
-    refetchInterval: 5_000, // Poll every 5s for live activity
+    refetchInterval: 5_000,
   });
 
   const { data: userPositions } = useQuery({
@@ -117,6 +125,43 @@ const Trade = () => {
     },
     enabled: isConnected && !!address && !!conditionId,
     staleTime: 15_000,
+  });
+
+  // Community comments
+  const { data: comments, isLoading: commentsLoading } = useQuery({
+    queryKey: ["market-comments", conditionId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("market_comments")
+        .select("*")
+        .eq("condition_id", conditionId!)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!conditionId && isValidId,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+
+  const postComment = useMutation({
+    mutationFn: async () => {
+      if (!commentBody.trim()) throw new Error("Comment cannot be empty");
+      const { error } = await supabase.from("market_comments").insert({
+        condition_id: conditionId!,
+        user_address: address || "anonymous",
+        display_name: commentName.trim() || (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Anon"),
+        body: commentBody.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setCommentBody("");
+      queryClient.invalidateQueries({ queryKey: ["market-comments", conditionId] });
+      toast.success("Comment posted");
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to post comment"),
   });
 
   const chartData = useMemo(() => {
@@ -159,8 +204,8 @@ const Trade = () => {
             </span>
           )}
         </p>
-        <Link to="/live" className="text-primary text-sm mt-4 inline-block hover:underline">
-          ← Back to live markets
+        <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm mt-4 hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Back to Live Markets
         </Link>
       </div>
     );
@@ -180,16 +225,22 @@ const Trade = () => {
         <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <p className="text-lg font-semibold text-foreground">Market not found on Polymarket</p>
         <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-          No market exists for this condition ID. It may have been removed or resolved.
-          {conditionId && (
-            <span className="block mt-1 font-mono text-[10px] break-all">
-              {conditionId.slice(0, 20)}…{conditionId.slice(-8)}
-            </span>
-          )}
+          No market exists for this condition ID. It may have been removed, resolved, or not yet indexed.
+          <span className="block mt-1 font-mono text-[10px] break-all">
+            {conditionId.slice(0, 20)}…{conditionId.slice(-8)}
+          </span>
         </p>
-        <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm mt-4 hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Browse live markets
-        </Link>
+        <div className="flex gap-3 justify-center mt-4">
+          <button
+            onClick={() => refetchMarket()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-all"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </button>
+          <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm hover:underline">
+            <ArrowLeft className="h-4 w-4" /> Browse live markets
+          </Link>
+        </div>
       </div>
     );
   }
@@ -204,10 +255,13 @@ const Trade = () => {
     toast.success("Link copied to clipboard");
   };
 
+  const hasMissingTokenIds = tokenIds.length === 0;
+
   const tabs = [
     { id: "trade" as const, label: "Trade" },
     { id: "orderbook" as const, label: "Orderbook" },
     { id: "trades" as const, label: "Activity" },
+    { id: "community" as const, label: "Community" },
     { id: "analytics" as const, label: "Analytics" },
     { id: "data" as const, label: "Market Data" },
   ];
@@ -230,6 +284,17 @@ const Trade = () => {
             {!isConnected && <ConnectButton />}
           </div>
         </div>
+
+        {/* Missing token IDs warning */}
+        {hasMissingTokenIds && (
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 mb-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-warning shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-warning">Orderbook Unavailable</p>
+              <p className="text-xs text-muted-foreground">This market loaded but is missing token IDs. Orderbook and trading features are unavailable.</p>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="mb-6">
@@ -349,6 +414,9 @@ const Trade = () => {
               )}
             >
               {tab.label}
+              {tab.id === "community" && comments && comments.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px]">{comments.length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -462,7 +530,7 @@ const Trade = () => {
                   tokenId={currentTokenId}
                   outcome={currentOutcome}
                   currentPrice={currentPrice}
-                  isTradable={market.accepting_orders !== false && !market.closed}
+                  isTradable={market.accepting_orders !== false && !market.closed && !hasMissingTokenIds}
                 />
 
                 {userPositions && userPositions.length > 0 && (
@@ -494,17 +562,27 @@ const Trade = () => {
                     <span className="text-right">Side</span>
                   </div>
                   <div className="max-h-64 overflow-y-auto space-y-px">
-                    {trades && trades.length > 0 ? (
-                      trades.slice(0, 50).map((trade, i) => (
-                        <div key={i} className="grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors">
-                          <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
-                          <span>{Math.round(trade.price * 100)}¢</span>
-                          <span>{trade.size.toFixed(1)}</span>
-                          <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
-                            {trade.side}
-                          </span>
-                        </div>
-                      ))
+                    {tradesLoading ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : trades && trades.length > 0 ? (
+                      trades.slice(0, 50).map((trade, i) => {
+                        const isLargeFill = trade.size >= 100;
+                        return (
+                          <div key={i} className={cn(
+                            "grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors",
+                            isLargeFill && "bg-primary/5 border-l-2 border-primary"
+                          )}>
+                            <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
+                            <span>{Math.round(trade.price * 100)}¢</span>
+                            <span className={isLargeFill ? "font-bold text-foreground" : ""}>{trade.size.toFixed(1)}{isLargeFill && " 🔥"}</span>
+                            <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
+                              {trade.side}
+                            </span>
+                          </div>
+                        );
+                      })
                     ) : (
                       <p className="text-xs text-muted-foreground py-4 text-center">No recent trades</p>
                     )}
@@ -567,6 +645,9 @@ const Trade = () => {
                 )}
               </div>
             ))}
+            {tokenIds.length === 0 && (
+              <p className="text-sm text-muted-foreground py-8 text-center sm:col-span-2">No token IDs available for orderbook.</p>
+            )}
             <div className="sm:col-span-2 flex items-center gap-2">
               <button
                 onClick={() => setWsEnabled(!wsEnabled)}
@@ -582,11 +663,13 @@ const Trade = () => {
           </div>
         )}
 
-        {/* Trades tab */}
+        {/* Activity tab */}
         {activeTab === "trades" && (
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Activity — {currentOutcome}</h3>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Activity className="h-4 w-4" /> Activity — {currentOutcome}
+              </h3>
               <span className="text-[10px] text-muted-foreground">
                 {tradesLoading ? "Loading..." : `${trades?.length ?? 0} recent trades`}
               </span>
@@ -598,7 +681,11 @@ const Trade = () => {
               <span className="text-right">Side</span>
             </div>
             <div className="max-h-[500px] overflow-y-auto space-y-px">
-              {trades && trades.length > 0 ? (
+              {tradesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : trades && trades.length > 0 ? (
                 trades.map((trade, i) => {
                   const isLargeFill = trade.size >= 100;
                   return (
@@ -618,6 +705,73 @@ const Trade = () => {
               ) : (
                 <p className="text-xs text-muted-foreground py-4 text-center">No recent trades for this token.</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Community tab */}
+        {activeTab === "community" && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" /> Community Discussion
+              </h3>
+              <p className="text-[10px] text-muted-foreground mb-4">
+                Share your analysis and predictions. Comments are stored on PolyView, not Polymarket.
+              </p>
+
+              {/* Comment form */}
+              <div className="rounded-md border border-border bg-muted/30 p-3 mb-4">
+                {!commentName && (
+                  <input
+                    type="text"
+                    value={commentName}
+                    onChange={(e) => setCommentName(e.target.value)}
+                    placeholder={address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Display name (optional)"}
+                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={commentBody}
+                    onChange={(e) => setCommentBody(e.target.value)}
+                    placeholder="Share your thoughts..."
+                    className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && commentBody.trim()) postComment.mutate();
+                    }}
+                  />
+                  <button
+                    onClick={() => postComment.mutate()}
+                    disabled={!commentBody.trim() || postComment.isPending}
+                    className="rounded-md bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 transition-all"
+                  >
+                    {postComment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Comments list */}
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {commentsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : comments && comments.length > 0 ? (
+                  comments.map((c: any) => (
+                    <div key={c.id} className="rounded-md border border-border bg-muted/30 p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-foreground">{c.display_name || "Anon"}</span>
+                        <span className="text-[10px] text-muted-foreground">{formatTime(c.created_at)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{c.body}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground py-8 text-center">No comments yet. Be the first!</p>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -648,7 +802,6 @@ const Trade = () => {
               )}
             </div>
 
-            {/* Price chart */}
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-semibold mb-3">Price History — {currentOutcome}</h3>
               <div className="h-64">
@@ -667,7 +820,6 @@ const Trade = () => {
               </div>
             </div>
 
-            {/* Volume chart */}
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-semibold mb-3">Volume — {currentOutcome}</h3>
               <div className="h-48">
@@ -778,8 +930,8 @@ const Trade = () => {
         {/* Disclaimer */}
         <div className="mt-8 rounded-lg border border-border bg-muted/50 p-3 text-center">
           <p className="text-[10px] text-muted-foreground">
-            PolyView is a third-party client. Not affiliated with Polymarket Inc. Trading prediction markets involves substantial risk.
-            Your wallet signs all transactions. We never hold your funds.
+            Trading involves risk. Not financial advice. PolyView is a third-party client, not affiliated with Polymarket Inc.
+            Your wallet signs all transactions. We never hold your funds or private keys.
           </p>
         </div>
       </div>
