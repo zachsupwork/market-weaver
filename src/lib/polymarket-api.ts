@@ -1,5 +1,7 @@
 // Polymarket API client - uses edge function proxies for CORS
 
+import { normalizeMarket, normalizeMarkets, type NormalizedMarket } from "./normalizePolymarket";
+
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
 function fnUrl(name: string) {
@@ -8,39 +10,9 @@ function fnUrl(name: string) {
 
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export interface PolymarketMarket {
-  id: string;
-  condition_id: string;
-  question: string;
-  description: string;
-  market_slug: string;
-  end_date_iso: string;
-  game_start_time: string;
-  tokens: Array<{
-    token_id: string;
-    outcome: string;
-    price: number;
-    winner: boolean;
-  }>;
-  volume: number;
-  volume_num: number;
-  volume_24hr: number;
-  liquidity: number;
-  liquidity_num: number;
-  active: boolean;
-  closed: boolean;
-  archived: boolean;
-  image: string;
-  icon: string;
-  category: string;
-  tags: string[];
-  slug: string;
-  outcomes: string;
-  outcome_prices: string;
-  clob_token_ids: string;
-  accepting_orders: boolean;
-  accepting_order_timestamp: string;
-}
+// Re-export NormalizedMarket as the primary market type
+export type { NormalizedMarket };
+export type PolymarketMarket = NormalizedMarket;
 
 export interface OrderbookLevel {
   price: string;
@@ -54,6 +26,15 @@ export interface Orderbook {
   hash: string;
   timestamp: string;
   market: string;
+}
+
+export interface TradeRecord {
+  id: string;
+  timestamp: string;
+  price: number;
+  size: number;
+  side: string;
+  asset_id: string;
 }
 
 export interface Position {
@@ -73,7 +54,7 @@ export async function fetchMarkets(params?: {
   closed?: boolean;
   tag?: string;
   textQuery?: string;
-}): Promise<PolymarketMarket[]> {
+}): Promise<NormalizedMarket[]> {
   const qs = new URLSearchParams();
   qs.set("limit", String(params?.limit ?? 50));
   qs.set("offset", String(params?.offset ?? 0));
@@ -85,34 +66,47 @@ export async function fetchMarkets(params?: {
     headers: { "apikey": ANON_KEY },
   });
   if (!res.ok) throw new Error(`Markets fetch failed: ${res.status}`);
-  const data: PolymarketMarket[] = await res.json();
+  const raw = await res.json();
 
-  // Client-side filter: exclude non-tradable markets
+  // Normalize all markets
+  const data = normalizeMarkets(Array.isArray(raw) ? raw : []);
+
+  // Strict filter: only tradable markets
   return data.filter((m) => {
     if (m.closed) return false;
     if (m.archived) return false;
     if (m.active === false) return false;
     if (m.accepting_orders === false) return false;
+    if (!m.condition_id) return false; // Must have condition_id
     return true;
   });
 }
 
-export async function fetchMarketBySlug(slug: string): Promise<PolymarketMarket | null> {
+export async function fetchMarketBySlug(slug: string): Promise<NormalizedMarket | null> {
   const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?slug=${encodeURIComponent(slug)}`, {
     headers: { "apikey": ANON_KEY },
   });
   if (!res.ok) return null;
-  const data = await res.json();
-  return Array.isArray(data) ? data[0] ?? null : data;
+  const raw = await res.json();
+  const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
+  // Find matching slug
+  return list.find((m) => m.slug === slug || m.market_slug === slug) ?? list[0] ?? null;
 }
 
-export async function fetchMarketByConditionId(conditionId: string): Promise<PolymarketMarket | null> {
+export async function fetchMarketByConditionId(conditionId: string): Promise<NormalizedMarket | null> {
   const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
     headers: { "apikey": ANON_KEY },
   });
   if (!res.ok) return null;
-  const data = await res.json();
-  return Array.isArray(data) ? data[0] ?? null : data;
+  const raw = await res.json();
+  const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
+  // Find the EXACT matching condition_id
+  const match = list.find((m) => m.condition_id === conditionId);
+  if (!match) {
+    console.warn(`[PolyView] No exact match for condition_id=${conditionId}, got ${list.length} results`);
+    return null;
+  }
+  return match;
 }
 
 export async function fetchOrderbook(tokenId: string): Promise<Orderbook | null> {
@@ -121,6 +115,16 @@ export async function fetchOrderbook(tokenId: string): Promise<Orderbook | null>
   });
   if (!res.ok) return null;
   return res.json();
+}
+
+export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRecord[]> {
+  const res = await fetch(
+    `${fnUrl("polymarket-proxy-trades")}?token_id=${encodeURIComponent(tokenId)}&limit=${limit}`,
+    { headers: { "apikey": ANON_KEY } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 export async function fetchPositionsByAddress(address: string): Promise<any[]> {

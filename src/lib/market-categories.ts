@@ -25,34 +25,28 @@ export function inferCategory(market: {
   tags?: string[];
   question?: string;
 }): CategoryId {
-  // Check explicit category from API
   const cat = (market.category || "").toLowerCase();
   for (const [key] of Object.entries(KEYWORD_MAP)) {
     if (cat.includes(key)) return key as CategoryId;
   }
-
-  // Check tags
   const tagStr = (market.tags || []).join(" ").toLowerCase();
   for (const [key, keywords] of Object.entries(KEYWORD_MAP)) {
     if (keywords.some((kw) => tagStr.includes(kw))) return key as CategoryId;
   }
-
-  // Check question text
   const q = (market.question || "").toLowerCase();
   for (const [key, keywords] of Object.entries(KEYWORD_MAP)) {
     if (keywords.some((kw) => q.includes(kw))) return key as CategoryId;
   }
-
   return "trending";
 }
 
-export function sortByTrending<T extends { volume_24hr?: number; volume_num?: number; liquidity_num?: number }>(markets: T[]): T[] {
+export function sortByTrending<T extends { volume24h?: number; volume_24hr?: number; volume_num?: number; liquidity?: number; liquidity_num?: number }>(markets: T[]): T[] {
   return [...markets].sort((a, b) => {
-    const aVol = a.volume_24hr ?? a.volume_num ?? 0;
-    const bVol = b.volume_24hr ?? b.volume_num ?? 0;
+    const aVol = a.volume24h ?? a.volume_24hr ?? a.volume_num ?? 0;
+    const bVol = b.volume24h ?? b.volume_24hr ?? b.volume_num ?? 0;
     if (bVol !== aVol) return bVol - aVol;
-    const aLiq = a.liquidity_num ?? 0;
-    const bLiq = b.liquidity_num ?? 0;
+    const aLiq = a.liquidity ?? a.liquidity_num ?? 0;
+    const bLiq = b.liquidity ?? b.liquidity_num ?? 0;
     return bLiq - aLiq;
   });
 }
