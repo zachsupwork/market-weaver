@@ -90,6 +90,7 @@ const Trade = () => {
     enabled: !!conditionId && isValidId,
     staleTime: 15_000,
     refetchInterval: 30_000,
+    retry: 2,
   });
 
   const tokenIds = market?.clobTokenIds ?? [];
@@ -100,12 +101,12 @@ const Trade = () => {
     console.warn("[PolyView] Market has no clobTokenIds:", market.condition_id, market.question);
   }
 
-  const { data: trades } = useQuery({
+  const { data: trades, isLoading: tradesLoading } = useQuery({
     queryKey: ["trades", currentTokenId],
     queryFn: () => fetchTrades(currentTokenId, 50),
     enabled: !!currentTokenId,
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000, // Poll every 5s for live activity
   });
 
   const { data: userPositions } = useQuery({
@@ -176,11 +177,18 @@ const Trade = () => {
   if (!market) {
     return (
       <div className="container py-16 text-center">
-        <p className="text-muted-foreground">
-          Market not found{conditionId ? ` (ID: ${conditionId.slice(0, 12)}…)` : ""}
+        <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+        <p className="text-lg font-semibold text-foreground">Market not found on Polymarket</p>
+        <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+          No market exists for this condition ID. It may have been removed or resolved.
+          {conditionId && (
+            <span className="block mt-1 font-mono text-[10px] break-all">
+              {conditionId.slice(0, 20)}…{conditionId.slice(-8)}
+            </span>
+          )}
         </p>
-        <Link to="/live" className="text-primary text-sm mt-2 inline-block hover:underline">
-          ← Back to live markets
+        <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm mt-4 hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Browse live markets
         </Link>
       </div>
     );
@@ -199,7 +207,7 @@ const Trade = () => {
   const tabs = [
     { id: "trade" as const, label: "Trade" },
     { id: "orderbook" as const, label: "Orderbook" },
-    { id: "trades" as const, label: "Trades" },
+    { id: "trades" as const, label: "Activity" },
     { id: "analytics" as const, label: "Analytics" },
     { id: "data" as const, label: "Market Data" },
   ];
@@ -577,7 +585,12 @@ const Trade = () => {
         {/* Trades tab */}
         {activeTab === "trades" && (
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-3">Activity — {currentOutcome}</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Activity — {currentOutcome}</h3>
+              <span className="text-[10px] text-muted-foreground">
+                {tradesLoading ? "Loading..." : `${trades?.length ?? 0} recent trades`}
+              </span>
+            </div>
             <div className="grid grid-cols-4 text-[10px] text-muted-foreground font-mono mb-1 px-1">
               <span>Time</span>
               <span>Price</span>
@@ -586,16 +599,22 @@ const Trade = () => {
             </div>
             <div className="max-h-[500px] overflow-y-auto space-y-px">
               {trades && trades.length > 0 ? (
-                trades.map((trade, i) => (
-                  <div key={i} className="grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors">
-                    <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
-                    <span>{Math.round(trade.price * 100)}¢</span>
-                    <span>{trade.size.toFixed(1)}</span>
-                    <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
-                      {trade.side}
-                    </span>
-                  </div>
-                ))
+                trades.map((trade, i) => {
+                  const isLargeFill = trade.size >= 100;
+                  return (
+                    <div key={i} className={cn(
+                      "grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors",
+                      isLargeFill && "bg-primary/5 border-l-2 border-primary"
+                    )}>
+                      <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
+                      <span>{Math.round(trade.price * 100)}¢</span>
+                      <span className={isLargeFill ? "font-bold text-foreground" : ""}>{trade.size.toFixed(1)}{isLargeFill && " 🔥"}</span>
+                      <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
+                        {trade.side}
+                      </span>
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-xs text-muted-foreground py-4 text-center">No recent trades for this token.</p>
               )}

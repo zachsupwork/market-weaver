@@ -107,9 +107,15 @@ export async function fetchMarketByConditionId(conditionId: string): Promise<Nor
   const raw = await res.json();
   const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
 
-  // Find the EXACT matching condition_id (handle camelCase keys too)
-  const match = list.find((m) => m.condition_id === conditionId);
+  // Find the EXACT matching condition_id (case-insensitive hex comparison)
+  const needle = conditionId.toLowerCase();
+  const match = list.find((m) => m.condition_id.toLowerCase() === needle);
   if (!match) {
+    // If no match by normalized condition_id, try first result if it's the only one
+    if (list.length === 1) {
+      console.warn(`[PolyView] Using single result for condition_id=${conditionId}`);
+      return list[0];
+    }
     console.warn(`[PolyView] No exact match for condition_id=${conditionId}, got ${list.length} results`);
     return null;
   }
