@@ -147,6 +147,35 @@ export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRec
   return Array.isArray(data) ? data : [];
 }
 
+export interface PriceHistoryPoint {
+  t: number;
+  p: number;
+}
+
+export async function fetchPriceHistory(
+  tokenId: string,
+  range: "1D" | "1W" | "1M" | "ALL" = "1W"
+): Promise<PriceHistoryPoint[]> {
+  const res = await fetch(
+    `${fnUrl("polymarket-proxy-history")}?token_id=${encodeURIComponent(tokenId)}&range=${range}`,
+    { headers: { "apikey": ANON_KEY } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function fetchEventBySlug(slug: string): Promise<any | null> {
+  const res = await fetch(
+    `${fnUrl("polymarket-proxy-events")}?slug=${encodeURIComponent(slug)}`,
+    { headers: { "apikey": ANON_KEY } }
+  );
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return raw;
+}
+
 export async function fetchPositionsByAddress(address: string): Promise<any[]> {
   const res = await fetch(`${fnUrl("polymarket-positions")}?address=${encodeURIComponent(address)}`, {
     headers: { "apikey": ANON_KEY },

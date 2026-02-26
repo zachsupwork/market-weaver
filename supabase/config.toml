@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.polymarket-proxy-events]
 verify_jwt = false
+
+[functions.polymarket-proxy-history]
+verify_jwt = false

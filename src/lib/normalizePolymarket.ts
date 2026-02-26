@@ -16,6 +16,11 @@ export interface NormalizedMarket {
   description: string;
   market_slug: string;
 
+  // Event context (enriched from event data)
+  eventTitle: string;
+  eventDescription: string;
+  resolutionSource: string;
+
   // Dates
   end_date_iso: string;
   game_start_time: string;
@@ -225,6 +230,16 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     statusLabel = "LIVE";
   }
 
+  // Event context fields (from Gamma market or merged event)
+  const eventTitle = String(raw.eventTitle ?? raw.event_title ?? raw.event?.title ?? "").trim();
+  const eventDescription = String(
+    raw.eventDescription ?? raw.event_description ?? raw.event?.description ??
+    raw.resolution_source ?? raw.resolutionSource ?? raw.rules ?? ""
+  ).trim();
+  const resolutionSource = String(
+    raw.resolution_source ?? raw.resolutionSource ?? raw.event?.resolution_source ?? ""
+  ).trim();
+
   return {
     condition_id,
     id: raw.id || "",
@@ -232,6 +247,10 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     question: raw.question || "",
     description: raw.description || "",
     market_slug: raw.market_slug || slug,
+
+    eventTitle,
+    eventDescription,
+    resolutionSource,
 
     end_date_iso: raw.end_date_iso || raw.endDateIso || raw.endDate || "",
     game_start_time: raw.game_start_time || "",

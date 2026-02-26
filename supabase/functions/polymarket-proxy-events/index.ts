@@ -16,10 +16,13 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const eventId = url.searchParams.get("id");
+    const slug = url.searchParams.get("slug");
 
     let endpoint: string;
     if (eventId) {
       endpoint = `${GAMMA_API}/events/${encodeURIComponent(eventId)}`;
+    } else if (slug) {
+      endpoint = `${GAMMA_API}/events?slug=${encodeURIComponent(slug)}&limit=1`;
     } else {
       const qs = new URLSearchParams();
       const active = url.searchParams.get("active");
