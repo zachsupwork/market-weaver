@@ -1,1 +1,37 @@
 project_id = "jqxjerhqddifcrrskaaq"
+
+[functions.polymarket-proxy-markets]
+verify_jwt = false
+
+[functions.polymarket-proxy-orderbook]
+verify_jwt = false
+
+[functions.polymarket-proxy-trades]
+verify_jwt = false
+
+[functions.polymarket-place-order]
+verify_jwt = false
+
+[functions.polymarket-cancel-order]
+verify_jwt = false
+
+[functions.polymarket-positions]
+verify_jwt = false
+
+[functions.polymarket-health]
+verify_jwt = false
+
+[functions.polymarket-has-creds]
+verify_jwt = false
+
+[functions.polymarket-derive-creds]
+verify_jwt = false
+
+[functions.polymarket-import-creds]
+verify_jwt = false
+
+[functions.polymarket-rotate-creds]
+verify_jwt = false
+
+[functions.polymarket-test-auth]
+verify_jwt = false
