@@ -15,6 +15,7 @@ import Index from "./pages/Index";
 import LiveMarkets from "./pages/LiveMarkets";
 import Trade from "./pages/Trade";
 import Portfolio from "./pages/Portfolio";
+import Leaderboard from "./pages/Leaderboard";
 import MarketDetail from "./pages/MarketDetail";
 import Admin from "./pages/Admin";
 import PolymarketSettings from "./pages/PolymarketSettings";
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="/live" element={<LiveMarkets />} />
                 <Route path="/trade/:conditionId" element={<Trade />} />
                 <Route path="/portfolio" element={<Portfolio />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/market/:slug" element={<MarketDetail />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/settings/polymarket" element={<PolymarketSettings />} />

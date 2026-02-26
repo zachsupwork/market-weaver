@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Wallet, Radio } from 'lucide-react';
+import { Activity, BarChart3, Wallet, Radio, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 const navItems = [
   { to: "/", icon: BarChart3, label: "Markets" },
   { to: "/live", icon: Radio, label: "Live" },
+  { to: "/leaderboard", icon: Trophy, label: "Leaders" },
   { to: "/portfolio", icon: Wallet, label: "Portfolio" },
 ];
 
