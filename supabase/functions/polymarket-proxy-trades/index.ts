@@ -24,15 +24,14 @@ serve(async (req) => {
       );
     }
 
-    // Use CLOB API for trades by token_id
-    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
+    // Use the public Data API (no auth required) instead of CLOB API (requires API key)
+    const dataApi = "https://data-api.polymarket.com";
     
     let endpoint: string;
     if (tokenId) {
-      endpoint = `${clobHost}/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`;
+      endpoint = `${dataApi}/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`;
     } else {
-      // Fallback: use data API for condition-level trades
-      endpoint = `https://data-api.polymarket.com/trades?market=${encodeURIComponent(conditionId!)}&limit=${limit}`;
+      endpoint = `${dataApi}/trades?market=${encodeURIComponent(conditionId!)}&limit=${limit}`;
     }
 
     const res = await fetch(endpoint, {
