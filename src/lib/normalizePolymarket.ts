@@ -1,5 +1,9 @@
 // Normalization layer for Gamma API market data
-// Ensures consistent shape regardless of API inconsistencies
+// Ensures consistent shape regardless of API inconsistencies (camelCase vs snake_case)
+
+export function isBytes32Hex(value: string): boolean {
+  return /^0x[a-fA-F0-9]{64}$/.test(value);
+}
 
 export interface NormalizedMarket {
   // Identity
@@ -56,12 +60,13 @@ export interface NormalizedMarket {
 
 function safeParseJson<T>(val: unknown, fallback: T): T {
   if (val === null || val === undefined) return fallback;
-  if (typeof val !== "string") {
-    if (Array.isArray(val)) return val as unknown as T;
-    return fallback;
-  }
+  if (Array.isArray(val)) return val as unknown as T;
+  if (typeof val !== "string") return fallback;
+  const trimmed = val.trim();
+  if (!trimmed) return fallback;
   try {
-    const parsed = JSON.parse(val);
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed as unknown as T;
     return parsed ?? fallback;
   } catch {
     return fallback;
@@ -78,32 +83,81 @@ function safeNum(val: unknown): number {
 }
 
 export function normalizeMarket(raw: any): NormalizedMarket {
-  // Condition ID - try multiple keys
-  const condition_id =
-    raw.condition_id || raw.conditionId || raw.conditionID || "";
+  // Condition ID - try multiple keys, trim whitespace
+  const condition_id = String(
+    raw.condition_id ?? raw.conditionId ?? raw.conditionID ?? ""
+  ).trim();
 
   // Slug
   const slug = raw.slug || raw.market_slug || "";
 
-  // Numeric fields
+  // Numeric fields - handle both camelCase and snake_case
   const volume24h = safeNum(
-    raw.volume24hr ?? raw.volume_24hr ?? raw.volume24h ?? 0
+    raw.volume24hr ?? raw.volume_24hr ?? raw.volume24h ?? raw.volume24Hr ?? 0
   );
-  const totalVolume = safeNum(raw.volume ?? raw.total_volume ?? 0);
-  const liquidity = safeNum(raw.liquidity ?? raw.liquidity_num ?? 0);
+  const totalVolume = safeNum(
+    raw.volume ?? raw.total_volume ?? raw.totalVolume ?? raw.volumeNum ?? raw.volume_num ?? 0
+  );
+  const liquidity = safeNum(
+    raw.liquidity ?? raw.liquidity_num ?? raw.liquidityNum ?? 0
+  );
 
-  // Parse outcomes
-  const outcomes: string[] = safeParseJson(raw.outcomes, ["Yes", "No"]);
+  // Parse outcomes - support both key styles
+  const outcomes: string[] = safeParseJson(
+    raw.outcomes ?? raw.outcomeNames,
+    ["Yes", "No"]
+  );
 
-  // Parse outcome prices
-  const rawPrices: (string | number)[] = safeParseJson(raw.outcome_prices, []);
-  const outcomePrices: number[] =
-    rawPrices.length > 0
-      ? rawPrices.map((p) => safeNum(p))
-      : [0.5, 0.5];
+  // Parse outcome prices - support both key styles
+  const rawPrices: (string | number)[] = safeParseJson(
+    raw.outcome_prices ?? raw.outcomePrices,
+    []
+  );
+  let outcomePrices: number[] = rawPrices.length > 0
+    ? rawPrices.map((p) => safeNum(p))
+    : [];
 
-  // Parse clob token IDs
-  const clobTokenIds: string[] = safeParseJson(raw.clob_token_ids, []);
+  // Also try extracting prices from tokens array if outcomePrices is empty
+  if (outcomePrices.length === 0 && raw.tokens && Array.isArray(raw.tokens)) {
+    const tokenPrices = raw.tokens
+      .sort((a: any, b: any) => {
+        // YES before NO
+        const ao = (a.outcome || "").toLowerCase();
+        const bo = (b.outcome || "").toLowerCase();
+        if (ao === "yes") return -1;
+        if (bo === "yes") return 1;
+        return 0;
+      })
+      .map((t: any) => safeNum(t.price));
+    if (tokenPrices.length > 0 && tokenPrices.some((p: number) => p > 0)) {
+      outcomePrices = tokenPrices;
+    }
+  }
+
+  // Only default to [0.5, 0.5] when outcomes is exactly 2 and prices still empty
+  if (outcomePrices.length === 0 && outcomes.length === 2) {
+    outcomePrices = [0.5, 0.5];
+  }
+
+  // Parse clob token IDs from both key styles
+  let clobTokenIds: string[] = safeParseJson(
+    raw.clob_token_ids ?? raw.clobTokenIds,
+    []
+  );
+
+  // Also extract from tokens array if empty
+  if (clobTokenIds.length === 0 && raw.tokens && Array.isArray(raw.tokens)) {
+    clobTokenIds = raw.tokens
+      .sort((a: any, b: any) => {
+        const ao = (a.outcome || "").toLowerCase();
+        const bo = (b.outcome || "").toLowerCase();
+        if (ao === "yes") return -1;
+        if (bo === "yes") return 1;
+        return 0;
+      })
+      .map((t: any) => t.token_id || t.tokenId || "")
+      .filter(Boolean);
+  }
 
   // Tags
   let tags: string[] = [];

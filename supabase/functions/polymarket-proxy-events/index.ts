@@ -15,32 +15,28 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const limit = url.searchParams.get("limit") || "50";
-    const offset = url.searchParams.get("offset") || "0";
-    const closed = url.searchParams.get("closed") || "false";
-    const slug = url.searchParams.get("slug");
-    const tag = url.searchParams.get("tag");
-    const text = url.searchParams.get("text");
-
-    const conditionId = url.searchParams.get("condition_id");
+    const eventId = url.searchParams.get("id");
 
     let endpoint: string;
-    if (conditionId) {
-      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=1`;
-    } else if (slug) {
-      endpoint = `${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
+    if (eventId) {
+      endpoint = `${GAMMA_API}/events/${encodeURIComponent(eventId)}`;
     } else {
       const qs = new URLSearchParams();
-      qs.set("closed", closed);
+      const active = url.searchParams.get("active");
+      const keyword = url.searchParams.get("_q");
+      const limit = url.searchParams.get("limit") || "50";
+      const offset = url.searchParams.get("offset") || "0";
+      const order = url.searchParams.get("order") || "volume";
+      const ascending = url.searchParams.get("ascending") || "false";
+
       qs.set("limit", limit);
       qs.set("offset", offset);
-      qs.set("order", "volume24hr");
-      qs.set("ascending", "false");
-      qs.set("active", "true");
-      qs.set("archived", "false");
-      if (tag) qs.set("tag", tag);
-      if (text) qs.set("_q", text);
-      endpoint = `${GAMMA_API}/markets?${qs}`;
+      qs.set("order", order);
+      qs.set("ascending", ascending);
+      if (active) qs.set("active", active);
+      if (keyword) qs.set("_q", keyword);
+
+      endpoint = `${GAMMA_API}/events?${qs}`;
     }
 
     const res = await fetch(endpoint, {
