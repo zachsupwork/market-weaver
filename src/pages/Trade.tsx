@@ -1,16 +1,42 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMarketByConditionId, fetchPositionsByAddress, type PolymarketMarket } from "@/lib/polymarket-api";
+import {
+  fetchMarketByConditionId,
+  fetchPositionsByAddress,
+  fetchTrades,
+  type NormalizedMarket,
+  type TradeRecord,
+} from "@/lib/polymarket-api";
 import { OrderbookView } from "@/components/trading/OrderbookView";
 import { OrderTicket } from "@/components/trading/OrderTicket";
-import { PriceChart } from "@/components/trading/PriceChart";
 import { PositionCard } from "@/components/trading/PositionCard";
-import { ArrowLeft, BarChart3, Droplets, Calendar, Loader2, ExternalLink, Users, Clock, Share2 } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowLeft,
+  BarChart3,
+  Droplets,
+  Calendar,
+  Loader2,
+  ExternalLink,
+  Clock,
+  Share2,
+  Activity,
+  TrendingUp,
+} from "lucide-react";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { toast } from "sonner";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip as ReTooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from "recharts";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -28,9 +54,20 @@ function timeUntil(dateStr: string): string {
   return `${hours}h ${mins}m`;
 }
 
+function formatTime(ts: string): string {
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return ts;
+  }
+}
+
 const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
   const [selectedOutcome, setSelectedOutcome] = useState(0);
+  const [chartTab, setChartTab] = useState<"price" | "volume">("price");
   const { isConnected, address } = useAccount();
 
   const { data: market, isLoading } = useQuery({
@@ -41,7 +78,20 @@ const Trade = () => {
     refetchInterval: 30_000,
   });
 
-  // Fetch user's positions for this market
+  // Derive token IDs from normalized market
+  const tokenIds = market?.clobTokenIds ?? [];
+  const currentTokenId = tokenIds[selectedOutcome] || "";
+
+  // Fetch trades for current token
+  const { data: trades } = useQuery({
+    queryKey: ["trades", currentTokenId],
+    queryFn: () => fetchTrades(currentTokenId, 50),
+    enabled: !!currentTokenId,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
+  // Fetch user positions
   const { data: userPositions } = useQuery({
     queryKey: ["user-positions-market", address, conditionId],
     queryFn: async () => {
@@ -52,11 +102,39 @@ const Trade = () => {
     staleTime: 15_000,
   });
 
+  // Build chart data from trades
+  const chartData = useMemo(() => {
+    if (!trades || trades.length === 0) return [];
+    // Reverse so oldest first
+    const sorted = [...trades].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    return sorted.map((t) => ({
+      time: formatTime(t.timestamp),
+      price: Math.round(t.price * 100),
+      volume: t.size,
+    }));
+  }, [trades]);
+
+  // Analytics from trades
+  const analytics = useMemo(() => {
+    if (!trades || trades.length < 2) return null;
+    const prices = trades.map((t) => t.price);
+    const latest = prices[0] ?? 0;
+    const oldest = prices[prices.length - 1] ?? 0;
+    const change24h = oldest > 0 ? ((latest - oldest) / oldest) * 100 : 0;
+    const bestBid = Math.max(...prices);
+    const bestAsk = Math.min(...prices);
+    const spread = bestBid - bestAsk;
+    const mid = (bestBid + bestAsk) / 2;
+    const totalVol = trades.reduce((s, t) => s + t.size, 0);
+    return { change24h, spread, mid, totalVol };
+  }, [trades]);
+
   if (!conditionId || conditionId === "undefined") {
     return (
       <div className="container py-16 text-center">
         <p className="text-lg font-semibold text-destructive">Invalid market ID</p>
-        <p className="text-sm text-muted-foreground mt-1">The market link appears to be broken.</p>
         <Link to="/live" className="text-primary text-sm mt-4 inline-block hover:underline">
           ← Back to live markets
         </Link>
@@ -85,12 +163,9 @@ const Trade = () => {
     );
   }
 
-  const prices = market.outcome_prices ? JSON.parse(market.outcome_prices) : [];
-  const outcomes = market.outcomes ? JSON.parse(market.outcomes) : ["Yes", "No"];
-  const tokenIds = market.clob_token_ids ? JSON.parse(market.clob_token_ids) : [];
-
-  const currentTokenId = tokenIds[selectedOutcome];
-  const currentPrice = prices[selectedOutcome] ? parseFloat(prices[selectedOutcome]) : 0.5;
+  const outcomes = market.outcomes;
+  const prices = market.outcomePrices;
+  const currentPrice = prices[selectedOutcome] ?? 0.5;
   const currentOutcome = outcomes[selectedOutcome] || (selectedOutcome === 0 ? "Yes" : "No");
 
   const handleShare = () => {
@@ -134,12 +209,17 @@ const Trade = () => {
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
               <BarChart3 className="h-3 w-3" />
-              <span className="font-mono text-foreground">{formatVol(market.volume_num || 0)}</span>
+              <span className="font-mono text-foreground">{formatVol(market.totalVolume)}</span>
               <span>vol</span>
             </div>
             <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
+              <TrendingUp className="h-3 w-3" />
+              <span className="font-mono text-foreground">{formatVol(market.volume24h)}</span>
+              <span>24h</span>
+            </div>
+            <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
               <Droplets className="h-3 w-3" />
-              <span className="font-mono text-foreground">{formatVol(market.liquidity_num || 0)}</span>
+              <span className="font-mono text-foreground">{formatVol(market.liquidity)}</span>
               <span>liq</span>
             </div>
             {market.end_date_iso && (
@@ -148,11 +228,21 @@ const Trade = () => {
                 <span className="font-mono text-foreground">{timeUntil(market.end_date_iso)}</span>
               </div>
             )}
-            <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-              LIVE
-            </span>
+            {analytics && (
+              <div className={cn(
+                "flex items-center gap-1 rounded-md px-2 py-1 font-mono",
+                analytics.change24h >= 0 ? "bg-yes/10 text-yes" : "bg-no/10 text-no"
+              )}>
+                {analytics.change24h >= 0 ? "+" : ""}{analytics.change24h.toFixed(1)}%
+              </div>
+            )}
+            {market.accepting_orders && (
+              <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                LIVE
+              </span>
+            )}
             <a
-              href={`https://polymarket.com/event/${market.market_slug || market.condition_id}`}
+              href={`https://polymarket.com/event/${market.market_slug || market.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-primary hover:underline ml-auto"
@@ -160,12 +250,23 @@ const Trade = () => {
               <ExternalLink className="h-3 w-3" /> Polymarket
             </a>
           </div>
+
+          {/* Tags */}
+          {market.tags.length > 0 && (
+            <div className="flex gap-1.5 mt-3">
+              {market.tags.slice(0, 5).map((tag) => (
+                <span key={tag} className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Outcome selector */}
         <div className="flex gap-2 mb-6">
           {outcomes.map((outcome: string, i: number) => {
-            const p = prices[i] ? parseFloat(prices[i]) : 0;
+            const p = prices[i] ?? 0;
             const isYes = outcome === "Yes" || i === 0;
             return (
               <button
@@ -196,16 +297,94 @@ const Trade = () => {
           })}
         </div>
 
+        {/* Analytics bar */}
+        {analytics && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="rounded-lg border border-border bg-card p-3">
+              <span className="text-[10px] text-muted-foreground block">Mid Price</span>
+              <span className="font-mono text-lg font-bold">{Math.round(analytics.mid * 100)}¢</span>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <span className="text-[10px] text-muted-foreground block">Spread</span>
+              <span className="font-mono text-lg font-bold">{(analytics.spread * 100).toFixed(1)}¢</span>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <span className="text-[10px] text-muted-foreground block">24h Change</span>
+              <span className={cn("font-mono text-lg font-bold", analytics.change24h >= 0 ? "text-yes" : "text-no")}>
+                {analytics.change24h >= 0 ? "+" : ""}{analytics.change24h.toFixed(1)}%
+              </span>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <span className="text-[10px] text-muted-foreground block">Trade Vol</span>
+              <span className="font-mono text-lg font-bold">{analytics.totalVol.toFixed(1)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Chart tabs + chart */}
+        <div className="rounded-lg border border-border bg-card p-4 mb-6">
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={() => setChartTab("price")}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                chartTab === "price" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              )}
+            >
+              Price
+            </button>
+            <button
+              onClick={() => setChartTab("volume")}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                chartTab === "volume" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              )}
+            >
+              Volume
+            </button>
+          </div>
+          <div className="h-48">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                {chartTab === "price" ? (
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <ReTooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                    />
+                    <Line type="monotone" dataKey="price" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                  </LineChart>
+                ) : (
+                  <BarChart data={chartData}>
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <ReTooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                    />
+                    <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                <Activity className="h-4 w-4 mr-2" /> Loading chart data...
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Main trading grid */}
         <div className="grid gap-4 lg:grid-cols-12">
-          {/* Left: Chart + Orderbook */}
-          <div className="lg:col-span-4 space-y-4">
-            <PriceChart
-              tokenId={currentTokenId}
-              outcome={currentOutcome}
-              currentPrice={currentPrice}
-            />
+          {/* Left: Orderbook */}
+          <div className="lg:col-span-3 space-y-4">
             <OrderbookView tokenId={currentTokenId} outcome={currentOutcome} />
+            {tokenIds.length > 1 && (
+              <OrderbookView
+                tokenId={tokenIds[selectedOutcome === 0 ? 1 : 0]}
+                outcome={outcomes[selectedOutcome === 0 ? 1 : 0]}
+              />
+            )}
           </div>
 
           {/* Center: Order ticket */}
@@ -217,10 +396,10 @@ const Trade = () => {
               isTradable={market.accepting_orders !== false && !market.closed}
             />
 
-            {/* User's position in this market */}
+            {/* User positions */}
             {userPositions && userPositions.length > 0 && (
               <div className="mt-4">
-                <h3 className="text-xs font-semibold text-muted-foreground mb-2">Your Position</h3>
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2">Your Positions</h3>
                 <div className="space-y-2">
                   {userPositions.map((pos: any, i: number) => (
                     <PositionCard key={i} position={pos} compact />
@@ -228,32 +407,66 @@ const Trade = () => {
                 </div>
               </div>
             )}
+
+            {/* Open Orders placeholder */}
+            {isConnected && (
+              <div className="mt-4 rounded-lg border border-border bg-card p-4">
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2">Open Orders</h3>
+                <p className="text-[10px] text-muted-foreground">Open order tracking coming next.</p>
+              </div>
+            )}
           </div>
 
-          {/* Right: Other outcome orderbook + market info */}
-          <div className="lg:col-span-4 space-y-4">
-            {tokenIds.length > 1 && (
-              <OrderbookView
-                tokenId={tokenIds[selectedOutcome === 0 ? 1 : 0]}
-                outcome={outcomes[selectedOutcome === 0 ? 1 : 0]}
-              />
-            )}
+          {/* Right: Recent Trades + Market Details */}
+          <div className="lg:col-span-5 space-y-4">
+            {/* Recent Trades */}
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold mb-3">Recent Trades</h3>
+              <div className="grid grid-cols-4 text-[10px] text-muted-foreground font-mono mb-1 px-1">
+                <span>Time</span>
+                <span>Price</span>
+                <span>Size</span>
+                <span className="text-right">Side</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-px">
+                {trades && trades.length > 0 ? (
+                  trades.slice(0, 50).map((trade, i) => (
+                    <div key={i} className="grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors">
+                      <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
+                      <span>{Math.round(trade.price * 100)}¢</span>
+                      <span>{trade.size.toFixed(1)}</span>
+                      <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
+                        {trade.side}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No recent trades</p>
+                )}
+              </div>
+            </div>
 
-            {/* Market details card */}
+            {/* Market details */}
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-semibold mb-3">Market Details</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  <span className="text-yes font-semibold">Active</span>
+                  <span className={market.accepting_orders ? "text-yes font-semibold" : "text-muted-foreground"}>
+                    {market.accepting_orders ? "Active" : "Paused"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Volume</span>
-                  <span className="font-mono">{formatVol(market.volume_num || 0)}</span>
+                  <span className="font-mono">{formatVol(market.totalVolume)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">24h Volume</span>
+                  <span className="font-mono">{formatVol(market.volume24h)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Liquidity</span>
-                  <span className="font-mono">{formatVol(market.liquidity_num || 0)}</span>
+                  <span className="font-mono">{formatVol(market.liquidity)}</span>
                 </div>
                 {market.end_date_iso && (
                   <div className="flex justify-between">
@@ -263,16 +476,22 @@ const Trade = () => {
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Condition ID</span>
-                  <span className="font-mono text-[10px] truncate max-w-[120px]">{conditionId}</span>
+                  <span className="font-mono text-[10px] truncate max-w-[160px]">{conditionId}</span>
                 </div>
+                {market.category && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Category</span>
+                    <span>{market.category}</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Resolution info */}
+            {/* Resolution */}
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-semibold mb-2">Resolution</h3>
               <p className="text-xs text-muted-foreground">
-                Markets resolve via UMA Optimistic Oracle on Polygon. Once resolved, winning shares are redeemable for $1 USDC each.
+                Markets resolve via UMA Optimistic Oracle on Polygon. Winning shares are redeemable for $1 USDC each.
               </p>
             </div>
           </div>

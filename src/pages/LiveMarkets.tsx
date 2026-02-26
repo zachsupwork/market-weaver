@@ -10,7 +10,7 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import type { PolymarketMarket } from "@/lib/polymarket-api";
+import type { NormalizedMarket } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -22,26 +22,24 @@ const LiveMarkets = () => {
   const [page, setPage] = useState(0);
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
-  const limit = 100; // fetch more, filter client-side
+  const limit = 100;
   const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
   const { isConnected } = useAccount();
 
   const filtered = useMemo(() => {
     if (!markets) return [];
 
-    let list = markets as (PolymarketMarket & { _inferredCategory?: CategoryId })[];
+    let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
-    // Annotate with inferred category
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
         category: m.category,
-        tags: typeof m.tags === "string" ? [] : m.tags,
+        tags: m.tags,
         question: m.question,
       }),
     }));
 
-    // Text search
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -51,7 +49,6 @@ const LiveMarkets = () => {
       );
     }
 
-    // Category filter
     if (category === "new") {
       list = [...list].sort(
         (a, b) =>
@@ -62,7 +59,6 @@ const LiveMarkets = () => {
       list = list.filter((m) => m._inferredCategory === category);
     }
 
-    // Sort trending by volume
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
@@ -73,7 +69,6 @@ const LiveMarkets = () => {
   return (
     <div className="min-h-screen">
       <div className="container py-8">
-        {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
             <Activity className="h-6 w-6 text-primary" />
@@ -87,7 +82,6 @@ const LiveMarkets = () => {
           </p>
         </div>
 
-        {/* Search */}
         <div className="relative mb-4 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -99,7 +93,6 @@ const LiveMarkets = () => {
           />
         </div>
 
-        {/* Category tabs */}
         <div className="flex flex-wrap gap-2 mb-6">
           {CATEGORIES.map((cat) => (
             <button
@@ -117,7 +110,6 @@ const LiveMarkets = () => {
           ))}
         </div>
 
-        {/* Wallet CTA */}
         {!isConnected && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 mb-6 text-sm text-muted-foreground">
             <span className="text-primary font-semibold">Connect your wallet</span> to trade on these markets.
@@ -140,20 +132,18 @@ const LiveMarkets = () => {
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((market) => {
-                const marketId = market.condition_id || market.id || market.slug;
-                if (!marketId) {
-                  if (import.meta.env.DEV) console.warn("Market missing ID:", market.question);
+                if (!market.condition_id) {
+                  if (import.meta.env.DEV) console.warn("[PolyView] Skipping market without condition_id:", market.question);
                   return null;
                 }
-                const prices = market.outcome_prices ? JSON.parse(market.outcome_prices) : [];
-                const outcomes = market.outcomes ? JSON.parse(market.outcomes) : [];
-                const yesPrice = prices[0] ? parseFloat(prices[0]) : null;
-                const noPrice = prices[1] ? parseFloat(prices[1]) : null;
+
+                const yesPrice = market.outcomePrices[0] ?? null;
+                const noPrice = market.outcomePrices[1] ?? null;
 
                 return (
                   <Link
-                    key={marketId}
-                    to={`/trade/${encodeURIComponent(marketId)}`}
+                    key={market.condition_id}
+                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
                     className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary animate-slide-in"
                   >
                     <div className="flex items-start gap-3 mb-3">
@@ -195,15 +185,17 @@ const LiveMarkets = () => {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <BarChart3 className="h-3 w-3" />
-                        <span>{formatVol(market.volume_num || 0)}</span>
+                        <span>{formatVol(market.volume24h)}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <TrendingUp className="h-3 w-3" />
-                        <span>{formatVol(market.liquidity_num || 0)} liq</span>
+                        <span>{formatVol(market.liquidity)} liq</span>
                       </div>
-                      <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-                        LIVE
-                      </span>
+                      {market.accepting_orders && (
+                        <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                          LIVE
+                        </span>
+                      )}
                     </div>
                   </Link>
                 );

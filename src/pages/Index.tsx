@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ArrowUpDown } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -11,7 +11,7 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import type { PolymarketMarket } from "@/lib/polymarket-api";
+import type { NormalizedMarket } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -27,12 +27,12 @@ const Index = () => {
 
   const filtered = useMemo(() => {
     if (!markets) return [];
-    let list = markets as (PolymarketMarket & { _inferredCategory?: CategoryId })[];
+    let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
         category: m.category,
-        tags: typeof m.tags === "string" ? [] : m.tags,
+        tags: m.tags,
         question: m.question,
       }),
     }));
@@ -62,7 +62,6 @@ const Index = () => {
   return (
     <div className="min-h-screen">
       <div className="container py-8">
-        {/* Hero */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Activity className="h-7 w-7 text-primary" />
@@ -74,7 +73,6 @@ const Index = () => {
             Browse, trade, and track prediction markets. Non-custodial. Powered by Polymarket.
           </p>
 
-          {/* Quick stats */}
           {markets && markets.length > 0 && (
             <div className="flex flex-wrap gap-4 mt-4">
               <div className="rounded-lg border border-border bg-card px-4 py-2">
@@ -82,16 +80,21 @@ const Index = () => {
                 <span className="font-mono text-lg font-bold text-foreground">{markets.length}</span>
               </div>
               <div className="rounded-lg border border-border bg-card px-4 py-2">
-                <span className="text-xs text-muted-foreground block">Total Volume</span>
+                <span className="text-xs text-muted-foreground block">24h Volume</span>
                 <span className="font-mono text-lg font-bold text-foreground">
-                  {formatVol(markets.reduce((s, m) => s + (m.volume_num || 0), 0))}
+                  {formatVol(markets.reduce((s, m) => s + (m.volume24h || 0), 0))}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-card px-4 py-2">
+                <span className="text-xs text-muted-foreground block">Total Liquidity</span>
+                <span className="font-mono text-lg font-bold text-foreground">
+                  {formatVol(markets.reduce((s, m) => s + (m.liquidity || 0), 0))}
                 </span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Quick links */}
         <div className="grid gap-3 sm:grid-cols-3 mb-8">
           <Link to="/live" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
             <Activity className="h-5 w-5 text-primary mb-2" />
@@ -110,7 +113,6 @@ const Index = () => {
           </Link>
         </div>
 
-        {/* Wallet CTA */}
         {!isConnected && (
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-8 flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -121,7 +123,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Search */}
         <div className="relative mb-4 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -133,7 +134,6 @@ const Index = () => {
           />
         </div>
 
-        {/* Category tabs */}
         <div className="flex flex-wrap gap-2 mb-6">
           {CATEGORIES.map((cat) => (
             <button
@@ -166,16 +166,14 @@ const Index = () => {
         {filtered.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.slice(0, 30).map((market) => {
-              const marketId = market.condition_id || market.id || market.slug;
-              if (!marketId) return null;
-              const prices = market.outcome_prices ? JSON.parse(market.outcome_prices) : [];
-              const yesPrice = prices[0] ? parseFloat(prices[0]) : null;
-              const noPrice = prices[1] ? parseFloat(prices[1]) : null;
+              if (!market.condition_id) return null;
+              const yesPrice = market.outcomePrices[0] ?? null;
+              const noPrice = market.outcomePrices[1] ?? null;
 
               return (
                 <Link
-                  key={marketId}
-                  to={`/trade/${encodeURIComponent(marketId)}`}
+                  key={market.condition_id}
+                  to={`/trade/${encodeURIComponent(market.condition_id)}`}
                   className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary"
                 >
                   <div className="flex items-start gap-3 mb-3">
@@ -204,15 +202,17 @@ const Index = () => {
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <BarChart3 className="h-3 w-3" />
-                      <span>{formatVol(market.volume_num || 0)}</span>
+                      <span>{formatVol(market.volume24h)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" />
-                      <span>{formatVol(market.liquidity_num || 0)} liq</span>
+                      <span>{formatVol(market.liquidity)} liq</span>
                     </div>
-                    <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-                      LIVE
-                    </span>
+                    {market.accepting_orders && (
+                      <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                        LIVE
+                      </span>
+                    )}
                   </div>
                 </Link>
               );
