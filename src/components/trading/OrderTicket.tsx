@@ -2,9 +2,10 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { placeOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp } from "lucide-react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useUsdcApproval } from "@/hooks/useUsdcApproval";
 
 interface OrderTicketProps {
   tokenId: string;
@@ -18,10 +19,23 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
   const [price, setPrice] = useState(currentPrice.toFixed(2));
   const [size, setSize] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
   const { isConnected } = useAccount();
 
+  const totalUsdc = parseFloat(price || "0") * parseFloat(size || "0");
+  const { needsApproval, approve, isApproving, usdcBalance } = useUsdcApproval(
+    side === "BUY" ? totalUsdc : 0
+  );
+
   const isYes = outcome === "Yes";
-  const total = (parseFloat(price || "0") * parseFloat(size || "0")).toFixed(2);
+  const total = totalUsdc.toFixed(2);
+  const potentialReturn = side === "BUY"
+    ? (parseFloat(size || "0") * (1 - parseFloat(price || "0"))).toFixed(2)
+    : (parseFloat(size || "0") * parseFloat(price || "0")).toFixed(2);
+
+  const hasInsufficientBalance = side === "BUY" && totalUsdc > usdcBalance && usdcBalance > 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +51,16 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
       toast.error("Enter a valid size");
       return;
     }
+    if (hasInsufficientBalance) {
+      toast.error("Insufficient USDC balance");
+      return;
+    }
+
+    if (!showConfirm) {
+      setShowConfirm(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
       const result = await placeOrder({
@@ -44,10 +68,12 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
         side,
         price: parseFloat(price),
         size: parseFloat(size),
+        orderType,
       });
       if (result.ok) {
-        toast.success(`${side} ${outcome} order placed`);
+        toast.success(`${side} ${outcome} order placed successfully`);
         setSize("");
+        setShowConfirm(false);
       } else {
         toast.error(result.error || "Order failed");
       }
@@ -57,6 +83,13 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
       setSubmitting(false);
     }
   }
+
+  function handleCancel() {
+    setShowConfirm(false);
+  }
+
+  // Quick size buttons
+  const quickSizes = [10, 25, 50, 100];
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-card p-4">
@@ -82,11 +115,19 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
         </div>
       )}
 
+      {/* USDC Balance */}
+      {isConnected && (
+        <div className="flex justify-between text-xs mb-3 px-1">
+          <span className="text-muted-foreground">USDC Balance</span>
+          <span className="font-mono text-foreground">${usdcBalance.toFixed(2)}</span>
+        </div>
+      )}
+
       {/* Side toggle */}
       <div className="flex gap-1 mb-3">
         <button
           type="button"
-          onClick={() => setSide("BUY")}
+          onClick={() => { setSide("BUY"); setShowConfirm(false); }}
           className={cn(
             "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
             side === "BUY"
@@ -98,7 +139,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
         </button>
         <button
           type="button"
-          onClick={() => setSide("SELL")}
+          onClick={() => { setSide("SELL"); setShowConfirm(false); }}
           className={cn(
             "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
             side === "SELL"
@@ -119,36 +160,137 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
           min="0.01"
           max="0.99"
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
+          onChange={(e) => { setPrice(e.target.value); setShowConfirm(false); }}
           disabled={!isConnected}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
       </div>
 
       {/* Size input */}
-      <div className="mb-3">
+      <div className="mb-2">
         <label className="text-[10px] text-muted-foreground mb-1 block">Shares</label>
         <input
           type="number"
           step="1"
           min="1"
           value={size}
-          onChange={(e) => setSize(e.target.value)}
+          onChange={(e) => { setSize(e.target.value); setShowConfirm(false); }}
           placeholder="0"
           disabled={!isConnected}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
       </div>
 
-      {/* Total */}
-      <div className="flex justify-between text-xs mb-3 px-1">
-        <span className="text-muted-foreground">Est. Total</span>
-        <span className="font-mono text-foreground">${total}</span>
+      {/* Quick size buttons */}
+      {isConnected && (
+        <div className="flex gap-1 mb-3">
+          {quickSizes.map((qs) => (
+            <button
+              key={qs}
+              type="button"
+              onClick={() => { setSize(String(qs)); setShowConfirm(false); }}
+              className="flex-1 rounded-md border border-border bg-muted py-1 text-[10px] font-mono text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
+            >
+              {qs}
+            </button>
+          ))}
+          {usdcBalance > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const maxShares = Math.floor(usdcBalance / parseFloat(price || "0.5"));
+                setSize(String(maxShares));
+                setShowConfirm(false);
+              }}
+              className="flex-1 rounded-md border border-primary/30 bg-primary/5 py-1 text-[10px] font-mono text-primary hover:bg-primary/10 transition-all"
+            >
+              MAX
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Advanced options */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground mb-2 transition-all"
+      >
+        {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        Advanced
+      </button>
+      {showAdvanced && (
+        <div className="mb-3 rounded-md border border-border bg-muted/50 p-2">
+          <label className="text-[10px] text-muted-foreground mb-1 block">Order Type</label>
+          <select
+            value={orderType}
+            onChange={(e) => setOrderType(e.target.value as any)}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="GTC">Good Till Cancel (GTC)</option>
+            <option value="FOK">Fill or Kill (FOK)</option>
+            <option value="GTD">Good Till Date (GTD)</option>
+          </select>
+        </div>
+      )}
+
+      {/* Order summary */}
+      <div className="space-y-1 mb-3 px-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Est. Cost</span>
+          <span className="font-mono text-foreground">${total}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Potential Return</span>
+          <span className="font-mono text-yes">+${potentialReturn}</span>
+        </div>
+        {hasInsufficientBalance && (
+          <p className="text-[10px] text-destructive font-medium">Insufficient USDC balance</p>
+        )}
       </div>
 
+      {/* Confirmation state */}
+      {showConfirm && (
+        <div className="rounded-md border border-warning/30 bg-warning/5 p-3 mb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="h-4 w-4 text-warning" />
+            <span className="text-xs font-semibold text-warning">Confirm Order</span>
+          </div>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>{side} <strong className="text-foreground">{size}</strong> shares of <strong className={isYes ? "text-yes" : "text-no"}>{outcome}</strong></p>
+            <p>at <strong className="text-foreground">{price}¢</strong> per share</p>
+            <p>Total: <strong className="text-foreground">${total}</strong> USDC</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="mt-2 text-[10px] text-muted-foreground hover:text-foreground underline"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Approval button */}
+      {isConnected && needsApproval && side === "BUY" && parseFloat(size || "0") > 0 && (
+        <button
+          type="button"
+          onClick={approve}
+          disabled={isApproving}
+          className="w-full rounded-md py-2 text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all disabled:opacity-50 mb-2"
+        >
+          {isApproving ? (
+            <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+          ) : (
+            "Approve USDC"
+          )}
+        </button>
+      )}
+
+      {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || !size || !isConnected || !isTradable}
+        disabled={submitting || !size || !isConnected || !isTradable || hasInsufficientBalance || (needsApproval && side === "BUY")}
         className={cn(
           "w-full rounded-md py-2.5 text-sm font-bold transition-all disabled:opacity-50",
           side === "BUY"
@@ -160,6 +302,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
           <Loader2 className="h-4 w-4 animate-spin mx-auto" />
         ) : !isConnected ? (
           "Connect Wallet"
+        ) : showConfirm ? (
+          `Confirm ${side} ${outcome}`
         ) : (
           `${side} ${outcome}`
         )}
