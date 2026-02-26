@@ -46,6 +46,9 @@ export interface NormalizedMarket {
   accepting_orders: boolean;
   statusLabel: MarketStatusLabel;
 
+  // Event slug for Polymarket external links
+  event_slug: string;
+
   // Display
   image: string;
   icon: string;
@@ -177,12 +180,21 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   }
 
   // accepting_orders: handle both camelCase and snake_case
-  const accepting_orders = (raw.accepting_orders ?? raw.acceptingOrders) !== false;
+  // IMPORTANT: default to FALSE when missing (unknown = not safe to label LIVE)
+  const rawAccepting = raw.accepting_orders ?? raw.acceptingOrders;
+  const accepting_orders = rawAccepting === true;
 
   // Status booleans — support both camelCase and snake_case
-  const active = (raw.active ?? raw.isActive ?? true) !== false;
+  // IMPORTANT: default active to FALSE when missing (unknown = not safe to label LIVE)
+  const rawActive = raw.active ?? raw.isActive;
+  const active = rawActive === true;
   const closed = (raw.closed ?? raw.isClosed) === true;
   const archived = (raw.archived ?? raw.isArchived) === true;
+
+  // Event slug for correct Polymarket external links
+  const event_slug = String(
+    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
+  ).trim();
 
   // Classify market status
   const hasValidConditionId = isBytes32Hex(condition_id);
@@ -226,6 +238,8 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     archived,
     accepting_orders,
     statusLabel,
+
+  event_slug,
 
     image: raw.image || "",
     icon: raw.icon || "",

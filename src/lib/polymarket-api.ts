@@ -72,15 +72,8 @@ export async function fetchMarkets(params?: {
   // Normalize all markets
   const data = normalizeMarkets(Array.isArray(raw) ? raw : []);
 
-  // Strict filter: only tradable markets
-  return data.filter((m) => {
-    if (m.closed) return false;
-    if (m.archived) return false;
-    if (m.active === false) return false;
-    if (m.accepting_orders === false) return false;
-    if (!m.condition_id) return false;
-    return true;
-  });
+  // Return all normalized markets — UI uses statusLabel to rank/filter
+  return data.filter((m) => !!m.condition_id);
 }
 
 export async function fetchMarketBySlug(slug: string): Promise<NormalizedMarket | null> {
