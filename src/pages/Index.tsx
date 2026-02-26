@@ -11,7 +11,7 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
+import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -178,7 +178,7 @@ const Index = () => {
             {filtered.slice(0, 30).map((market) => {
               if (!market.condition_id) return null;
               const hasValidId = isBytes32Hex(market.condition_id);
-              if (!hasValidId) return null;
+              if (!hasValidId || market.statusLabel !== "LIVE") return null;
 
               const yesPrice = market.outcomePrices?.[0];
               const noPrice = market.outcomePrices?.[1];
@@ -217,7 +217,7 @@ const Index = () => {
                       <TrendingUp className="h-3 w-3" />
                       <span>{formatVol(market.liquidity)} liq</span>
                     </div>
-                    {market.accepting_orders && (
+                    {market.statusLabel === "LIVE" && (
                       <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                         LIVE
                       </span>

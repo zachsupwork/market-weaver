@@ -5,6 +5,8 @@ export function isBytes32Hex(value: string): boolean {
   return /^0x[a-fA-F0-9]{64}$/.test(value);
 }
 
+export type MarketStatusLabel = "LIVE" | "CLOSED" | "ARCHIVED" | "UNAVAILABLE";
+
 export interface NormalizedMarket {
   // Identity
   condition_id: string;
@@ -42,6 +44,7 @@ export interface NormalizedMarket {
   closed: boolean;
   archived: boolean;
   accepting_orders: boolean;
+  statusLabel: MarketStatusLabel;
 
   // Display
   image: string;
@@ -176,6 +179,26 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   // accepting_orders: handle both camelCase and snake_case
   const accepting_orders = (raw.accepting_orders ?? raw.acceptingOrders) !== false;
 
+  // Status booleans — support both camelCase and snake_case
+  const active = (raw.active ?? raw.isActive ?? true) !== false;
+  const closed = (raw.closed ?? raw.isClosed) === true;
+  const archived = (raw.archived ?? raw.isArchived) === true;
+
+  // Classify market status
+  const hasValidConditionId = isBytes32Hex(condition_id);
+  const hasTradableTokens = clobTokenIds.length >= 2;
+
+  let statusLabel: MarketStatusLabel;
+  if (archived) {
+    statusLabel = "ARCHIVED";
+  } else if (closed || !active) {
+    statusLabel = "CLOSED";
+  } else if (!hasValidConditionId || !hasTradableTokens || !accepting_orders) {
+    statusLabel = "UNAVAILABLE";
+  } else {
+    statusLabel = "LIVE";
+  }
+
   return {
     condition_id,
     id: raw.id || "",
@@ -198,10 +221,12 @@ export function normalizeMarket(raw: any): NormalizedMarket {
 
     tokens,
 
-    active: (raw.active ?? true) !== false,
-    closed: raw.closed === true,
-    archived: raw.archived === true,
+    active,
+    closed,
+    archived,
     accepting_orders,
+    statusLabel,
+
     image: raw.image || "",
     icon: raw.icon || "",
     category: raw.category || "",

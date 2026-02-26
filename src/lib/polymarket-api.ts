@@ -1,6 +1,6 @@
 // Polymarket API client - uses edge function proxies for CORS
 
-import { normalizeMarket, normalizeMarkets, isBytes32Hex, type NormalizedMarket } from "./normalizePolymarket";
+import { normalizeMarket, normalizeMarkets, isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "./normalizePolymarket";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
@@ -11,7 +11,7 @@ function fnUrl(name: string) {
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Re-export
-export type { NormalizedMarket };
+export type { NormalizedMarket, MarketStatusLabel };
 export { isBytes32Hex };
 export type PolymarketMarket = NormalizedMarket;
 

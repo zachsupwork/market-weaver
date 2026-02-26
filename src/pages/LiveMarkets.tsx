@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import {
@@ -10,7 +10,7 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
+import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -24,16 +24,37 @@ function formatPrice(p: number | undefined): string {
   return `${cents}¢`;
 }
 
+function StatusBadge({ status }: { status: MarketStatusLabel }) {
+  if (status === "LIVE") {
+    return (
+      <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+        LIVE
+      </span>
+    );
+  }
+  const colors: Record<string, string> = {
+    CLOSED: "bg-muted border-border text-muted-foreground",
+    ARCHIVED: "bg-muted border-border text-muted-foreground",
+    UNAVAILABLE: "bg-destructive/10 border-destructive/20 text-destructive",
+  };
+  return (
+    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-mono border", colors[status] || colors.UNAVAILABLE)}>
+      {status}
+    </span>
+  );
+}
+
 const LiveMarkets = () => {
   const [page, setPage] = useState(0);
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
+  const [showClosed, setShowClosed] = useState(false);
   const limit = 100;
   const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
   const { isConnected } = useAccount();
 
-  const filtered = useMemo(() => {
-    if (!markets) return [];
+  const { liveMarkets, otherMarkets } = useMemo(() => {
+    if (!markets) return { liveMarkets: [], otherMarkets: [] };
 
     let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
@@ -69,8 +90,71 @@ const LiveMarkets = () => {
       list = sortByTrending(list);
     }
 
-    return list;
+    const live = list.filter((m) => m.statusLabel === "LIVE");
+    const other = list.filter((m) => m.statusLabel !== "LIVE");
+
+    return { liveMarkets: live, otherMarkets: other };
   }, [markets, category, search]);
+
+  const renderMarketCard = (market: NormalizedMarket & { _inferredCategory?: CategoryId }, dimmed = false) => {
+    const hasValidId = isBytes32Hex(market.condition_id);
+    if (!market.condition_id) return null;
+
+    const yesPrice = market.outcomePrices?.[0];
+    const noPrice = market.outcomePrices?.[1];
+
+    const content = (
+      <div className={cn(
+        "group block rounded-xl border border-border bg-card p-5 transition-all",
+        dimmed ? "opacity-60" : "hover:border-primary/30 hover:glow-primary"
+      )}>
+        <div className="flex items-start gap-3 mb-3">
+          {market.icon && (
+            <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
+          )}
+          <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
+            {market.question}
+          </h3>
+        </div>
+
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Yes</span>
+            <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+          </div>
+          <div className="h-6 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">No</span>
+            <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <BarChart3 className="h-3 w-3" />
+            <span>{formatVol(market.volume24h)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <TrendingUp className="h-3 w-3" />
+            <span>{formatVol(market.liquidity)} liq</span>
+          </div>
+          <span className="ml-auto">
+            <StatusBadge status={market.statusLabel} />
+          </span>
+        </div>
+      </div>
+    );
+
+    if (!hasValidId || market.statusLabel !== "LIVE") {
+      return <div key={market.id || market.condition_id || market.question} className="cursor-not-allowed">{content}</div>;
+    }
+
+    return (
+      <Link key={market.condition_id} to={`/trade/${encodeURIComponent(market.condition_id)}`} className="block">
+        {content}
+      </Link>
+    );
+  };
 
   return (
     <div className="min-h-screen">
@@ -134,117 +218,56 @@ const LiveMarkets = () => {
           </div>
         )}
 
-        {filtered.length > 0 && (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((market) => {
-                // Must have a valid bytes32 condition_id to be clickable
-                const hasValidId = isBytes32Hex(market.condition_id);
-                if (!market.condition_id) {
-                  if (import.meta.env.DEV) console.warn("[PolyView] Skipping market without condition_id:", market.question);
-                  return null;
-                }
-
-                const yesPrice = market.outcomePrices?.[0];
-                const noPrice = market.outcomePrices?.[1];
-                const hasPrices = yesPrice !== undefined && noPrice !== undefined && !(yesPrice === 0.5 && noPrice === 0.5 && market.outcomePrices.length === 2);
-
-                const content = (
-                  <div className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary">
-                    <div className="flex items-start gap-3 mb-3">
-                      {market.icon && (
-                        <img
-                          src={market.icon}
-                          alt=""
-                          className="h-8 w-8 rounded-full bg-muted shrink-0"
-                          loading="lazy"
-                        />
-                      )}
-                      <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
-                        {market.question}
-                      </h3>
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Yes</span>
-                        <span className="font-mono text-lg font-bold text-yes">
-                          {formatPrice(yesPrice)}
-                        </span>
-                      </div>
-                      <div className="h-6 w-px bg-border" />
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">No</span>
-                        <span className="font-mono text-lg font-bold text-no">
-                          {formatPrice(noPrice)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <BarChart3 className="h-3 w-3" />
-                        <span>{formatVol(market.volume24h)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3" />
-                        <span>{formatVol(market.liquidity)} liq</span>
-                      </div>
-                      {!hasValidId && (
-                        <span className="ml-auto rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive flex items-center gap-1">
-                          <AlertTriangle className="h-2.5 w-2.5" /> No ID
-                        </span>
-                      )}
-                      {hasValidId && market.accepting_orders && (
-                        <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-                          LIVE
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-
-                if (!hasValidId) {
-                  return <div key={market.id || market.question} className="opacity-60 cursor-not-allowed">{content}</div>;
-                }
-
-                return (
-                  <Link
-                    key={market.condition_id}
-                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                    className="block"
-                  >
-                    {content}
-                  </Link>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-center gap-3 mt-8">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
-              >
-                Previous
-              </button>
-              <span className="flex items-center text-sm text-muted-foreground">
-                Page {page + 1}
-              </span>
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={filtered.length < 20}
-                className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
-              >
-                Next
-              </button>
-            </div>
-          </>
+        {/* LIVE markets */}
+        {liveMarkets.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {liveMarkets.map((market) => renderMarketCard(market))}
+          </div>
         )}
 
-        {!isLoading && filtered.length === 0 && (
+        {!isLoading && liveMarkets.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-sm">No active markets found for this category.</p>
+          </div>
+        )}
+
+        {/* Closed / Unavailable section */}
+        {otherMarkets.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowClosed(!showClosed)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+            >
+              {showClosed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Closed / Unavailable ({otherMarkets.length})
+            </button>
+            {showClosed && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {otherMarkets.map((market) => renderMarketCard(market, true))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {liveMarkets.length > 0 && (
+          <div className="flex justify-center gap-3 mt-8">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+            >
+              Previous
+            </button>
+            <span className="flex items-center text-sm text-muted-foreground">
+              Page {page + 1}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={liveMarkets.length < 20}
+              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+            >
+              Next
+            </button>
           </div>
         )}
       </div>
