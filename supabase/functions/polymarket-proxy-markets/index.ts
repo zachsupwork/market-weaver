@@ -26,7 +26,8 @@ serve(async (req) => {
 
     let endpoint: string;
     if (conditionId) {
-      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=1`;
+      // Try both condition_id and conditionId params for maximum compatibility
+      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=5`;
     } else if (slug) {
       endpoint = `${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
     } else {

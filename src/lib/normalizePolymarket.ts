@@ -173,6 +173,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     tokens = safeParseJson(tokens, []);
   }
 
+  // accepting_orders: handle both camelCase and snake_case
+  const accepting_orders = (raw.accepting_orders ?? raw.acceptingOrders) !== false;
+
   return {
     condition_id,
     id: raw.id || "",
@@ -181,9 +184,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     description: raw.description || "",
     market_slug: raw.market_slug || slug,
 
-    end_date_iso: raw.end_date_iso || "",
+    end_date_iso: raw.end_date_iso || raw.endDateIso || raw.endDate || "",
     game_start_time: raw.game_start_time || "",
-    accepting_order_timestamp: raw.accepting_order_timestamp || "",
+    accepting_order_timestamp: raw.accepting_order_timestamp || raw.acceptingOrdersTimestamp || "",
 
     volume24h,
     totalVolume,
@@ -195,11 +198,10 @@ export function normalizeMarket(raw: any): NormalizedMarket {
 
     tokens,
 
-    active: raw.active !== false,
+    active: (raw.active ?? true) !== false,
     closed: raw.closed === true,
     archived: raw.archived === true,
-    accepting_orders: raw.accepting_orders !== false,
-
+    accepting_orders,
     image: raw.image || "",
     icon: raw.icon || "",
     category: raw.category || "",
