@@ -1,6 +1,6 @@
 // Polymarket API client - uses edge function proxies for CORS
 
-import { normalizeMarket, normalizeMarkets, type NormalizedMarket } from "./normalizePolymarket";
+import { normalizeMarket, normalizeMarkets, isBytes32Hex, type NormalizedMarket } from "./normalizePolymarket";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
@@ -10,8 +10,9 @@ function fnUrl(name: string) {
 
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Re-export NormalizedMarket as the primary market type
+// Re-export
 export type { NormalizedMarket };
+export { isBytes32Hex };
 export type PolymarketMarket = NormalizedMarket;
 
 export interface OrderbookLevel {
@@ -77,7 +78,7 @@ export async function fetchMarkets(params?: {
     if (m.archived) return false;
     if (m.active === false) return false;
     if (m.accepting_orders === false) return false;
-    if (!m.condition_id) return false; // Must have condition_id
+    if (!m.condition_id) return false;
     return true;
   });
 }
@@ -89,18 +90,24 @@ export async function fetchMarketBySlug(slug: string): Promise<NormalizedMarket 
   if (!res.ok) return null;
   const raw = await res.json();
   const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
-  // Find matching slug
   return list.find((m) => m.slug === slug || m.market_slug === slug) ?? list[0] ?? null;
 }
 
 export async function fetchMarketByConditionId(conditionId: string): Promise<NormalizedMarket | null> {
+  // Validate: must be bytes32 hex
+  if (!isBytes32Hex(conditionId)) {
+    console.warn(`[PolyView] Invalid condition_id format: ${conditionId}`);
+    return null;
+  }
+
   const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
     headers: { "apikey": ANON_KEY },
   });
   if (!res.ok) return null;
   const raw = await res.json();
   const list = normalizeMarkets(Array.isArray(raw) ? raw : [raw]);
-  // Find the EXACT matching condition_id
+
+  // Find the EXACT matching condition_id (handle camelCase keys too)
   const match = list.find((m) => m.condition_id === conditionId);
   if (!match) {
     console.warn(`[PolyView] No exact match for condition_id=${conditionId}, got ${list.length} results`);
@@ -164,4 +171,37 @@ export async function cancelOrder(orderId: string): Promise<{ ok: boolean; error
     body: JSON.stringify({ orderId }),
   });
   return res.json();
+}
+
+// Events API
+export async function fetchEvents(params?: {
+  active?: boolean;
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<any[]> {
+  const qs = new URLSearchParams();
+  if (params?.active !== undefined) qs.set("active", String(params.active));
+  if (params?.keyword) qs.set("_q", params.keyword);
+  qs.set("limit", String(params?.limit ?? 50));
+  qs.set("offset", String(params?.offset ?? 0));
+  qs.set("order", "volume");
+  qs.set("ascending", "false");
+
+  const res = await fetch(`${fnUrl("polymarket-proxy-events")}?${qs}`, {
+    headers: { "apikey": ANON_KEY },
+  });
+  if (!res.ok) throw new Error(`Events fetch failed: ${res.status}`);
+  const raw = await res.json();
+  return Array.isArray(raw) ? raw : [];
+}
+
+export async function fetchEventById(eventId: string): Promise<any | null> {
+  const res = await fetch(`${fnUrl("polymarket-proxy-events")}?id=${encodeURIComponent(eventId)}`, {
+    headers: { "apikey": ANON_KEY },
+  });
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return raw;
 }

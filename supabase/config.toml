@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.polymarket-test-auth]
 verify_jwt = false
+
+[functions.polymarket-proxy-events]
+verify_jwt = false

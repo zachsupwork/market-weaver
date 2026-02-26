@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import {
@@ -10,12 +10,18 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import type { NormalizedMarket } from "@/lib/polymarket-api";
+import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
+}
+
+function formatPrice(p: number | undefined): string {
+  if (p === undefined || p === null || isNaN(p)) return "—";
+  const cents = Math.round(p * 100);
+  return `${cents}¢`;
 }
 
 const LiveMarkets = () => {
@@ -132,20 +138,19 @@ const LiveMarkets = () => {
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((market) => {
+                // Must have a valid bytes32 condition_id to be clickable
+                const hasValidId = isBytes32Hex(market.condition_id);
                 if (!market.condition_id) {
                   if (import.meta.env.DEV) console.warn("[PolyView] Skipping market without condition_id:", market.question);
                   return null;
                 }
 
-                const yesPrice = market.outcomePrices[0] ?? null;
-                const noPrice = market.outcomePrices[1] ?? null;
+                const yesPrice = market.outcomePrices?.[0];
+                const noPrice = market.outcomePrices?.[1];
+                const hasPrices = yesPrice !== undefined && noPrice !== undefined && !(yesPrice === 0.5 && noPrice === 0.5 && market.outcomePrices.length === 2);
 
-                return (
-                  <Link
-                    key={market.condition_id}
-                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                    className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary animate-slide-in"
-                  >
+                const content = (
+                  <div className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary">
                     <div className="flex items-start gap-3 mb-3">
                       {market.icon && (
                         <img
@@ -161,25 +166,19 @@ const LiveMarkets = () => {
                     </div>
 
                     <div className="flex items-center gap-4 mb-4">
-                      {yesPrice !== null && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Yes</span>
-                          <span className="font-mono text-lg font-bold text-yes">
-                            {Math.round(yesPrice * 100)}¢
-                          </span>
-                        </div>
-                      )}
-                      {yesPrice !== null && noPrice !== null && (
-                        <div className="h-6 w-px bg-border" />
-                      )}
-                      {noPrice !== null && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">No</span>
-                          <span className="font-mono text-lg font-bold text-no">
-                            {Math.round(noPrice * 100)}¢
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Yes</span>
+                        <span className="font-mono text-lg font-bold text-yes">
+                          {formatPrice(yesPrice)}
+                        </span>
+                      </div>
+                      <div className="h-6 w-px bg-border" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">No</span>
+                        <span className="font-mono text-lg font-bold text-no">
+                          {formatPrice(noPrice)}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -191,12 +190,31 @@ const LiveMarkets = () => {
                         <TrendingUp className="h-3 w-3" />
                         <span>{formatVol(market.liquidity)} liq</span>
                       </div>
-                      {market.accepting_orders && (
+                      {!hasValidId && (
+                        <span className="ml-auto rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive flex items-center gap-1">
+                          <AlertTriangle className="h-2.5 w-2.5" /> No ID
+                        </span>
+                      )}
+                      {hasValidId && market.accepting_orders && (
                         <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                           LIVE
                         </span>
                       )}
                     </div>
+                  </div>
+                );
+
+                if (!hasValidId) {
+                  return <div key={market.id || market.question} className="opacity-60 cursor-not-allowed">{content}</div>;
+                }
+
+                return (
+                  <Link
+                    key={market.condition_id}
+                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
+                    className="block"
+                  >
+                    {content}
                   </Link>
                 );
               })}

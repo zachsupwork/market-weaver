@@ -11,12 +11,17 @@ import {
   inferCategory,
   sortByTrending,
 } from "@/lib/market-categories";
-import type { NormalizedMarket } from "@/lib/polymarket-api";
+import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
+}
+
+function formatPrice(p: number | undefined): string {
+  if (p === undefined || p === null || isNaN(p)) return "—";
+  return `${Math.round(p * 100)}¢`;
 }
 
 const Index = () => {
@@ -95,11 +100,16 @@ const Index = () => {
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3 mb-8">
+        <div className="grid gap-3 sm:grid-cols-4 mb-8">
           <Link to="/live" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
             <Activity className="h-5 w-5 text-primary mb-2" />
             <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Live Markets</h3>
             <p className="text-xs text-muted-foreground mt-1">Browse all active prediction markets</p>
+          </Link>
+          <Link to="/events" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
+            <Search className="h-5 w-5 text-primary mb-2" />
+            <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Explore Events</h3>
+            <p className="text-xs text-muted-foreground mt-1">Browse events with nested markets</p>
           </Link>
           <Link to="/leaderboard" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
             <Trophy className="h-5 w-5 text-warning mb-2" />
@@ -167,8 +177,11 @@ const Index = () => {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.slice(0, 30).map((market) => {
               if (!market.condition_id) return null;
-              const yesPrice = market.outcomePrices[0] ?? null;
-              const noPrice = market.outcomePrices[1] ?? null;
+              const hasValidId = isBytes32Hex(market.condition_id);
+              if (!hasValidId) return null;
+
+              const yesPrice = market.outcomePrices?.[0];
+              const noPrice = market.outcomePrices?.[1];
 
               return (
                 <Link
@@ -185,19 +198,15 @@ const Index = () => {
                     </h3>
                   </div>
                   <div className="flex items-center gap-4 mb-4">
-                    {yesPrice !== null && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Yes</span>
-                        <span className="font-mono text-lg font-bold text-yes">{Math.round(yesPrice * 100)}¢</span>
-                      </div>
-                    )}
-                    {yesPrice !== null && noPrice !== null && <div className="h-6 w-px bg-border" />}
-                    {noPrice !== null && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">No</span>
-                        <span className="font-mono text-lg font-bold text-no">{Math.round(noPrice * 100)}¢</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Yes</span>
+                      <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+                    </div>
+                    <div className="h-6 w-px bg-border" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">No</span>
+                      <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
