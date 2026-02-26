@@ -32,6 +32,13 @@ function StatusBadge({ status }: { status: MarketStatusLabel }) {
       </span>
     );
   }
+  if (status === "ENDED") {
+    return (
+      <span className="rounded-full bg-warning/10 border border-warning/20 px-2 py-0.5 text-[10px] font-mono text-warning">
+        ENDED
+      </span>
+    );
+  }
   const colors: Record<string, string> = {
     CLOSED: "bg-muted border-border text-muted-foreground",
     ARCHIVED: "bg-muted border-border text-muted-foreground",
@@ -49,12 +56,13 @@ const LiveMarkets = () => {
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
+  const [showEnded, setShowEnded] = useState(false);
   const limit = 100;
   const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
   const { isConnected } = useAccount();
 
-  const { liveMarkets, otherMarkets } = useMemo(() => {
-    if (!markets) return { liveMarkets: [], otherMarkets: [] };
+  const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
+    if (!markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
 
     let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
@@ -91,9 +99,10 @@ const LiveMarkets = () => {
     }
 
     const live = list.filter((m) => m.statusLabel === "LIVE");
-    const other = list.filter((m) => m.statusLabel !== "LIVE");
+    const ended = list.filter((m) => m.statusLabel === "ENDED");
+    const other = list.filter((m) => m.statusLabel !== "LIVE" && m.statusLabel !== "ENDED");
 
-    return { liveMarkets: live, otherMarkets: other };
+    return { liveMarkets: live, endedMarkets: ended, otherMarkets: other };
   }, [markets, category, search]);
 
   const renderMarketCard = (market: NormalizedMarket & { _inferredCategory?: CategoryId }, dimmed = false) => {
@@ -244,6 +253,24 @@ const LiveMarkets = () => {
             {showClosed && (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {otherMarkets.map((market) => renderMarketCard(market, true))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ended / Resolved section — always last */}
+        {endedMarkets.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowEnded(!showEnded)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+            >
+              {showEnded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Ended / Resolved ({endedMarkets.length})
+            </button>
+            {showEnded && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {endedMarkets.map((market) => renderMarketCard(market, true))}
               </div>
             )}
           </div>
