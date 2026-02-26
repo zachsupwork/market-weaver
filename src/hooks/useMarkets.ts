@@ -10,7 +10,18 @@ export function useMarkets(params?: {
 }) {
   return useQuery({
     queryKey: ["polymarket-markets", params],
-    queryFn: () => fetchMarkets(params),
+    queryFn: async () => {
+      const data = await fetchMarkets(params);
+      if (import.meta.env.DEV && data.length > 0) {
+        console.log("[PolyView Markets] Sample (first 3):", data.slice(0, 3).map(m => ({
+          condition_id: m.condition_id,
+          id: m.id,
+          slug: m.slug,
+          question: m.question?.slice(0, 40),
+        })));
+      }
+      return data;
+    },
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
