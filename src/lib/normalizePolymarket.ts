@@ -5,7 +5,7 @@ export function isBytes32Hex(value: string): boolean {
   return /^0x[a-fA-F0-9]{64}$/.test(value);
 }
 
-export type MarketStatusLabel = "LIVE" | "CLOSED" | "ARCHIVED" | "UNAVAILABLE";
+export type MarketStatusLabel = "LIVE" | "CLOSED" | "ARCHIVED" | "UNAVAILABLE" | "ENDED";
 
 export interface NormalizedMarket {
   // Identity
@@ -45,6 +45,7 @@ export interface NormalizedMarket {
   archived: boolean;
   accepting_orders: boolean;
   statusLabel: MarketStatusLabel;
+  ended: boolean;
 
   // Event slug for Polymarket external links
   event_slug: string;
@@ -62,6 +63,14 @@ export interface NormalizedMarket {
   liquidity_num: number;
   outcome_prices: string;
   clob_token_ids: string;
+}
+
+export function isEndedByPrices(outcomePrices?: number[]): boolean {
+  if (!outcomePrices || outcomePrices.length !== 2) return false;
+  const [a, b] = outcomePrices;
+  const lo = (x: number) => x <= 0.01;
+  const hi = (x: number) => x >= 0.99;
+  return (lo(a) && hi(b)) || (hi(a) && lo(b));
 }
 
 function safeParseJson<T>(val: unknown, fallback: T): T {
@@ -196,6 +205,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
   ).trim();
 
+  // Detect ended by extreme prices (resolved market)
+  const ended = isEndedByPrices(outcomePrices);
+
   // Classify market status
   const hasValidConditionId = isBytes32Hex(condition_id);
   const hasTradableTokens = clobTokenIds.length >= 2;
@@ -203,6 +215,8 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   let statusLabel: MarketStatusLabel;
   if (archived) {
     statusLabel = "ARCHIVED";
+  } else if (ended) {
+    statusLabel = "ENDED";
   } else if (closed || !active) {
     statusLabel = "CLOSED";
   } else if (!hasValidConditionId || !hasTradableTokens || !accepting_orders) {
@@ -238,8 +252,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     archived,
     accepting_orders,
     statusLabel,
+    ended,
 
-  event_slug,
+    event_slug,
 
     image: raw.image || "",
     icon: raw.icon || "",

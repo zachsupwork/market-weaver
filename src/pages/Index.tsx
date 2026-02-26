@@ -178,7 +178,7 @@ const Index = () => {
             {filtered.slice(0, 30).map((market) => {
               if (!market.condition_id) return null;
               const hasValidId = isBytes32Hex(market.condition_id);
-              if (!hasValidId || market.statusLabel !== "LIVE") return null;
+              if (!hasValidId || market.statusLabel !== "LIVE" || market.ended) return null;
 
               const yesPrice = market.outcomePrices?.[0];
               const noPrice = market.outcomePrices?.[1];

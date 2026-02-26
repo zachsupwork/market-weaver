@@ -1,6 +1,6 @@
 // Polymarket API client - uses edge function proxies for CORS
 
-import { normalizeMarket, normalizeMarkets, isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "./normalizePolymarket";
+import { normalizeMarket, normalizeMarkets, isBytes32Hex, isEndedByPrices, type NormalizedMarket, type MarketStatusLabel } from "./normalizePolymarket";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
