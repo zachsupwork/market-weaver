@@ -6,9 +6,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
-import { walletConfig } from "@/lib/wallet-config";
+import { walletConfig, walletConnectConfigured } from "@/lib/wallet-config";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AgeGate } from "@/components/AgeGate";
+import { useEffect } from "react";
+import { useAccount } from "wagmi";
 import Index from "./pages/Index";
 import LiveMarkets from "./pages/LiveMarkets";
 import Trade from "./pages/Trade";
@@ -19,6 +21,25 @@ import PolymarketSettings from "./pages/PolymarketSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function WalletDebugLogger() {
+  const { address, isConnected, chainId, connector } = useAccount();
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("[PolyView Wallet]", { isConnected, address, chainId, connector: connector?.name });
+    }
+  }, [isConnected, address, chainId, connector]);
+  return null;
+}
+
+function WalletConnectBanner() {
+  if (walletConnectConfigured) return null;
+  return (
+    <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 text-center text-xs text-destructive">
+      WalletConnect disabled: set <code className="font-mono">VITE_WALLETCONNECT_PROJECT_ID</code> in your environment.
+    </div>
+  );
+}
 
 const App = () => (
   <WagmiProvider config={walletConfig}>
@@ -34,6 +55,8 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AgeGate>
+              <WalletConnectBanner />
+              <WalletDebugLogger />
               <AppHeader />
               <Routes>
                 <Route path="/" element={<Index />} />

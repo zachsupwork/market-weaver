@@ -15,15 +15,27 @@ function formatVol(n: number): string {
 
 const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
-  const [selectedOutcome, setSelectedOutcome] = useState(0); // 0 = Yes, 1 = No
+  const [selectedOutcome, setSelectedOutcome] = useState(0);
 
-  // Fetch market details. We use condition_id to query gamma API
   const { data: market, isLoading } = useQuery({
     queryKey: ["trade-market", conditionId],
     queryFn: () => fetchMarketByConditionId(conditionId!),
     enabled: !!conditionId,
     staleTime: 15_000,
   });
+
+  // Guard: missing/undefined param
+  if (!conditionId || conditionId === "undefined") {
+    return (
+      <div className="container py-16 text-center">
+        <p className="text-lg font-semibold text-destructive">Invalid market ID</p>
+        <p className="text-sm text-muted-foreground mt-1">The market link appears to be broken.</p>
+        <Link to="/live" className="text-primary text-sm mt-4 inline-block hover:underline">
+          ← Back to live markets
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
