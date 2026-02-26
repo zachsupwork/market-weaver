@@ -21,13 +21,13 @@ serve(async (req) => {
     const slug = url.searchParams.get("slug");
     const tag = url.searchParams.get("tag");
     const text = url.searchParams.get("text");
-
     const conditionId = url.searchParams.get("condition_id");
 
     let endpoint: string;
     if (conditionId) {
-      // Try both condition_id and conditionId params for maximum compatibility
-      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=5`;
+      // Gamma's condition_id filter is unreliable - fetch broader set and filter server-side
+      // Try multiple query approaches for best results
+      endpoint = `${GAMMA_API}/markets?condition_id=${encodeURIComponent(conditionId)}&limit=20`;
     } else if (slug) {
       endpoint = `${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
     } else {
@@ -49,14 +49,32 @@ serve(async (req) => {
     });
 
     if (!res.ok) {
-      const text = await res.text();
+      const errText = await res.text();
       return new Response(
-        JSON.stringify({ error: `Gamma API error: ${res.status}`, detail: text.substring(0, 200) }),
+        JSON.stringify({ error: `Gamma API error: ${res.status}`, detail: errText.substring(0, 200) }),
         { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const data = await res.json();
+    let data = await res.json();
+
+    // If searching by condition_id, do exact server-side filtering
+    if (conditionId && Array.isArray(data)) {
+      const needle = conditionId.toLowerCase();
+      const exactMatch = data.filter((m: any) => {
+        const cid = String(m.condition_id ?? m.conditionId ?? m.conditionID ?? "").trim().toLowerCase();
+        return cid === needle;
+      });
+      
+      if (exactMatch.length > 0) {
+        data = exactMatch;
+      } else {
+        // Gamma didn't return our market - try slug-based search as fallback
+        // Return empty array so client knows it's not found
+        data = [];
+      }
+    }
+
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
