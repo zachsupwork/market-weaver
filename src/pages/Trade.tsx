@@ -38,7 +38,7 @@ import {
   Send,
   RefreshCw,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -93,6 +93,13 @@ const Trade = () => {
   const { isConnected, address } = useAccount();
   const queryClient = useQueryClient();
 
+  // Visibility-aware polling: pause refetching when tab is hidden
+  const [isTabVisible, setIsTabVisible] = useState(!document.hidden);
+  useEffect(() => {
+    const handler = () => setIsTabVisible(!document.hidden);
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
   // Validate condition_id format
   const isValidId = conditionId ? isBytes32Hex(conditionId) : false;
 
@@ -135,12 +142,35 @@ const Trade = () => {
     refetchInterval: 60_000,
   });
 
+  // Fetch trades for both YES and NO tokens, merge and sort
+  const yesTokenId = tokenIds[0] || "";
+  const noTokenId = tokenIds[1] || "";
+  const isLive = market?.statusLabel === "LIVE";
+
   const { data: trades, isLoading: tradesLoading } = useQuery({
-    queryKey: ["trades", currentTokenId],
-    queryFn: () => fetchTrades(currentTokenId, 50),
-    enabled: !!currentTokenId,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    queryKey: ["trades", yesTokenId, noTokenId],
+    queryFn: async () => {
+      const results: TradeRecord[] = [];
+      const fetches = [yesTokenId, noTokenId].filter(Boolean).map(async (tid, idx) => {
+        const items = await fetchTrades(tid, 30);
+        return items.map((t) => ({
+          ...t,
+          outcome: idx === 0 ? "YES" : "NO",
+        }));
+      });
+      const all = await Promise.all(fetches);
+      all.forEach((batch) => results.push(...batch));
+      // Sort by timestamp descending
+      results.sort((a, b) => {
+        const ta = new Date(a.timestamp).getTime() || 0;
+        const tb = new Date(b.timestamp).getTime() || 0;
+        return tb - ta;
+      });
+      return results;
+    },
+    enabled: !!yesTokenId,
+    staleTime: 3_000,
+    refetchInterval: isLive && isTabVisible ? 4_000 : false,
   });
 
   const { data: userPositions } = useQuery({
@@ -647,9 +677,17 @@ const Trade = () => {
 
               <div className="lg:col-span-5 space-y-4">
                 <div className="rounded-lg border border-border bg-card p-4">
-                  <h3 className="text-sm font-semibold mb-3">Recent Trades</h3>
-                  <div className="grid grid-cols-4 text-[10px] text-muted-foreground font-mono mb-1 px-1">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Recent Trades</h3>
+                    {isLive && isTabVisible && (
+                      <span className="flex items-center gap-1 text-[10px] text-yes font-mono">
+                        <span className="h-1.5 w-1.5 rounded-full bg-yes animate-pulse" /> Live
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-5 text-[10px] text-muted-foreground font-mono mb-1 px-1">
                     <span>Time</span>
+                    <span>Outcome</span>
                     <span>Price</span>
                     <span>Size</span>
                     <span className="text-right">Side</span>
@@ -662,12 +700,19 @@ const Trade = () => {
                     ) : trades && trades.length > 0 ? (
                       trades.slice(0, 50).map((trade, i) => {
                         const isLargeFill = trade.size >= 100;
+                        const outcomeLabel = (trade as any).outcome || "";
                         return (
                           <div key={i} className={cn(
-                            "grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors",
+                            "grid grid-cols-5 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors",
                             isLargeFill && "bg-primary/5 border-l-2 border-primary"
                           )}>
                             <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
+                            <span className={cn(
+                              "font-semibold",
+                              outcomeLabel === "YES" ? "text-yes" : outcomeLabel === "NO" ? "text-no" : "text-foreground"
+                            )}>
+                              {outcomeLabel || "—"}
+                            </span>
                             <span>{Math.round(trade.price * 100)}¢</span>
                             <span className={isLargeFill ? "font-bold text-foreground" : ""}>{trade.size.toFixed(1)}{isLargeFill && " 🔥"}</span>
                             <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>
