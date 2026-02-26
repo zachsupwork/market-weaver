@@ -24,42 +24,61 @@ serve(async (req) => {
       );
     }
 
-    // Use the public Data API (no auth required) instead of CLOB API (requires API key)
-    const dataApi = "https://data-api.polymarket.com";
-    
-    let endpoint: string;
+    // Try multiple public endpoints in order of preference
+    const endpoints: string[] = [];
+
     if (tokenId) {
-      endpoint = `${dataApi}/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`;
+      // Gamma API activity endpoint (public, no auth)
+      endpoints.push(
+        `https://gamma-api.polymarket.com/activity?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}&type=TRADE`
+      );
+      // CLOB trades endpoint (public GET)
+      endpoints.push(
+        `https://clob.polymarket.com/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`
+      );
     } else {
-      endpoint = `${dataApi}/trades?market=${encodeURIComponent(conditionId!)}&limit=${limit}`;
-    }
-
-    const res = await fetch(endpoint, {
-      headers: { "Accept": "application/json" },
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return new Response(
-        JSON.stringify({ error: `Trades API error: ${res.status}`, detail: text.substring(0, 200) }),
-        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      endpoints.push(
+        `https://gamma-api.polymarket.com/activity?market=${encodeURIComponent(conditionId!)}&limit=${limit}&type=TRADE`
       );
     }
 
-    const data = await res.json();
-    
-    // Normalize trades to a consistent shape
-    const trades = (Array.isArray(data) ? data : []).map((t: any) => ({
-      id: t.id || t.trade_id || "",
-      timestamp: t.timestamp || t.created_at || t.match_time || "",
-      price: parseFloat(t.price || "0"),
-      size: parseFloat(t.size || t.amount || "0"),
-      side: (t.side || t.maker_side || "BUY").toUpperCase(),
-      asset_id: t.asset_id || t.token_id || tokenId || "",
-    }));
+    let lastError = "";
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          headers: { "Accept": "application/json" },
+        });
 
-    return new Response(JSON.stringify(trades), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+        if (!res.ok) {
+          lastError = `${endpoint} returned ${res.status}`;
+          continue;
+        }
+
+        const data = await res.json();
+        const rawList = Array.isArray(data) ? data : [];
+
+        // Normalize trades to a consistent shape
+        const trades = rawList.map((t: any) => ({
+          id: t.id || t.trade_id || "",
+          timestamp: t.timestamp || t.created_at || t.match_time || t.time || "",
+          price: parseFloat(t.price || t.outcome_price || "0"),
+          size: parseFloat(t.size || t.amount || t.quantity || "0"),
+          side: (t.side || t.maker_side || t.type || "BUY").toUpperCase(),
+          asset_id: t.asset_id || t.token_id || tokenId || "",
+        }));
+
+        return new Response(JSON.stringify(trades), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        lastError = e.message;
+        continue;
+      }
+    }
+
+    // All endpoints failed - return empty array with warning
+    return new Response(JSON.stringify([]), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Trades-Warning": lastError },
     });
   } catch (err) {
     return new Response(
