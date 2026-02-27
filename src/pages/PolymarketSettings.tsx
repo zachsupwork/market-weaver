@@ -157,7 +157,14 @@ export default function PolymarketSettings() {
         setDepositInfo(result.deposit);
         toast({ title: "Deposit address retrieved" });
       } else {
-        toast({ title: "Error", description: result.error, variant: "destructive" });
+        console.error("[PolyView] createDepositAddress failed:", result);
+        const statusInfo = result.upstreamStatus ? ` (upstream ${result.upstreamStatus})` : "";
+        const bodyPreview = result.upstreamBody ? `\n${String(result.upstreamBody).slice(0, 140)}` : "";
+        toast({
+          title: "Deposit address failed" + statusInfo,
+          description: (result.error || "Unknown error") + bodyPreview,
+          variant: "destructive",
+        });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

@@ -78,6 +78,7 @@ PolyView is a rebranded Polymarket client that trades via the CLOB API using ser
 | `POLY_BUILDER_API_KEY` | Optional | Builder key for gasless tx + attribution |
 | `POLY_BUILDER_SECRET` | Optional | Builder secret |
 | `POLY_BUILDER_PASSPHRASE` | Optional | Builder passphrase |
+| `POLY_BRIDGE_DEPOSIT_URL` | Edge Function | Full URL for deposit address creation (e.g. `https://bridge.polymarket.com/deposit-addresses`) |
 
 ### Generating Real Credentials
 
