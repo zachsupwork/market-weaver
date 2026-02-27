@@ -2,9 +2,12 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { parseUnits } from "viem";
 import { useState, useEffect } from "react";
 
-const USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const;
+// USDC.e (bridged) on Polygon — used by Polymarket CTF Exchange
+const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
 // Polymarket CTF Exchange on Polygon
 const CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
+// Neg Risk CTF Exchange on Polygon
+const NEG_RISK_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a" as const;
 
 const erc20Abi = [
   {

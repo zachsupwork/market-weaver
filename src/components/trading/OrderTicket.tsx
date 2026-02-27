@@ -2,10 +2,11 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Circle } from "lucide-react";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useUsdcApproval } from "@/hooks/useUsdcApproval";
+import { useTradingReadiness } from "@/hooks/useTradingReadiness";
+import { deriveApiCreds } from "@/lib/polymarket-api";
 import { supabase } from "@/integrations/supabase/client";
 
 interface OrderTicketProps {
@@ -26,73 +27,100 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
+  const [derivingCreds, setDerivingCreds] = useState(false);
   const { isConnected, address } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
 
   const totalUsdc = parseFloat(price || "0") * parseFloat(size || "0");
-  const { needsApproval, approve, isApproving, usdcBalance } = useUsdcApproval(
-    side === "BUY" ? totalUsdc : 0
-  );
+  const readiness = useTradingReadiness(side === "BUY" ? totalUsdc : 0);
 
-  const isYes = outcome === "Yes";
+  const isYes = outcome === "Yes" || outcome.toLowerCase() === "yes";
   const total = totalUsdc.toFixed(2);
   const potentialReturn = side === "BUY"
     ? (parseFloat(size || "0") * (1 - parseFloat(price || "0"))).toFixed(2)
     : (parseFloat(size || "0") * parseFloat(price || "0")).toFixed(2);
 
-  const hasInsufficientBalance = side === "BUY" && totalUsdc > usdcBalance && usdcBalance > 0;
+  const hasInsufficientBalance = side === "BUY" && totalUsdc > readiness.usdc.usdcBalance && readiness.usdc.usdcBalance > 0;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
+
+  // ── Step Actions ──────────────────────────────────────────────
+  async function handleDeployProxy() {
+    readiness.proxy.deploy();
+  }
+
+  async function handleDeriveCreds() {
+    if (!address) return;
+    setDerivingCreds(true);
+    try {
+      // Ensure Supabase session
+      let { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const { error } = await supabase.auth.signInAnonymously();
+        if (error) { toast.error("Sign-in required"); setDerivingCreds(false); return; }
+        session = (await supabase.auth.getSession()).data.session;
+      }
+
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const nonce = "0";
+      const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
+      const types = {
+        ClobAuth: [
+          { name: "address", type: "address" },
+          { name: "timestamp", type: "string" },
+          { name: "nonce", type: "uint256" },
+          { name: "message", type: "string" },
+        ],
+      } as const;
+      const message = {
+        address,
+        timestamp,
+        nonce: BigInt(nonce),
+        message: "This message attests that I control the given wallet",
+      } as const;
+
+      const signature = await signTypedDataAsync({ account: address, domain, types, primaryType: "ClobAuth", message });
+      const result = await deriveApiCreds({ address, signature, timestamp, nonce });
+
+      if (result.ok) {
+        toast.success("Trading enabled!");
+        await readiness.refreshCreds();
+      } else {
+        toast.error(result.error || "Credential derivation failed");
+      }
+    } catch (err: any) {
+      const msg = err.message || "Failed";
+      if (msg.includes("rejected") || msg.includes("denied")) {
+        toast.error("Signature cancelled");
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setDerivingCreds(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isConnected || !address) {
-      toast.error("Connect your wallet first");
-      return;
-    }
-    if (!isTradable) {
-      toast.error("This market is not currently tradable");
-      return;
-    }
-    if (!ageConfirmed) {
-      toast.error("Please confirm age & jurisdiction in Settings before trading");
-      return;
-    }
-    if (!size || parseFloat(size) <= 0) {
-      toast.error("Enter a valid size");
-      return;
-    }
-    if (hasInsufficientBalance) {
-      toast.error("Insufficient USDC balance");
-      return;
-    }
+    if (!isConnected || !address) { toast.error("Connect your wallet first"); return; }
+    if (!isTradable) { toast.error("This market is not currently tradable"); return; }
+    if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
+    if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
+    if (!size || parseFloat(size) <= 0) { toast.error("Enter a valid size"); return; }
+    if (hasInsufficientBalance) { toast.error("Insufficient USDC.e balance"); return; }
 
-    // Check if user is logged in — attempt auto anonymous sign-in
+    // Ensure Supabase session
     let { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      const { error: anonErr } = await supabase.auth.signInAnonymously();
-      if (anonErr) {
-        toast.error("Sign in (guest is fine) to trade", {
-          description: "Go to Trading Settings to authenticate",
-          action: { label: "Settings", onClick: () => window.location.href = "/settings/polymarket" },
-        });
-        return;
-      }
-      const refreshed = await supabase.auth.getSession();
-      session = refreshed.data.session;
-      if (!session) {
-        toast.error("Session issue — visit Trading Settings to sign in");
-        return;
-      }
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) { toast.error("Sign in required"); return; }
+      session = (await supabase.auth.getSession()).data.session;
+      if (!session) { toast.error("Session issue"); return; }
     }
 
-    if (!showConfirm) {
-      setShowConfirm(true);
-      return;
-    }
+    if (!showConfirm) { setShowConfirm(true); return; }
 
     setSubmitting(true);
     try {
-      // Build order object for signing
       const orderData = {
         tokenID: tokenId,
         side: side.toUpperCase(),
@@ -104,7 +132,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         expiration: "0",
       };
 
-      // Submit signed order to backend (backend adds L2 HMAC headers)
       const result = await postSignedOrder(orderData);
 
       if (result.ok) {
@@ -114,7 +141,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       } else if (result.code === "GEOBLOCKED") {
         toast.error("Trading is not available in your jurisdiction");
       } else if (result.code === "NO_CREDS") {
-        toast.error("Enable trading in Settings → Trading Settings first");
+        toast.error("Enable trading first (Step 2 below)");
       } else {
         toast.error(result.error || "Order failed");
       }
@@ -125,11 +152,15 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     }
   }
 
-  function handleCancel() {
-    setShowConfirm(false);
-  }
-
   const quickSizes = [10, 25, 50, 100];
+
+  // ── State machine steps ───────────────────────────────────────
+  const steps = [
+    { key: "proxy" as const, label: "Approve Exchange", done: readiness.proxyReady },
+    { key: "creds" as const, label: "Enable Trading", done: readiness.credsReady },
+    { key: "usdc" as const, label: "Approve USDC.e", done: readiness.usdcReady },
+    { key: "ready" as const, label: "Trade", done: readiness.allReady },
+  ];
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-card p-4">
@@ -159,100 +190,109 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-2 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           <p className="text-[10px] text-warning">
-            Confirm age & jurisdiction in <a href="/settings/polymarket" className="underline font-semibold">Trading Settings</a> to trade.
+            Confirm age & jurisdiction in <a href="/settings/polymarket" className="underline font-semibold">Trading Settings</a>.
           </p>
         </div>
       )}
 
-      {/* USDC Balance */}
+      {/* Trading Setup Steps */}
+      {isConnected && ageConfirmed && !readiness.allReady && (
+        <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">Setup Required</p>
+          {steps.slice(0, 3).map((step, i) => {
+            const isCurrent = readiness.currentStep === step.key;
+            return (
+              <div key={step.key} className="flex items-center gap-2">
+                {step.done ? (
+                  <Check className="h-3.5 w-3.5 text-yes shrink-0" />
+                ) : (
+                  <Circle className={cn("h-3.5 w-3.5 shrink-0", isCurrent ? "text-primary" : "text-muted-foreground/40")} />
+                )}
+                <span className={cn("text-xs", step.done ? "text-muted-foreground line-through" : isCurrent ? "text-foreground font-medium" : "text-muted-foreground/60")}>
+                  Step {i + 1}: {step.label}
+                </span>
+                {isCurrent && !step.done && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (step.key === "proxy") handleDeployProxy();
+                      else if (step.key === "creds") handleDeriveCreds();
+                      else if (step.key === "usdc") readiness.usdc.approve();
+                    }}
+                    disabled={
+                      (step.key === "proxy" && readiness.proxy.isDeploying) ||
+                      (step.key === "creds" && (derivingCreds || readiness.credsLoading)) ||
+                      (step.key === "usdc" && readiness.usdc.isApproving)
+                    }
+                    className="ml-auto rounded-md bg-primary text-primary-foreground px-2.5 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
+                  >
+                    {(step.key === "proxy" && readiness.proxy.isDeploying) ||
+                     (step.key === "creds" && derivingCreds) ||
+                     (step.key === "usdc" && readiness.usdc.isApproving) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      step.key === "proxy" ? "Approve" : step.key === "creds" ? "Sign" : "Approve"
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* USDC.e Balance */}
       {isConnected && (
         <div className="flex justify-between text-xs mb-3 px-1">
-          <span className="text-muted-foreground">USDC Balance</span>
-          <span className="font-mono text-foreground">${usdcBalance.toFixed(2)}</span>
+          <span className="text-muted-foreground">USDC.e Balance</span>
+          <span className="font-mono text-foreground">${readiness.usdc.usdcBalance.toFixed(2)}</span>
         </div>
       )}
 
       {/* Side toggle */}
       <div className="flex gap-1 mb-3">
-        <button
-          type="button"
-          onClick={() => { setSide("BUY"); setShowConfirm(false); }}
-          className={cn(
-            "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
-            side === "BUY"
-              ? "bg-yes/20 text-yes border border-yes/40"
-              : "bg-muted text-muted-foreground border border-transparent"
-          )}
-        >
-          Buy
-        </button>
-        <button
-          type="button"
-          onClick={() => { setSide("SELL"); setShowConfirm(false); }}
-          className={cn(
-            "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
-            side === "SELL"
-              ? "bg-no/20 text-no border border-no/40"
-              : "bg-muted text-muted-foreground border border-transparent"
-          )}
-        >
-          Sell
-        </button>
+        <button type="button" onClick={() => { setSide("BUY"); setShowConfirm(false); }}
+          className={cn("flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
+            side === "BUY" ? "bg-yes/20 text-yes border border-yes/40" : "bg-muted text-muted-foreground border border-transparent"
+          )}>Buy</button>
+        <button type="button" onClick={() => { setSide("SELL"); setShowConfirm(false); }}
+          className={cn("flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
+            side === "SELL" ? "bg-no/20 text-no border border-no/40" : "bg-muted text-muted-foreground border border-transparent"
+          )}>Sell</button>
       </div>
 
       {/* Price input */}
       <div className="mb-2">
         <label className="text-[10px] text-muted-foreground mb-1 block">Limit Price (¢)</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0.01"
-          max="0.99"
-          value={price}
+        <input type="number" step="0.01" min="0.01" max="0.99" value={price}
           onChange={(e) => { setPrice(e.target.value); setShowConfirm(false); }}
           disabled={!isConnected}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-        />
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50" />
       </div>
 
       {/* Size input */}
       <div className="mb-2">
         <label className="text-[10px] text-muted-foreground mb-1 block">Shares</label>
-        <input
-          type="number"
-          step="1"
-          min="1"
-          value={size}
+        <input type="number" step="1" min="1" value={size}
           onChange={(e) => { setSize(e.target.value); setShowConfirm(false); }}
-          placeholder="0"
-          disabled={!isConnected}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-        />
+          placeholder="0" disabled={!isConnected}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50" />
       </div>
 
       {/* Quick size buttons */}
       {isConnected && (
         <div className="flex gap-1 mb-3">
           {quickSizes.map((qs) => (
-            <button
-              key={qs}
-              type="button"
-              onClick={() => { setSize(String(qs)); setShowConfirm(false); }}
-              className="flex-1 rounded-md border border-border bg-muted py-1 text-[10px] font-mono text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-            >
+            <button key={qs} type="button" onClick={() => { setSize(String(qs)); setShowConfirm(false); }}
+              className="flex-1 rounded-md border border-border bg-muted py-1 text-[10px] font-mono text-muted-foreground hover:bg-accent hover:text-foreground transition-all">
               {qs}
             </button>
           ))}
-          {usdcBalance > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                const maxShares = Math.floor(usdcBalance / parseFloat(price || "0.5"));
-                setSize(String(maxShares));
-                setShowConfirm(false);
-              }}
-              className="flex-1 rounded-md border border-primary/30 bg-primary/5 py-1 text-[10px] font-mono text-primary hover:bg-primary/10 transition-all"
-            >
+          {readiness.usdc.usdcBalance > 0 && (
+            <button type="button" onClick={() => {
+              const maxShares = Math.floor(readiness.usdc.usdcBalance / parseFloat(price || "0.5"));
+              setSize(String(maxShares)); setShowConfirm(false);
+            }} className="flex-1 rounded-md border border-primary/30 bg-primary/5 py-1 text-[10px] font-mono text-primary hover:bg-primary/10 transition-all">
               MAX
             </button>
           )}
@@ -260,22 +300,15 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       )}
 
       {/* Advanced options */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground mb-2 transition-all"
-      >
-        {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        Advanced
+      <button type="button" onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground mb-2 transition-all">
+        {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />} Advanced
       </button>
       {showAdvanced && (
         <div className="mb-3 rounded-md border border-border bg-muted/50 p-2">
           <label className="text-[10px] text-muted-foreground mb-1 block">Order Type</label>
-          <select
-            value={orderType}
-            onChange={(e) => setOrderType(e.target.value as any)}
-            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
-          >
+          <select value={orderType} onChange={(e) => setOrderType(e.target.value as any)}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring">
             <option value="GTC">Good Till Cancel (GTC)</option>
             <option value="FOK">Fill or Kill (FOK)</option>
             <option value="GTD">Good Till Date (GTD)</option>
@@ -294,7 +327,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           <span className="font-mono text-yes">+${potentialReturn}</span>
         </div>
         {hasInsufficientBalance && (
-          <p className="text-[10px] text-destructive font-medium">Insufficient USDC balance</p>
+          <p className="text-[10px] text-destructive font-medium">Insufficient USDC.e balance</p>
         )}
       </div>
 
@@ -308,49 +341,27 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           <div className="text-xs text-muted-foreground space-y-1">
             <p>{side} <strong className="text-foreground">{size}</strong> shares of <strong className={isYes ? "text-yes" : "text-no"}>{outcome}</strong></p>
             <p>at <strong className="text-foreground">{price}¢</strong> per share</p>
-            <p>Total: <strong className="text-foreground">${total}</strong> USDC</p>
+            <p>Total: <strong className="text-foreground">${total}</strong> USDC.e</p>
           </div>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="mt-2 text-[10px] text-muted-foreground hover:text-foreground underline"
-          >
-            Cancel
-          </button>
+          <button type="button" onClick={() => setShowConfirm(false)} className="mt-2 text-[10px] text-muted-foreground hover:text-foreground underline">Cancel</button>
         </div>
-      )}
-
-      {/* Approval button */}
-      {isConnected && needsApproval && side === "BUY" && parseFloat(size || "0") > 0 && (
-        <button
-          type="button"
-          onClick={approve}
-          disabled={isApproving}
-          className="w-full rounded-md py-2 text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all disabled:opacity-50 mb-2"
-        >
-          {isApproving ? (
-            <Loader2 className="h-4 w-4 animate-spin mx-auto" />
-          ) : (
-            "Approve USDC"
-          )}
-        </button>
       )}
 
       {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || !size || !isConnected || !isTradable || hasInsufficientBalance || (needsApproval && side === "BUY") || !ageConfirmed}
+        disabled={submitting || !size || !isConnected || !isTradable || hasInsufficientBalance || !readiness.allReady || !ageConfirmed}
         className={cn(
           "w-full rounded-md py-2.5 text-sm font-bold transition-all disabled:opacity-50",
-          side === "BUY"
-            ? "bg-yes text-yes-foreground hover:bg-yes/90"
-            : "bg-no text-no-foreground hover:bg-no/90"
+          side === "BUY" ? "bg-yes text-yes-foreground hover:bg-yes/90" : "bg-no text-no-foreground hover:bg-no/90"
         )}
       >
         {submitting ? (
           <Loader2 className="h-4 w-4 animate-spin mx-auto" />
         ) : !isConnected ? (
           "Connect Wallet"
+        ) : !readiness.allReady ? (
+          "Complete Setup Above"
         ) : showConfirm ? (
           `Confirm ${side} ${outcome}`
         ) : (
