@@ -160,22 +160,20 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const quickSizes = [10, 25, 50, 100];
 
   // ── 3-step checklist matching Polymarket ─────────────────────────
-  const proxySubLabel = readiness.proxy.isDeployed
-    ? null
-    : readiness.proxy.nextApprovalLabel
-    ? `Next: approve ${readiness.proxy.nextApprovalLabel} (${readiness.proxy.approvalProgress}/3)`
+  const usdcSubLabel = readiness.usdc.needsApproval && readiness.usdc.approvalProgress > 0
+    ? `Approved ${readiness.usdc.approvalProgress}/2 exchanges`
     : null;
 
   const steps = [
     {
       key: "proxy" as const,
       label: "Deploy Proxy Wallet",
-      description: "Approve operator contracts on Conditional Tokens to enable trading.",
-      subLabel: proxySubLabel,
+      description: "Deploy a smart contract wallet to enable trading.",
+      subLabel: null,
       done: readiness.proxyReady,
       action: handleDeployProxy,
-      loading: readiness.proxy.isDeploying,
-      buttonLabel: readiness.proxy.approvalProgress > 0 ? `Approve (${readiness.proxy.approvalProgress}/3)` : "Deploy",
+      loading: false,
+      buttonLabel: "Deploy",
     },
     {
       key: "creds" as const,
@@ -189,13 +187,13 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     },
     {
       key: "usdc" as const,
-      label: "Approve USDC.e",
-      description: "Approve USDC.e token spending for the exchange contracts.",
-      subLabel: null,
+      label: "Approve Tokens",
+      description: "Approve USDC.e token spending for trading.",
+      subLabel: usdcSubLabel,
       done: readiness.usdcReady,
       action: handleApproveUsdc,
       loading: readiness.usdc.isApproving,
-      buttonLabel: "Approve",
+      buttonLabel: readiness.usdc.approvalProgress > 0 ? `Approve (${readiness.usdc.approvalProgress}/2)` : "Approve",
     },
   ];
 
