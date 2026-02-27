@@ -160,20 +160,28 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const quickSizes = [10, 25, 50, 100];
 
   // ── 3-step checklist matching Polymarket ─────────────────────────
+  const proxySubLabel = readiness.proxy.isDeployed
+    ? null
+    : readiness.proxy.nextApprovalLabel
+    ? `Next: approve ${readiness.proxy.nextApprovalLabel} (${readiness.proxy.approvalProgress}/3)`
+    : null;
+
   const steps = [
     {
       key: "proxy" as const,
       label: "Deploy Proxy Wallet",
-      description: "Deploy a smart contract wallet to enable trading.",
+      description: "Approve operator contracts on Conditional Tokens to enable trading.",
+      subLabel: proxySubLabel,
       done: readiness.proxyReady,
       action: handleDeployProxy,
       loading: readiness.proxy.isDeploying,
-      buttonLabel: "Deploy",
+      buttonLabel: readiness.proxy.approvalProgress > 0 ? `Approve (${readiness.proxy.approvalProgress}/3)` : "Deploy",
     },
     {
       key: "creds" as const,
       label: "Enable Trading",
-      description: "Sign a message to generate your API keys.",
+      description: "Sign a message to generate your API keys. No gas required.",
+      subLabel: null,
       done: readiness.credsReady,
       action: handleDeriveCreds,
       loading: derivingCreds || readiness.credsLoading,
@@ -181,8 +189,9 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     },
     {
       key: "usdc" as const,
-      label: "Approve Tokens",
-      description: "Approve token spending for trading.",
+      label: "Approve USDC.e",
+      description: "Approve USDC.e token spending for the exchange contracts.",
+      subLabel: null,
       done: readiness.usdcReady,
       action: handleApproveUsdc,
       loading: readiness.usdc.isApproving,
@@ -274,6 +283,9 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
                   )}>
                     {step.description}
                   </p>
+                  {step.subLabel && !step.done && isCurrent && (
+                    <p className="text-[10px] mt-0.5 text-primary font-medium">{step.subLabel}</p>
+                  )}
                 </div>
               </div>
             );

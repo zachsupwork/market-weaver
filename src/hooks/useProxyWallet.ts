@@ -1,5 +1,5 @@
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // Polymarket Conditional Tokens Framework on Polygon
 const CONDITIONAL_TOKENS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
@@ -44,7 +44,7 @@ const polygon = {
  * Step 1: "Deploy Proxy Wallet"
  * Approves the CTF Exchange + Neg Risk Exchange + Neg Risk Adapter
  * as operators on the Conditional Tokens (ERC-1155) contract.
- * This is required before any trading can occur.
+ * Fires ONE approval at a time to avoid wallet confusion.
  */
 export function useProxyWallet() {
   const { address } = useAccount();
@@ -71,58 +71,42 @@ export function useProxyWallet() {
     args: address ? [address, NEG_RISK_ADAPTER] : undefined,
   });
 
-  // We need up to 3 approval txns
-  const { writeContract: write1, data: tx1, isPending: pending1 } = useWriteContract();
-  const { writeContract: write2, data: tx2, isPending: pending2 } = useWriteContract();
-  const { writeContract: write3, data: tx3, isPending: pending3 } = useWriteContract();
+  const { writeContract, data: txHash, isPending } = useWriteContract();
+  const { isLoading: confirming, isSuccess: confirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  const { isLoading: confirming1, isSuccess: confirmed1 } = useWaitForTransactionReceipt({ hash: tx1 });
-  const { isLoading: confirming2, isSuccess: confirmed2 } = useWaitForTransactionReceipt({ hash: tx2 });
-  const { isLoading: confirming3, isSuccess: confirmed3 } = useWaitForTransactionReceipt({ hash: tx3 });
-
+  // After any confirmation, refetch all approval states
   useEffect(() => {
-    if (confirmed1 || confirmed2 || confirmed3) {
+    if (confirmed) {
       refetchCtf();
       refetchNegRisk();
       refetchAdapter();
     }
-  }, [confirmed1, confirmed2, confirmed3, refetchCtf, refetchNegRisk, refetchAdapter]);
+  }, [confirmed, refetchCtf, refetchNegRisk, refetchAdapter]);
 
   const isDeployed = !!ctfApproved && !!negRiskApproved && !!negAdapterApproved;
 
-  const deploy = () => {
-    if (!address) return;
-    if (!ctfApproved) {
-      write1({
-        address: CONDITIONAL_TOKENS,
-        abi: erc1155Abi,
-        functionName: "setApprovalForAll",
-        args: [CTF_EXCHANGE, true],
-        account: address,
-        chain: polygon,
-      });
-    }
-    if (!negRiskApproved) {
-      write2({
-        address: CONDITIONAL_TOKENS,
-        abi: erc1155Abi,
-        functionName: "setApprovalForAll",
-        args: [NEG_RISK_EXCHANGE, true],
-        account: address,
-        chain: polygon,
-      });
-    }
-    if (!negAdapterApproved) {
-      write3({
-        address: CONDITIONAL_TOKENS,
-        abi: erc1155Abi,
-        functionName: "setApprovalForAll",
-        args: [NEG_RISK_ADAPTER, true],
-        account: address,
-        chain: polygon,
-      });
-    }
-  };
+  // Determine which approval is needed next and its label
+  const nextApproval = !ctfApproved
+    ? { operator: CTF_EXCHANGE, label: "CTF Exchange" }
+    : !negRiskApproved
+    ? { operator: NEG_RISK_EXCHANGE, label: "Neg Risk Exchange" }
+    : !negAdapterApproved
+    ? { operator: NEG_RISK_ADAPTER, label: "Neg Risk Adapter" }
+    : null;
+
+  const approvalProgress = [!!ctfApproved, !!negRiskApproved, !!negAdapterApproved].filter(Boolean).length;
+
+  const deploy = useCallback(() => {
+    if (!address || !nextApproval) return;
+    writeContract({
+      address: CONDITIONAL_TOKENS,
+      abi: erc1155Abi,
+      functionName: "setApprovalForAll",
+      args: [nextApproval.operator, true],
+      account: address,
+      chain: polygon,
+    });
+  }, [address, nextApproval, writeContract]);
 
   return {
     isDeployed,
@@ -130,6 +114,8 @@ export function useProxyWallet() {
     negRiskApproved: !!negRiskApproved,
     negAdapterApproved: !!negAdapterApproved,
     deploy,
-    isDeploying: pending1 || pending2 || pending3 || confirming1 || confirming2 || confirming3,
+    isDeploying: isPending || confirming,
+    nextApprovalLabel: nextApproval?.label ?? null,
+    approvalProgress, // 0-3
   };
 }
