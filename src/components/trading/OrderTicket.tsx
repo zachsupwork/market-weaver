@@ -1,20 +1,24 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { placeOrder } from "@/lib/polymarket-api";
+import { postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp } from "lucide-react";
-import { useAccount } from "wagmi";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useUsdcApproval } from "@/hooks/useUsdcApproval";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OrderTicketProps {
   tokenId: string;
   outcome: string;
   currentPrice: number;
+  conditionId?: string;
   isTradable?: boolean;
 }
 
-export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true }: OrderTicketProps) {
+const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
+
+export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTradable = true }: OrderTicketProps) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [price, setPrice] = useState(currentPrice.toFixed(2));
   const [size, setSize] = useState("");
@@ -22,7 +26,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const totalUsdc = parseFloat(price || "0") * parseFloat(size || "0");
   const { needsApproval, approve, isApproving, usdcBalance } = useUsdcApproval(
@@ -36,15 +41,20 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
     : (parseFloat(size || "0") * parseFloat(price || "0")).toFixed(2);
 
   const hasInsufficientBalance = side === "BUY" && totalUsdc > usdcBalance && usdcBalance > 0;
+  const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isConnected) {
+    if (!isConnected || !address) {
       toast.error("Connect your wallet first");
       return;
     }
     if (!isTradable) {
       toast.error("This market is not currently tradable");
+      return;
+    }
+    if (!ageConfirmed) {
+      toast.error("Please confirm age & jurisdiction in Settings before trading");
       return;
     }
     if (!size || parseFloat(size) <= 0) {
@@ -56,6 +66,13 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
       return;
     }
 
+    // Check if user is logged in to Supabase
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error("Sign in to your account to place trades");
+      return;
+    }
+
     if (!showConfirm) {
       setShowConfirm(true);
       return;
@@ -63,17 +80,29 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
 
     setSubmitting(true);
     try {
-      const result = await placeOrder({
-        tokenId,
-        side,
-        price: parseFloat(price),
-        size: parseFloat(size),
-        orderType,
-      });
+      // Build order object for signing
+      const orderData = {
+        tokenID: tokenId,
+        side: side.toUpperCase(),
+        price: parseFloat(price).toFixed(2),
+        size: parseFloat(size).toFixed(2),
+        type: orderType,
+        feeRateBps: "0",
+        nonce: Math.floor(Math.random() * 1e15).toString(),
+        expiration: "0",
+      };
+
+      // Submit signed order to backend (backend adds L2 HMAC headers)
+      const result = await postSignedOrder(orderData);
+
       if (result.ok) {
         toast.success(`${side} ${outcome} order placed successfully`);
         setSize("");
         setShowConfirm(false);
+      } else if (result.code === "GEOBLOCKED") {
+        toast.error("Trading is not available in your jurisdiction");
+      } else if (result.code === "NO_CREDS") {
+        toast.error("Enable trading in Settings → Trading Settings first");
       } else {
         toast.error(result.error || "Order failed");
       }
@@ -88,7 +117,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
     setShowConfirm(false);
   }
 
-  // Quick size buttons
   const quickSizes = [10, 25, 50, 100];
 
   return (
@@ -112,6 +140,15 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
               </button>
             )}
           </ConnectButton.Custom>
+        </div>
+      )}
+
+      {isConnected && !ageConfirmed && (
+        <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-2 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+          <p className="text-[10px] text-warning">
+            Confirm age & jurisdiction in <a href="/settings/polymarket" className="underline font-semibold">Trading Settings</a> to trade.
+          </p>
         </div>
       )}
 
@@ -290,7 +327,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, isTradable = true 
       {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || !size || !isConnected || !isTradable || hasInsufficientBalance || (needsApproval && side === "BUY")}
+        disabled={submitting || !size || !isConnected || !isTradable || hasInsufficientBalance || (needsApproval && side === "BUY") || !ageConfirmed}
         className={cn(
           "w-full rounded-md py-2.5 text-sm font-bold transition-all disabled:opacity-50",
           side === "BUY"

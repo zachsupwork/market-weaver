@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { decrypt } from "../_shared/crypto.ts";
 import { getServiceClient } from "../_shared/supabase-admin.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-token",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -27,76 +28,96 @@ async function hmacSign(secret: string, message: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
+function jsonResp(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== "DELETE" && req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "DELETE or POST required" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (req.method !== "POST" && req.method !== "DELETE") {
+    return jsonResp({ ok: false, error: "POST or DELETE required" }, 405);
   }
 
   try {
-    const body = await req.json();
-    const { orderId } = body;
-
-    if (!orderId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "orderId required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ── Auth ─────────────────────────────────────────────────────
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return jsonResp({ ok: false, error: "Authorization required" }, 401);
     }
 
-    const masterKey = Deno.env.get("MASTER_KEY");
-    if (!masterKey) throw new Error("MASTER_KEY not configured");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      return jsonResp({ ok: false, error: "Invalid auth token" }, 401);
+    }
 
-    const supabase = getServiceClient();
-    const { data, error } = await supabase
-      .from("polymarket_secrets")
-      .select("value_encrypted, iv, auth_tag")
-      .eq("name", "polymarket_api_creds")
+    // ── Load user creds ─────────────────────────────────────────
+    const masterKey = Deno.env.get("MASTER_KEY");
+    if (!masterKey) return jsonResp({ ok: false, error: "MASTER_KEY not configured" }, 500);
+
+    const adminClient = getServiceClient();
+    const { data: credRow } = await adminClient
+      .from("polymarket_user_creds")
+      .select("value_encrypted, iv, auth_tag, address")
+      .eq("user_id", user.id)
       .maybeSingle();
 
-    if (error || !data) throw new Error("No stored credentials");
+    if (!credRow) {
+      return jsonResp({ ok: false, error: "No trading credentials. Enable trading first." }, 400);
+    }
 
-    const credsJson = await decrypt(data.value_encrypted, data.iv, data.auth_tag, masterKey);
+    const credsJson = await decrypt(credRow.value_encrypted, credRow.iv, credRow.auth_tag, masterKey);
     const creds = JSON.parse(credsJson);
 
+    const body = await req.json();
+    const { orderId } = body;
+    if (!orderId) {
+      return jsonResp({ ok: false, error: "orderId required" }, 400);
+    }
+
+    // ── Cancel on CLOB ──────────────────────────────────────────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const method = "DELETE";
-    const path = `/order/${orderId}`;
-    const signature = await hmacSign(creds.secret, timestamp + method + path);
+    const requestPath = "/order";
+    const cancelBody = JSON.stringify({ orderID: orderId });
+    const signMessage = timestamp + "DELETE" + requestPath + cancelBody;
+    const signature = await hmacSign(creds.secret, signMessage);
 
-    const hdrs: Record<string, string> = {
-      "POLY_API_KEY": creds.apiKey,
-      "POLY_PASSPHRASE": creds.passphrase,
-      "POLY_TIMESTAMP": timestamp,
-      "POLY_SIGNATURE": signature,
-    };
-    if (creds.address) hdrs["POLY_ADDRESS"] = creds.address;
+    const res = await fetch(`${clobHost}${requestPath}`, {
+      method: "DELETE",
+      headers: {
+        "POLY_API_KEY": creds.apiKey,
+        "POLY_PASSPHRASE": creds.passphrase,
+        "POLY_TIMESTAMP": timestamp,
+        "POLY_SIGNATURE": signature,
+        "POLY_ADDRESS": credRow.address,
+        "Content-Type": "application/json",
+      },
+      body: cancelBody,
+    });
 
-    const res = await fetch(`${clobHost}${path}`, { method, headers: hdrs });
     const resBody = await res.text();
+    console.log(`[cancel-order] user=${user.id} CLOB: ${res.status}`);
 
     if (res.ok) {
-      return new Response(
-        JSON.stringify({ ok: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      let parsed;
+      try { parsed = JSON.parse(resBody); } catch { parsed = resBody; }
+      return jsonResp({ ok: true, result: parsed });
     } else {
-      return new Response(
-        JSON.stringify({ ok: false, error: `Cancel failed (${res.status}): ${resBody.substring(0, 300)}` }),
-        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResp({ ok: false, error: `Cancel failed (${res.status}): ${resBody.substring(0, 300)}` }, res.status);
     }
   } catch (err) {
-    return new Response(
-      JSON.stringify({ ok: false, error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[cancel-order] error:", err);
+    return jsonResp({ ok: false, error: err.message }, 500);
   }
 });

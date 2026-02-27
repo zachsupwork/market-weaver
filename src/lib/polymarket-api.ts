@@ -1,6 +1,7 @@
 // Polymarket API client - uses edge function proxies for CORS
 
 import { normalizeMarket, normalizeMarkets, isBytes32Hex, isEndedByPrices, type NormalizedMarket, type MarketStatusLabel } from "./normalizePolymarket";
+import { supabase } from "@/integrations/supabase/client";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
@@ -49,6 +50,8 @@ export interface Position {
   pnl: string;
 }
 
+// ── Public market data (no auth required) ───────────────────────
+
 export async function fetchMarkets(params?: {
   limit?: number;
   offset?: number;
@@ -68,11 +71,7 @@ export async function fetchMarkets(params?: {
   });
   if (!res.ok) throw new Error(`Markets fetch failed: ${res.status}`);
   const raw = await res.json();
-
-  // Normalize all markets
   const data = normalizeMarkets(Array.isArray(raw) ? raw : []);
-
-  // Return all normalized markets — UI uses statusLabel to rank/filter
   return data.filter((m) => !!m.condition_id);
 }
 
@@ -87,7 +86,6 @@ export async function fetchMarketBySlug(slug: string): Promise<NormalizedMarket 
 }
 
 export async function fetchMarketByConditionId(conditionId: string): Promise<NormalizedMarket | null> {
-  // Validate: must be bytes32 hex
   if (!isBytes32Hex(conditionId)) {
     console.warn(`[PolyView] Invalid condition_id format: ${conditionId}`);
     return null;
@@ -95,7 +93,6 @@ export async function fetchMarketByConditionId(conditionId: string): Promise<Nor
 
   const needle = conditionId.toLowerCase();
 
-  // Attempt 1: query proxy with condition_id (proxy does server-side exact filtering)
   try {
     const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?condition_id=${encodeURIComponent(conditionId)}`, {
       headers: { "apikey": ANON_KEY },
@@ -110,7 +107,6 @@ export async function fetchMarketByConditionId(conditionId: string): Promise<Nor
     console.warn("[PolyView] condition_id query failed:", e);
   }
 
-  // Attempt 2: search the broader market list for exact match
   try {
     const res = await fetch(`${fnUrl("polymarket-proxy-markets")}?limit=200&offset=0&closed=false`, {
       headers: { "apikey": ANON_KEY },
@@ -185,37 +181,6 @@ export async function fetchPositionsByAddress(address: string): Promise<any[]> {
   return data.positions || [];
 }
 
-export async function placeOrder(params: {
-  tokenId: string;
-  side: "BUY" | "SELL";
-  price: number;
-  size: number;
-  orderType?: string;
-}): Promise<{ ok: boolean; order?: any; error?: string }> {
-  const res = await fetch(fnUrl("polymarket-place-order"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": ANON_KEY,
-    },
-    body: JSON.stringify(params),
-  });
-  return res.json();
-}
-
-export async function cancelOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(fnUrl("polymarket-cancel-order"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": ANON_KEY,
-    },
-    body: JSON.stringify({ orderId }),
-  });
-  return res.json();
-}
-
-// Events API
 export async function fetchEvents(params?: {
   active?: boolean;
   keyword?: string;
@@ -246,4 +211,79 @@ export async function fetchEventById(eventId: string): Promise<any | null> {
   const raw = await res.json();
   if (Array.isArray(raw)) return raw[0] ?? null;
   return raw;
+}
+
+// ── Per-user authenticated trading functions ────────────────────
+
+/** Derive Polymarket API credentials via L1 EIP-712 signature */
+export async function deriveApiCreds(params: {
+  address: string;
+  signature: string;
+  timestamp: string;
+  nonce: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("polymarket-l1-derive-creds", {
+    body: params,
+  });
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
+/** Check if current user has stored creds */
+export async function checkUserCredsStatus(): Promise<{
+  hasCreds: boolean;
+  address?: string;
+  updatedAt?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-user-creds-status");
+  if (error) return { hasCreds: false };
+  return data;
+}
+
+/** Get deposit address for funding */
+export async function createDepositAddress(address: string): Promise<{
+  ok: boolean;
+  deposit?: any;
+  error?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-create-deposit-address", {
+    body: { address },
+  });
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
+/** Submit a signed order to Polymarket via backend L2 auth proxy */
+export async function postSignedOrder(signedOrder: any): Promise<{
+  ok: boolean;
+  order?: any;
+  error?: string;
+  code?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-post-signed-order", {
+    body: { signedOrder },
+  });
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
+/** Cancel an order via backend */
+export async function cancelOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("polymarket-cancel-order", {
+    body: { orderId },
+  });
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
+// Legacy placeOrder kept as alias for postSignedOrder
+export async function placeOrder(params: {
+  tokenId: string;
+  side: "BUY" | "SELL";
+  price: number;
+  size: number;
+  orderType?: string;
+}): Promise<{ ok: boolean; order?: any; error?: string }> {
+  // This builds a simplified order — the real flow requires client-side signing
+  return postSignedOrder(params);
 }
