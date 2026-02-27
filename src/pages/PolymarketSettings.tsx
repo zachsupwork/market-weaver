@@ -89,8 +89,8 @@ export default function PolymarketSettings() {
 
     setDeriving(true);
     try {
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-      const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const nonce = "0";
 
       // Polymarket L1 EIP-712 typed data for API key derivation
       const domain = {
@@ -111,7 +111,7 @@ export default function PolymarketSettings() {
       const message = {
         address: address,
         timestamp: timestamp,
-        nonce: BigInt(parseInt(nonce, 16)),
+        nonce: BigInt(nonce),
         message: "This message attests that I control the given wallet",
       } as const;
 
@@ -127,7 +127,7 @@ export default function PolymarketSettings() {
         address,
         signature,
         timestamp,
-        nonce: parseInt(nonce, 16).toString(),
+        nonce,
       });
 
       if (result.ok) {
