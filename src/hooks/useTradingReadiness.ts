@@ -47,9 +47,11 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
     if (isConnected) refreshCreds();
   }, [isConnected, refreshCreds]);
 
+  // For EOA users, proxy is always ready when connected
   const proxyReady = proxy.isDeployed;
   const usdcReady = !usdc.needsApproval;
 
+  // Step sequence: proxy (auto-done for EOA) → creds → usdc → ready
   let currentStep: TradingStep = "proxy";
   if (proxyReady) currentStep = "creds";
   if (proxyReady && credsReady) currentStep = "usdc";
