@@ -46,27 +46,38 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "address required" }, 400);
     }
 
-    // Polymarket uses Polygon bridge for deposits
-    // GET deposit address from their funding endpoint
-    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
+    const BRIDGE_BASE = Deno.env.get("POLYMARKET_BRIDGE_BASE_URL") ?? "https://bridge.polymarket.com";
 
-    const res = await fetch(`${clobHost}/auth/deposit-address?address=${encodeURIComponent(address)}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
+    console.log(`[deposit-addr] Creating deposit address for user=${user.id}, address=${address}`);
+
+    const res = await fetch(`${BRIDGE_BASE}/deposit-addresses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({ address }),
     });
 
     const resBody = await res.text();
-    console.log(`[deposit-addr] CLOB response: ${res.status}`);
+    console.log(`[deposit-addr] Bridge response: status=${res.status} body=${resBody.substring(0, 500)}`);
 
     if (!res.ok) {
+      console.error(`[deposit-addr] Bridge error: status=${res.status} body=${resBody}`);
       return jsonResp({
         ok: false,
-        error: `Failed to get deposit address (${res.status}): ${resBody.substring(0, 200)}`,
-      }, res.status);
+        error: "Bridge error",
+        status: res.status,
+        details: resBody.substring(0, 500),
+      }, 502);
     }
 
     let parsed;
-    try { parsed = JSON.parse(resBody); } catch { parsed = { raw: resBody }; }
+    try {
+      parsed = JSON.parse(resBody);
+    } catch {
+      parsed = { raw: resBody };
+    }
 
     return jsonResp({ ok: true, deposit: parsed });
   } catch (err) {
