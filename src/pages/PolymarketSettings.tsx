@@ -7,12 +7,13 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Activity, CheckCircle, XCircle, RefreshCw, Shield, AlertTriangle,
-  Loader2, Wallet, Banknote, Copy,
+  Loader2, Wallet, Banknote, Copy, Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { deriveApiCreds, checkUserCredsStatus, createDepositAddress } from "@/lib/polymarket-api";
+import { AuthGate } from "@/components/auth/AuthGate";
 
 const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
 
@@ -29,13 +30,21 @@ export default function PolymarketSettings() {
   const [depositInfo, setDepositInfo] = useState<any>(null);
   const [supabaseUser, setSupabaseUser] = useState<any>(null);
 
-  // Check Supabase auth state
+  // Check Supabase auth state — attempt anonymous sign-in automatically
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSupabaseUser(session?.user ?? null);
     });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSupabaseUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        setSupabaseUser(session.user);
+      } else {
+        // Auto anonymous sign-in for frictionless UX
+        try {
+          const { error } = await supabase.auth.signInAnonymously();
+          if (error) console.warn("Auto anonymous sign-in failed:", error.message);
+        } catch {}
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -224,16 +233,21 @@ export default function PolymarketSettings() {
         </CardContent>
       </Card>
 
-      {/* Auth Status */}
+      {/* Auth Status — inline AuthGate if no session */}
       {!supabaseUser && (
-        <Card className="border-destructive/30">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <span>You must sign in to your account to use trading features. Use the app's authentication system.</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AuthGate autoAnonymous={false}>
+          <></>
+        </AuthGate>
+      )}
+
+      {/* WalletConnect warning */}
+      {!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID && (
+        <div className="flex items-center gap-2 rounded-md border border-muted bg-muted/50 p-3">
+          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            WalletConnect is disabled. Set <code className="font-mono text-[10px]">VITE_WALLETCONNECT_PROJECT_ID</code> to enable mobile wallets. Browser wallets (MetaMask) still work.
+          </p>
+        </div>
       )}
 
       <Separator />

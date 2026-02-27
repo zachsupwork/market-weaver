@@ -66,11 +66,23 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       return;
     }
 
-    // Check if user is logged in to Supabase
-    const { data: { session } } = await supabase.auth.getSession();
+    // Check if user is logged in — attempt auto anonymous sign-in
+    let { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      toast.error("Sign in to your account to place trades");
-      return;
+      const { error: anonErr } = await supabase.auth.signInAnonymously();
+      if (anonErr) {
+        toast.error("Sign in (guest is fine) to trade", {
+          description: "Go to Trading Settings to authenticate",
+          action: { label: "Settings", onClick: () => window.location.href = "/settings/polymarket" },
+        });
+        return;
+      }
+      const refreshed = await supabase.auth.getSession();
+      session = refreshed.data.session;
+      if (!session) {
+        toast.error("Session issue — visit Trading Settings to sign in");
+        return;
+      }
     }
 
     if (!showConfirm) {
