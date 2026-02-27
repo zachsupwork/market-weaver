@@ -9,10 +9,10 @@ verify_jwt = false
 [functions.polymarket-proxy-trades]
 verify_jwt = false
 
-[functions.polymarket-place-order]
+[functions.polymarket-proxy-events]
 verify_jwt = false
 
-[functions.polymarket-cancel-order]
+[functions.polymarket-proxy-history]
 verify_jwt = false
 
 [functions.polymarket-positions]
@@ -24,20 +24,20 @@ verify_jwt = false
 [functions.polymarket-has-creds]
 verify_jwt = false
 
-[functions.polymarket-derive-creds]
-verify_jwt = false
-
-[functions.polymarket-import-creds]
-verify_jwt = false
-
-[functions.polymarket-rotate-creds]
-verify_jwt = false
-
 [functions.polymarket-test-auth]
 verify_jwt = false
 
-[functions.polymarket-proxy-events]
+[functions.polymarket-l1-derive-creds]
 verify_jwt = false
 
-[functions.polymarket-proxy-history]
+[functions.polymarket-post-signed-order]
+verify_jwt = false
+
+[functions.polymarket-cancel-order]
+verify_jwt = false
+
+[functions.polymarket-create-deposit-address]
+verify_jwt = false
+
+[functions.polymarket-user-creds-status]
 verify_jwt = false

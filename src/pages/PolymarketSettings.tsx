@@ -1,364 +1,348 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Activity, CheckCircle, XCircle, RefreshCw, Key, Shield, AlertTriangle, Loader2, Github, Upload } from "lucide-react";
+  Activity, CheckCircle, XCircle, RefreshCw, Shield, AlertTriangle,
+  Loader2, Wallet, Banknote, Copy,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAccount, useSignTypedData } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { deriveApiCreds, checkUserCredsStatus, createDepositAddress } from "@/lib/polymarket-api";
 
-type Status = "idle" | "loading" | "success" | "error";
-
-interface CredStatus {
-  hasCreds: boolean;
-  updatedAt: string | null;
-  credType: "placeholder" | "real" | "unknown" | null;
-}
+const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
 
 export default function PolymarketSettings() {
   const { toast } = useToast();
-  const [backendStatus, setBackendStatus] = useState<Status>("idle");
-  const [credStatus, setCredStatus] = useState<CredStatus>({ hasCreds: false, updatedAt: null, credType: null });
-  const [credStatusLoading, setCredStatusLoading] = useState(true);
+  const { address, isConnected } = useAccount();
+  const { signTypedDataAsync } = useSignTypedData();
+
+  const [credStatus, setCredStatus] = useState<{ hasCreds: boolean; address?: string; updatedAt?: string }>({ hasCreds: false });
+  const [credLoading, setCredLoading] = useState(true);
   const [deriving, setDeriving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; placeholder?: boolean; message?: string } | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importForm, setImportForm] = useState({ apiKey: "", secret: "", passphrase: "", address: "" });
+  const [ageConfirmed, setAgeConfirmed] = useState(() => localStorage.getItem(TRADING_AGE_KEY) === "true");
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositInfo, setDepositInfo] = useState<any>(null);
+  const [supabaseUser, setSupabaseUser] = useState<any>(null);
 
-  const checkHealth = useCallback(async () => {
-    setBackendStatus("loading");
-    try {
-      const { data, error } = await supabase.functions.invoke("polymarket-health");
-      if (error) throw error;
-      setBackendStatus(data?.ok ? "success" : "error");
-    } catch {
-      setBackendStatus("error");
-    }
-  }, []);
-
-  const checkCreds = useCallback(async () => {
-    setCredStatusLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("polymarket-has-creds");
-      if (error) throw error;
-      setCredStatus({
-        hasCreds: data?.hasCreds ?? false,
-        updatedAt: data?.updatedAt ?? null,
-        credType: data?.credType ?? null,
-      });
-    } catch {
-      setCredStatus({ hasCreds: false, updatedAt: null, credType: null });
-    } finally {
-      setCredStatusLoading(false);
-    }
-  }, []);
-
+  // Check Supabase auth state
   useEffect(() => {
-    checkHealth();
-    checkCreds();
-  }, [checkHealth, checkCreds]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseUser(session?.user ?? null);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSupabaseUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const derivePlaceholder = async () => {
+  const refreshCreds = useCallback(async () => {
+    if (!supabaseUser) {
+      setCredStatus({ hasCreds: false });
+      setCredLoading(false);
+      return;
+    }
+    setCredLoading(true);
+    try {
+      const status = await checkUserCredsStatus();
+      setCredStatus(status);
+    } catch {
+      setCredStatus({ hasCreds: false });
+    } finally {
+      setCredLoading(false);
+    }
+  }, [supabaseUser]);
+
+  useEffect(() => { refreshCreds(); }, [refreshCreds]);
+
+  function handleAgeConfirm(checked: boolean) {
+    setAgeConfirmed(checked);
+    localStorage.setItem(TRADING_AGE_KEY, checked ? "true" : "false");
+  }
+
+  async function handleDerive() {
+    if (!isConnected || !address) {
+      toast({ title: "Connect your wallet first", variant: "destructive" });
+      return;
+    }
+    if (!supabaseUser) {
+      toast({ title: "Sign in to your account first", variant: "destructive" });
+      return;
+    }
+    if (!ageConfirmed) {
+      toast({ title: "Please confirm you are 18+ to enable trading", variant: "destructive" });
+      return;
+    }
+
     setDeriving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("polymarket-derive-creds", {
-        method: "POST",
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+
+      // Polymarket L1 EIP-712 typed data for API key derivation
+      const domain = {
+        name: "ClobAuthDomain",
+        version: "1",
+        chainId: 137,
+      } as const;
+
+      const types = {
+        ClobAuth: [
+          { name: "address", type: "address" },
+          { name: "timestamp", type: "string" },
+          { name: "nonce", type: "uint256" },
+          { name: "message", type: "string" },
+        ],
+      } as const;
+
+      const message = {
+        address: address,
+        timestamp: timestamp,
+        nonce: BigInt(parseInt(nonce, 16)),
+        message: "This message attests that I control the given wallet",
+      } as const;
+
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain,
+        types,
+        primaryType: "ClobAuth",
+        message,
       });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Failed to generate placeholder credentials");
-      toast({ title: "Placeholder Credentials Stored", description: `Created at ${data.createdAt}. These are for storage testing only.` });
-      await checkCreds();
+
+      const result = await deriveApiCreds({
+        address,
+        signature,
+        timestamp,
+        nonce: parseInt(nonce, 16).toString(),
+      });
+
+      if (result.ok) {
+        toast({ title: "Trading Enabled!", description: "Your Polymarket API credentials have been securely derived and stored." });
+        await refreshCreds();
+      } else {
+        toast({ title: "Derivation Failed", description: result.error || "Unknown error", variant: "destructive" });
+      }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const msg = err.message || "Failed to sign typed data";
+      if (msg.includes("rejected") || msg.includes("denied")) {
+        toast({ title: "Signature rejected", description: "You cancelled the wallet signing request.", variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setDeriving(false);
     }
-  };
+  }
 
-  const testAuth = async () => {
-    setTesting(true);
-    setTestResult(null);
+  async function handleDeposit() {
+    if (!address) return;
+    setDepositLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("polymarket-test-auth", {
-        method: "POST",
-      });
-      if (error) throw error;
-      setTestResult({ ok: data?.ok ?? false, error: data?.error, placeholder: data?.placeholder, message: data?.message });
+      const result = await createDepositAddress(address);
+      if (result.ok) {
+        setDepositInfo(result.deposit);
+        toast({ title: "Deposit address retrieved" });
+      } else {
+        toast({ title: "Error", description: result.error, variant: "destructive" });
+      }
     } catch (err: any) {
-      setTestResult({ ok: false, error: err.message });
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
-      setTesting(false);
+      setDepositLoading(false);
     }
-  };
+  }
 
-  const importCreds = async () => {
-    if (!importForm.apiKey || !importForm.secret || !importForm.passphrase) {
-      toast({ title: "Missing fields", description: "API Key, Secret, and Passphrase are required.", variant: "destructive" });
-      return;
-    }
-    setImporting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("polymarket-import-creds", {
-        method: "POST",
-        body: importForm,
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Import failed");
-      toast({ title: "Real Credentials Imported", description: "Encrypted and stored successfully. Run Test Auth to verify." });
-      setImportForm({ apiKey: "", secret: "", passphrase: "", address: "" });
-      setTestResult(null);
-      await checkCreds();
-    } catch (err: any) {
-      toast({ title: "Import Error", description: err.message, variant: "destructive" });
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const credBadge = () => {
-    if (!credStatus.hasCreds) return <Badge variant="secondary">None</Badge>;
-    if (credStatus.credType === "real") {
-      return <Badge className="bg-primary/20 text-primary border-primary/30"><Shield className="h-3 w-3 mr-1" /> Real</Badge>;
-    }
-    if (credStatus.credType === "placeholder") {
-      return <Badge variant="outline" className="border-accent text-accent-foreground"><AlertTriangle className="h-3 w-3 mr-1" /> Placeholder</Badge>;
-    }
-    return <Badge variant="secondary">Unknown</Badge>;
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
   };
 
   return (
     <div className="container max-w-3xl py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Polymarket API Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Trading Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Manage your server-side Polymarket CLOB API credentials. Private keys never leave the backend.
+          Connect your wallet and derive your personal Polymarket API credentials to trade directly from PolyView.
+          Your credentials are encrypted and stored per-account — no shared keys.
         </p>
       </div>
 
-      {/* Connectivity Check */}
+      {/* Age Confirmation */}
+      <Card className="border-warning/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="h-4 w-4" /> Age & Jurisdiction Confirmation
+          </CardTitle>
+          <CardDescription>
+            You must be 18+ and in a jurisdiction where prediction market trading is permitted.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="age-confirm"
+              checked={ageConfirmed}
+              onCheckedChange={(checked) => handleAgeConfirm(checked === true)}
+            />
+            <label htmlFor="age-confirm" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
+              I confirm I am at least 18 years old and located in a jurisdiction where prediction market
+              trading is permitted. I understand this involves financial risk.
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Wallet Connection */}
       <Card>
         <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wallet className="h-4 w-4" /> Wallet
+          </CardTitle>
+          <CardDescription>Connect your Polygon wallet to enable trading.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isConnected ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-primary" />
+              <span className="text-sm font-mono">{address?.slice(0, 8)}…{address?.slice(-6)}</span>
+              <ConnectButton.Custom>
+                {({ openAccountModal }) => (
+                  <Button variant="ghost" size="sm" onClick={openAccountModal}>
+                    Change
+                  </Button>
+                )}
+              </ConnectButton.Custom>
+            </div>
+          ) : (
+            <ConnectButton />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Auth Status */}
+      {!supabaseUser && (
+        <Card className="border-destructive/30">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <span>You must sign in to your account to use trading features. Use the app's authentication system.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Separator />
+
+      {/* Credential Derivation */}
+      <Card className={credStatus.hasCreds ? "border-primary/30" : ""}>
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Connectivity Check</CardTitle>
-            <Button variant="ghost" size="sm" onClick={checkHealth}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            <CardTitle className="text-base">Trading Credentials</CardTitle>
+            <Button variant="ghost" size="sm" onClick={refreshCreds} disabled={credLoading}>
+              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${credLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
           </div>
-          <CardDescription>Verify that the backend functions are reachable.</CardDescription>
+          <CardDescription>
+            Derive your personal Polymarket API credentials by signing an EIP-712 message with your wallet.
+            No secrets are ever shown or stored in your browser.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            {backendStatus === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-            {backendStatus === "success" && <CheckCircle className="h-4 w-4 text-primary" />}
-            {backendStatus === "error" && <XCircle className="h-4 w-4 text-destructive" />}
-            {backendStatus === "idle" && <Activity className="h-4 w-4 text-muted-foreground" />}
-            <span className="text-sm">
-              {backendStatus === "loading" && "Checking..."}
-              {backendStatus === "success" && "Backend is reachable"}
-              {backendStatus === "error" && "Backend unreachable — check edge function deployment"}
-              {backendStatus === "idle" && "Not checked yet"}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Status Panel */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Credential Status</CardTitle>
-          <CardDescription>Current state of stored Polymarket API credentials.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {credStatusLoading ? (
+        <CardContent className="space-y-4">
+          {credLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading status...
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking status...
+            </div>
+          ) : credStatus.hasCreds ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge className="bg-primary/20 text-primary border-primary/30">
+                  <CheckCircle className="h-3 w-3 mr-1" /> Active
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Address: <span className="font-mono">{credStatus.address}</span></p>
+                <p>Last updated: {credStatus.updatedAt ? new Date(credStatus.updatedAt).toLocaleString() : "—"}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}>
+                {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Re-derive Credentials
+              </Button>
             </div>
           ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground w-36">Credentials:</span>
-                {credBadge()}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground w-36">Last updated:</span>
-                <span className="text-sm font-mono">
-                  {credStatus.updatedAt
-                    ? new Date(credStatus.updatedAt).toLocaleString()
-                    : "—"}
-                </span>
-              </div>
-              {credStatus.credType === "placeholder" && (
-                <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-                  ⚠️ Placeholder credentials are stored for testing the encryption/storage flow only.
-                  They will not authenticate against the Polymarket CLOB API.
-                  Use one of the methods below to store real credentials.
-                </p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                No credentials stored yet. Click below to sign with your wallet and derive your Polymarket API key.
+              </p>
+              <Button
+                onClick={handleDerive}
+                disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}
+                className="w-full sm:w-auto"
+              >
+                {deriving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Shield className="h-4 w-4 mr-2" />
+                )}
+                {deriving ? "Signing & Deriving..." : "Enable Trading"}
+              </Button>
+              {!ageConfirmed && (
+                <p className="text-xs text-warning">⚠️ Confirm age & jurisdiction above first</p>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Generate Real Credentials (Recommended) */}
-      <Card className="border-primary/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Github className="h-4 w-4" /> Generate Real Credentials (Recommended)
-          </CardTitle>
-          <CardDescription>
-            Use the GitHub Actions workflow to derive real Polymarket L2 CLOB API credentials without any local setup.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="text-sm space-y-2">
-            <p className="font-medium">Steps:</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Go to your GitHub repo → <strong>Actions</strong> → <strong>"Derive Polymarket API Credentials"</strong></li>
-              <li>Click <strong>"Run workflow"</strong></li>
-              <li>The workflow reads your GitHub Secrets, derives real L1-signed credentials, encrypts them, and stores them in the database</li>
-              <li>Come back here and click <strong>Test Auth</strong> to verify</li>
-            </ol>
-            <p className="font-medium mt-3">Required GitHub Secrets:</p>
-            <ul className="list-disc list-inside text-muted-foreground space-y-0.5 font-mono text-xs">
-              <li>PM_PRIVATE_KEY — Your Polymarket wallet private key</li>
-              <li>MASTER_KEY — AES-256-GCM encryption key (same as backend)</li>
-              <li>SUPABASE_URL — Your project's backend URL</li>
-              <li>SUPABASE_SERVICE_ROLE_KEY — Service role key for database access</li>
-              <li>CHAIN_ID — (optional, default: 137)</li>
-              <li>CLOB_HOST — (optional, default: https://clob.polymarket.com)</li>
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Import Real Credentials */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Upload className="h-4 w-4" /> Import Real Credentials
-          </CardTitle>
-          <CardDescription>
-            Paste real Polymarket CLOB API credentials derived externally (via L1 wallet signature or @polymarket/clob-client).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2">
-            <Input
-              placeholder="API Key"
-              value={importForm.apiKey}
-              onChange={(e) => setImportForm(f => ({ ...f, apiKey: e.target.value }))}
-            />
-            <Input
-              placeholder="Secret (base64)"
-              type="password"
-              value={importForm.secret}
-              onChange={(e) => setImportForm(f => ({ ...f, secret: e.target.value }))}
-            />
-            <Input
-              placeholder="Passphrase"
-              type="password"
-              value={importForm.passphrase}
-              onChange={(e) => setImportForm(f => ({ ...f, passphrase: e.target.value }))}
-            />
-            <Input
-              placeholder="Wallet address (optional)"
-              value={importForm.address}
-              onChange={(e) => setImportForm(f => ({ ...f, address: e.target.value }))}
-            />
-          </div>
-          <Button onClick={importCreds} disabled={importing}>
-            {importing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-            {importing ? "Importing..." : "Import Credentials"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Test Authentication */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Test Authentication</CardTitle>
-          <CardDescription>
-            Verify stored credentials work against the Polymarket CLOB API using HMAC-SHA256 signing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button variant="secondary" onClick={testAuth} disabled={testing || !credStatus.hasCreds}>
-            {testing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
-            {testing ? "Testing..." : "Test Auth"}
-          </Button>
-          {testResult && (
-            <div className={`flex items-start gap-2 text-sm rounded p-3 ${
-              testResult.ok
-                ? "bg-primary/10 text-primary"
-                : testResult.placeholder
-                  ? "bg-accent/10 text-accent-foreground"
-                  : "bg-destructive/10 text-destructive"
-            }`}>
-              {testResult.ok ? (
-                <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              ) : testResult.placeholder ? (
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-              ) : (
-                <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              )}
-              <span>{testResult.ok ? (testResult.message || "Authentication successful") : testResult.error || "Authentication failed"}</span>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Deposit Address */}
+      {credStatus.hasCreds && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Banknote className="h-4 w-4" /> Fund Account
+            </CardTitle>
+            <CardDescription>
+              Get a deposit address to fund your Polymarket account with USDC on Polygon.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button variant="secondary" onClick={handleDeposit} disabled={depositLoading || !address}>
+              {depositLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Banknote className="h-4 w-4 mr-2" />}
+              {depositLoading ? "Loading..." : "Get Deposit Address"}
+            </Button>
+            {depositInfo && (
+              <div className="rounded-md border border-border bg-muted/50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-foreground">Deposit Info:</p>
+                <pre className="text-[10px] text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
+                  {JSON.stringify(depositInfo, null, 2)}
+                </pre>
+                <Button variant="ghost" size="sm" onClick={() => copyToClipboard(JSON.stringify(depositInfo))}>
+                  <Copy className="h-3 w-3 mr-1" /> Copy
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Separator />
 
-      {/* Storage Test — Placeholder */}
+      {/* Security Info */}
       <Card className="border-muted">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
-            <Key className="h-4 w-4" /> Generate Placeholder Credentials (Storage Test Only)
-          </CardTitle>
-          <CardDescription>
-            Store fake credentials to verify the encryption/storage pipeline works. These will <strong>not</strong> authenticate with Polymarket.
-          </CardDescription>
+          <CardTitle className="text-base text-muted-foreground">Security</CardTitle>
         </CardHeader>
-        <CardContent>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={deriving} className="text-muted-foreground">
-                {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Key className="h-4 w-4 mr-2" />}
-                {deriving ? "Generating..." : "Generate Placeholder Credentials"}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Generate Placeholder Credentials?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This stores <strong>fake</strong> credentials to test the encryption/storage pipeline.
-                  If you have real credentials stored, they will be overwritten.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={derivePlaceholder}>Yes, Generate Placeholders</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+        <CardContent className="space-y-2 text-xs text-muted-foreground">
+          <p>✅ Your Polymarket API credentials are derived from your wallet signature — never pasted or typed.</p>
+          <p>✅ Credentials are encrypted with AES-256-GCM and stored per-user. No global/shared secrets.</p>
+          <p>✅ All L2 HMAC signing happens server-side. Your API secret never reaches the browser.</p>
+          <p>✅ Orders are signed by your wallet (client-side) and submitted by our backend with L2 headers.</p>
+          <p>✅ Geoblock checks are performed before every order submission.</p>
         </CardContent>
       </Card>
     </div>

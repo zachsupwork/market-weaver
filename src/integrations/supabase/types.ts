@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      polymarket_user_creds: {
+        Row: {
+          address: string
+          auth_tag: string
+          created_at: string
+          iv: string
+          updated_at: string
+          user_id: string
+          value_encrypted: string
+        }
+        Insert: {
+          address: string
+          auth_tag: string
+          created_at?: string
+          iv: string
+          updated_at?: string
+          user_id: string
+          value_encrypted: string
+        }
+        Update: {
+          address?: string
+          auth_tag?: string
+          created_at?: string
+          iv?: string
+          updated_at?: string
+          user_id?: string
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
