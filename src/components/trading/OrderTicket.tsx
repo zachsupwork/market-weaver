@@ -43,16 +43,16 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const hasInsufficientBalance = side === "BUY" && totalUsdc > readiness.usdc.usdcBalance && readiness.usdc.usdcBalance > 0;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
-  // ── Step Actions ──────────────────────────────────────────────
+  // ── Step 1: Deploy Proxy Wallet ─────────────────────────────────
   async function handleDeployProxy() {
     readiness.proxy.deploy();
   }
 
+  // ── Step 2: Enable Trading (ClobAuth EIP-712 signature) ─────────
   async function handleDeriveCreds() {
     if (!address) return;
     setDerivingCreds(true);
     try {
-      // Ensure Supabase session
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         const { error } = await supabase.auth.signInAnonymously();
@@ -99,6 +99,12 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     }
   }
 
+  // ── Step 3: Approve USDC.e ──────────────────────────────────────
+  function handleApproveUsdc() {
+    readiness.usdc.approve();
+  }
+
+  // ── Order submission ────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isConnected || !address) { toast.error("Connect your wallet first"); return; }
@@ -108,7 +114,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!size || parseFloat(size) <= 0) { toast.error("Enter a valid size"); return; }
     if (hasInsufficientBalance) { toast.error("Insufficient USDC.e balance"); return; }
 
-    // Ensure Supabase session
     let { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       const { error } = await supabase.auth.signInAnonymously();
@@ -154,12 +159,35 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
   const quickSizes = [10, 25, 50, 100];
 
-  // ── State machine steps ───────────────────────────────────────
+  // ── 3-step checklist matching Polymarket ─────────────────────────
   const steps = [
-    { key: "proxy" as const, label: "Approve Exchange", done: readiness.proxyReady },
-    { key: "creds" as const, label: "Enable Trading", done: readiness.credsReady },
-    { key: "usdc" as const, label: "Approve USDC.e", done: readiness.usdcReady },
-    { key: "ready" as const, label: "Trade", done: readiness.allReady },
+    {
+      key: "proxy" as const,
+      label: "Deploy Proxy Wallet",
+      description: "Deploy a smart contract wallet to enable trading.",
+      done: readiness.proxyReady,
+      action: handleDeployProxy,
+      loading: readiness.proxy.isDeploying,
+      buttonLabel: "Deploy",
+    },
+    {
+      key: "creds" as const,
+      label: "Enable Trading",
+      description: "Sign a message to generate your API keys.",
+      done: readiness.credsReady,
+      action: handleDeriveCreds,
+      loading: derivingCreds || readiness.credsLoading,
+      buttonLabel: "Sign",
+    },
+    {
+      key: "usdc" as const,
+      label: "Approve Tokens",
+      description: "Approve token spending for trading.",
+      done: readiness.usdcReady,
+      action: handleApproveUsdc,
+      loading: readiness.usdc.isApproving,
+      buttonLabel: "Approve",
+    },
   ];
 
   return (
@@ -195,49 +223,69 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         </div>
       )}
 
-      {/* Trading Setup Steps */}
+      {/* 3-Step Setup Checklist */}
       {isConnected && ageConfirmed && !readiness.allReady && (
-        <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground mb-2">Setup Required</p>
-          {steps.slice(0, 3).map((step, i) => {
+        <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground">Setup Required</p>
+          {steps.map((step, i) => {
             const isCurrent = readiness.currentStep === step.key;
+            const isDisabled = !isCurrent && !step.done;
             return (
-              <div key={step.key} className="flex items-center gap-2">
+              <div key={step.key} className="flex items-start gap-2.5">
                 {step.done ? (
-                  <Check className="h-3.5 w-3.5 text-yes shrink-0" />
+                  <div className="mt-0.5 h-4 w-4 rounded-full bg-yes/20 flex items-center justify-center shrink-0">
+                    <Check className="h-2.5 w-2.5 text-yes" />
+                  </div>
                 ) : (
-                  <Circle className={cn("h-3.5 w-3.5 shrink-0", isCurrent ? "text-primary" : "text-muted-foreground/40")} />
+                  <div className={cn(
+                    "mt-0.5 h-4 w-4 rounded-full border-2 shrink-0",
+                    isCurrent ? "border-primary" : "border-muted-foreground/30"
+                  )} />
                 )}
-                <span className={cn("text-xs", step.done ? "text-muted-foreground line-through" : isCurrent ? "text-foreground font-medium" : "text-muted-foreground/60")}>
-                  Step {i + 1}: {step.label}
-                </span>
-                {isCurrent && !step.done && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (step.key === "proxy") handleDeployProxy();
-                      else if (step.key === "creds") handleDeriveCreds();
-                      else if (step.key === "usdc") readiness.usdc.approve();
-                    }}
-                    disabled={
-                      (step.key === "proxy" && readiness.proxy.isDeploying) ||
-                      (step.key === "creds" && (derivingCreds || readiness.credsLoading)) ||
-                      (step.key === "usdc" && readiness.usdc.isApproving)
-                    }
-                    className="ml-auto rounded-md bg-primary text-primary-foreground px-2.5 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
-                  >
-                    {(step.key === "proxy" && readiness.proxy.isDeploying) ||
-                     (step.key === "creds" && derivingCreds) ||
-                     (step.key === "usdc" && readiness.usdc.isApproving) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      step.key === "proxy" ? "Approve" : step.key === "creds" ? "Sign" : "Approve"
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={cn(
+                      "text-xs font-medium",
+                      step.done ? "text-muted-foreground line-through" : isCurrent ? "text-foreground" : "text-muted-foreground/50"
+                    )}>
+                      Step {i + 1}: {step.label}
+                    </span>
+                    {isCurrent && !step.done && (
+                      <button
+                        type="button"
+                        onClick={step.action}
+                        disabled={step.loading}
+                        className="shrink-0 rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
+                      >
+                        {step.loading ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          step.buttonLabel
+                        )}
+                      </button>
                     )}
-                  </button>
-                )}
+                    {step.done && (
+                      <span className="text-[10px] text-yes font-medium">Done</span>
+                    )}
+                  </div>
+                  <p className={cn(
+                    "text-[10px] mt-0.5",
+                    step.done ? "text-muted-foreground/50" : isCurrent ? "text-muted-foreground" : "text-muted-foreground/30"
+                  )}>
+                    {step.description}
+                  </p>
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* All ready badge */}
+      {isConnected && ageConfirmed && readiness.allReady && (
+        <div className="mb-3 rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
+          <Check className="h-3.5 w-3.5 text-yes shrink-0" />
+          <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
         </div>
       )}
 

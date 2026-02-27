@@ -13,7 +13,6 @@ export interface TradingReadiness {
   credsReady: boolean;
   usdcReady: boolean;
   allReady: boolean;
-  // Sub-hook state
   proxy: ReturnType<typeof useProxyWallet>;
   usdc: ReturnType<typeof useUsdcApproval>;
   credsLoading: boolean;
@@ -49,7 +48,7 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
   }, [isConnected, refreshCreds]);
 
   const proxyReady = proxy.isDeployed;
-  const usdcReady = !usdc.needsApproval || orderAmountUsdc <= 0;
+  const usdcReady = !usdc.needsApproval;
 
   let currentStep: TradingStep = "proxy";
   if (proxyReady) currentStep = "creds";
