@@ -1,15 +1,12 @@
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits } from "viem";
-import { useState, useEffect, useCallback } from "react";
+import { maxUint256 } from "viem";
+import { useMemo, useEffect } from "react";
 
-// USDC.e (bridged) on Polygon — used by Polymarket CTF Exchange
-const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
-// Polymarket CTF Exchange on Polygon
-const CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
-// Neg Risk CTF Exchange on Polygon
-const NEG_RISK_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a" as const;
+const FALLBACK_USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
+const FALLBACK_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
 
-const MAX_APPROVAL = parseUnits("100000000", 6); // 100M USDC.e — effectively unlimited
+const USDC_E_ADDRESS = (import.meta.env.VITE_USDC_E_ADDRESS || FALLBACK_USDC_E) as `0x${string}`;
+const POLYMARKET_EXCHANGE_ADDRESS = (import.meta.env.VITE_POLYMARKET_EXCHANGE_ADDRESS || FALLBACK_EXCHANGE) as `0x${string}`;
 
 const erc20Abi = [
   {
@@ -50,32 +47,21 @@ const polygon = {
 
 /**
  * Step 3: "Approve Tokens"
- * Approves USDC.e spending for CTF Exchange and Neg Risk Exchange.
- * This is a standard ERC-20 approve — MetaMask shows "Spending cap request".
- * NO ERC-1155 setApprovalForAll (which triggers "NFT Withdrawal" warnings).
+ * Uses ONLY ERC-20 approve() on USDC.e for the Polymarket Exchange spender.
+ * No ERC-1155 setApprovalForAll calls are made here.
  */
 export function useUsdcApproval(amountUsdc: number) {
   const { address } = useAccount();
-  const [approvalTarget, setApprovalTarget] = useState<"ctf" | "neg" | null>(null);
 
-  // Check CTF Exchange allowance
-  const { data: ctfAllowance, refetch: refetchCtf } = useReadContract({
-    address: USDC_ADDRESS,
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: USDC_E_ADDRESS,
     abi: erc20Abi,
     functionName: "allowance",
-    args: address ? [address, CTF_EXCHANGE] : undefined,
-  });
-
-  // Check Neg Risk Exchange allowance
-  const { data: negAllowance, refetch: refetchNeg } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: address ? [address, NEG_RISK_EXCHANGE] : undefined,
+    args: address ? [address, POLYMARKET_EXCHANGE_ADDRESS] : undefined,
   });
 
   const { data: balance } = useReadContract({
-    address: USDC_ADDRESS,
+    address: USDC_E_ADDRESS,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
@@ -84,66 +70,34 @@ export function useUsdcApproval(amountUsdc: number) {
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isLoading: confirming, isSuccess: confirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // After confirmation, refetch and fire next approval if needed
   useEffect(() => {
     if (confirmed) {
-      refetchCtf();
-      refetchNeg();
-      // If we just approved CTF and neg still needs approval, queue it
-      if (approvalTarget === "ctf") {
-        const negOk = negAllowance !== undefined && (negAllowance as bigint) > 0n;
-        if (!negOk && address) {
-          setApprovalTarget("neg");
-          // Small delay to let refetch settle
-          setTimeout(() => {
-            writeContract({
-              address: USDC_ADDRESS,
-              abi: erc20Abi,
-              functionName: "approve",
-              args: [NEG_RISK_EXCHANGE, MAX_APPROVAL],
-              account: address,
-              chain: polygon,
-            });
-          }, 1000);
-        } else {
-          setApprovalTarget(null);
-        }
-      } else {
-        setApprovalTarget(null);
-      }
+      refetchAllowance();
     }
-  }, [confirmed]);
+  }, [confirmed, refetchAllowance]);
 
-  const ctfOk = ctfAllowance !== undefined && (ctfAllowance as bigint) > 0n;
-  const negOk = negAllowance !== undefined && (negAllowance as bigint) > 0n;
-  const needsApproval = !ctfOk || !negOk;
+  const requiredAllowance = useMemo(() => {
+    if (amountUsdc > 0) {
+      return BigInt(Math.floor(amountUsdc * 1_000_000));
+    }
+    return 1n;
+  }, [amountUsdc]);
 
-  const approve = useCallback(() => {
+  const currentAllowance = (allowance as bigint | undefined) ?? 0n;
+  const needsApproval = currentAllowance < requiredAllowance;
+
+  const approve = () => {
     if (!address) return;
-    if (!ctfOk) {
-      setApprovalTarget("ctf");
-      writeContract({
-        address: USDC_ADDRESS,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [CTF_EXCHANGE, MAX_APPROVAL],
-        account: address,
-        chain: polygon,
-      });
-    } else if (!negOk) {
-      setApprovalTarget("neg");
-      writeContract({
-        address: USDC_ADDRESS,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [NEG_RISK_EXCHANGE, MAX_APPROVAL],
-        account: address,
-        chain: polygon,
-      });
-    }
-  }, [address, ctfOk, negOk, writeContract]);
+    writeContract({
+      address: USDC_E_ADDRESS,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [POLYMARKET_EXCHANGE_ADDRESS, maxUint256],
+      account: address,
+      chain: polygon,
+    });
+  };
 
-  const approvalProgress = (ctfOk ? 1 : 0) + (negOk ? 1 : 0);
   const usdcBalance = balance ? Number(balance) / 1e6 : 0;
 
   return {
@@ -152,8 +106,8 @@ export function useUsdcApproval(amountUsdc: number) {
     isApproving: isPending || confirming,
     isConfirmed: !needsApproval,
     usdcBalance,
-    approvalProgress, // 0, 1, or 2
-    ctfApproved: ctfOk,
-    negApproved: negOk,
+    approvalProgress: needsApproval ? 0 : 1,
+    ctfApproved: !needsApproval,
+    negApproved: true,
   };
 }
