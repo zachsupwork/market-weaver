@@ -41,3 +41,12 @@ verify_jwt = false
 
 [functions.polymarket-user-creds-status]
 verify_jwt = false
+
+[functions.polymarket-withdraw]
+verify_jwt = false
+
+[functions.polymarket-orders]
+verify_jwt = false
+
+[functions.polymarket-deposit-status]
+verify_jwt = false

@@ -16,6 +16,7 @@ import LiveMarkets from "./pages/LiveMarkets";
 import Trade from "./pages/Trade";
 import Portfolio from "./pages/Portfolio";
 import Leaderboard from "./pages/Leaderboard";
+import Account from "./pages/Account";
 import MarketDetail from "./pages/MarketDetail";
 import ExploreEvents from "./pages/ExploreEvents";
 import EventDetail from "./pages/EventDetail";
@@ -66,6 +67,7 @@ const App = () => (
                 <Route path="/live" element={<LiveMarkets />} />
                 <Route path="/trade/:conditionId" element={<Trade />} />
                 <Route path="/portfolio" element={<Portfolio />} />
+                <Route path="/account" element={<Account />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/market/:slug" element={<MarketDetail />} />
                 <Route path="/events" element={<ExploreEvents />} />
