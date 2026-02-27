@@ -245,6 +245,8 @@ export async function createDepositAddress(address: string): Promise<{
   ok: boolean;
   deposit?: any;
   error?: string;
+  upstreamStatus?: number;
+  upstreamBody?: string;
 }> {
   const { data, error } = await supabase.functions.invoke("polymarket-create-deposit-address", {
     body: { address },

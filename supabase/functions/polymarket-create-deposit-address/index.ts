@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
@@ -13,6 +13,8 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -42,15 +44,20 @@ serve(async (req) => {
 
     const body = await req.json();
     const { address } = body;
-    if (!address) {
-      return jsonResp({ ok: false, error: "address required" }, 400);
+    if (!address || !EVM_ADDRESS_RE.test(address)) {
+      return jsonResp({ ok: false, error: "Valid EVM address required (0x + 40 hex chars)" }, 400);
     }
 
-    const BRIDGE_BASE = Deno.env.get("POLYMARKET_BRIDGE_BASE_URL") ?? "https://bridge.polymarket.com";
+    // ── Upstream URL from env ────────────────────────────────────
+    const DEPOSIT_URL = Deno.env.get("POLY_BRIDGE_DEPOSIT_URL");
+    if (!DEPOSIT_URL) {
+      console.error("[deposit-addr] POLY_BRIDGE_DEPOSIT_URL not configured");
+      return jsonResp({ ok: false, error: "Server missing POLY_BRIDGE_DEPOSIT_URL" }, 500);
+    }
 
-    console.log(`[deposit-addr] Creating deposit address for user=${user.id}, address=${address}`);
+    console.log(`[deposit-addr] Creating deposit address for user=${user.id}, address=${address}, url=${DEPOSIT_URL}`);
 
-    const res = await fetch(`${BRIDGE_BASE}/deposit-addresses`, {
+    const res = await fetch(DEPOSIT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -60,16 +67,16 @@ serve(async (req) => {
     });
 
     const resBody = await res.text();
-    console.log(`[deposit-addr] Bridge response: status=${res.status} body=${resBody.substring(0, 500)}`);
+    console.log(`[deposit-addr] Upstream response: status=${res.status} body=${resBody.substring(0, 500)}`);
 
     if (!res.ok) {
-      console.error(`[deposit-addr] Bridge error: status=${res.status} body=${resBody}`);
+      console.error(`[deposit-addr] Upstream error: status=${res.status} body=${resBody}`);
       return jsonResp({
         ok: false,
-        error: "Bridge error",
-        status: res.status,
-        details: resBody.substring(0, 500),
-      }, 502);
+        error: "Upstream error",
+        upstreamStatus: res.status,
+        upstreamBody: resBody.substring(0, 500),
+      }, res.status);
     }
 
     let parsed;
