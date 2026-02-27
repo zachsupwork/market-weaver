@@ -5,15 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Activity, CheckCircle, XCircle, RefreshCw, Shield, AlertTriangle,
-  Loader2, Wallet, Banknote, Copy, Info,
+  Loader2, Wallet, Banknote, Copy, Info, ChevronDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { deriveApiCreds, checkUserCredsStatus, createDepositAddress } from "@/lib/polymarket-api";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
+import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 
 const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
 
@@ -29,6 +32,8 @@ export default function PolymarketSettings() {
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositInfo, setDepositInfo] = useState<any>(null);
   const [supabaseUser, setSupabaseUser] = useState<any>(null);
+  const [depositError, setDepositError] = useState<any>(null);
+  const [showDepositError, setShowDepositError] = useState(false);
 
   // Check Supabase auth state — attempt anonymous sign-in automatically
   useEffect(() => {
@@ -39,7 +44,6 @@ export default function PolymarketSettings() {
       if (session) {
         setSupabaseUser(session.user);
       } else {
-        // Auto anonymous sign-in for frictionless UX
         try {
           const { error } = await supabase.auth.signInAnonymously();
           if (error) console.warn("Auto anonymous sign-in failed:", error.message);
@@ -91,14 +95,7 @@ export default function PolymarketSettings() {
     try {
       const timestamp = String(Math.floor(Date.now() / 1000));
       const nonce = "0";
-
-      // Polymarket L1 EIP-712 typed data for API key derivation
-      const domain = {
-        name: "ClobAuthDomain",
-        version: "1",
-        chainId: 137,
-      } as const;
-
+      const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
       const types = {
         ClobAuth: [
           { name: "address", type: "address" },
@@ -107,7 +104,6 @@ export default function PolymarketSettings() {
           { name: "message", type: "string" },
         ],
       } as const;
-
       const message = {
         address: address,
         timestamp: timestamp,
@@ -115,20 +111,8 @@ export default function PolymarketSettings() {
         message: "This message attests that I control the given wallet",
       } as const;
 
-      const signature = await signTypedDataAsync({
-        account: address,
-        domain,
-        types,
-        primaryType: "ClobAuth",
-        message,
-      });
-
-      const result = await deriveApiCreds({
-        address,
-        signature,
-        timestamp,
-        nonce,
-      });
+      const signature = await signTypedDataAsync({ account: address, domain, types, primaryType: "ClobAuth", message });
+      const result = await deriveApiCreds({ address, signature, timestamp, nonce });
 
       if (result.ok) {
         toast({ title: "Trading Enabled!", description: "Your Polymarket API credentials have been securely derived and stored." });
@@ -151,6 +135,7 @@ export default function PolymarketSettings() {
   async function handleDeposit() {
     if (!address) return;
     setDepositLoading(true);
+    setDepositError(null);
     try {
       const result = await createDepositAddress(address);
       if (result.ok) {
@@ -158,11 +143,11 @@ export default function PolymarketSettings() {
         toast({ title: "Deposit address retrieved" });
       } else {
         console.error("[PolyView] createDepositAddress failed:", result);
+        setDepositError(result);
         const statusInfo = result.upstreamStatus ? ` (upstream ${result.upstreamStatus})` : "";
-        const bodyPreview = result.upstreamBody ? `\n${String(result.upstreamBody).slice(0, 140)}` : "";
         toast({
           title: "Deposit address failed" + statusInfo,
-          description: (result.error || "Unknown error") + bodyPreview,
+          description: (result.error || "Unknown error"),
           variant: "destructive",
         });
       }
@@ -173,10 +158,10 @@ export default function PolymarketSettings() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied to clipboard" });
-  };
+  // Extract addresses from deposit response
+  const depositAddresses = depositInfo?.address || depositInfo?.addresses || null;
+  // Pick first available address for status tracking
+  const trackingAddress = depositAddresses?.evm || depositAddresses?.svm || "";
 
   return (
     <div className="container max-w-3xl py-8 space-y-6">
@@ -228,9 +213,7 @@ export default function PolymarketSettings() {
               <span className="text-sm font-mono">{address?.slice(0, 8)}…{address?.slice(-6)}</span>
               <ConnectButton.Custom>
                 {({ openAccountModal }) => (
-                  <Button variant="ghost" size="sm" onClick={openAccountModal}>
-                    Change
-                  </Button>
+                  <Button variant="ghost" size="sm" onClick={openAccountModal}>Change</Button>
                 )}
               </ConnectButton.Custom>
             </div>
@@ -240,11 +223,9 @@ export default function PolymarketSettings() {
         </CardContent>
       </Card>
 
-      {/* Auth Status — inline AuthGate if no session */}
+      {/* Auth Status */}
       {!supabaseUser && (
-        <AuthGate autoAnonymous={false}>
-          <></>
-        </AuthGate>
+        <AuthGate autoAnonymous={false}><></></AuthGate>
       )}
 
       {/* WalletConnect warning */}
@@ -252,7 +233,7 @@ export default function PolymarketSettings() {
         <div className="flex items-center gap-2 rounded-md border border-muted bg-muted/50 p-3">
           <Info className="h-4 w-4 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground">
-            WalletConnect is disabled. Set <code className="font-mono text-[10px]">VITE_WALLETCONNECT_PROJECT_ID</code> to enable mobile wallets. Browser wallets (MetaMask) still work.
+            WalletConnect is disabled. Set <code className="font-mono text-[10px]">VITE_WALLETCONNECT_PROJECT_ID</code> to enable mobile wallets.
           </p>
         </div>
       )}
@@ -265,13 +246,11 @@ export default function PolymarketSettings() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Trading Credentials</CardTitle>
             <Button variant="ghost" size="sm" onClick={refreshCreds} disabled={credLoading}>
-              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${credLoading ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${credLoading ? "animate-spin" : ""}`} /> Refresh
             </Button>
           </div>
           <CardDescription>
             Derive your personal Polymarket API credentials by signing an EIP-712 message with your wallet.
-            No secrets are ever shown or stored in your browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -300,27 +279,17 @@ export default function PolymarketSettings() {
               <p className="text-sm text-muted-foreground">
                 No credentials stored yet. Click below to sign with your wallet and derive your Polymarket API key.
               </p>
-              <Button
-                onClick={handleDerive}
-                disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}
-                className="w-full sm:w-auto"
-              >
-                {deriving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Shield className="h-4 w-4 mr-2" />
-                )}
+              <Button onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed} className="w-full sm:w-auto">
+                {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
                 {deriving ? "Signing & Deriving..." : "Enable Trading"}
               </Button>
-              {!ageConfirmed && (
-                <p className="text-xs text-warning">⚠️ Confirm age & jurisdiction above first</p>
-              )}
+              {!ageConfirmed && <p className="text-xs text-warning">⚠️ Confirm age & jurisdiction above first</p>}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Deposit Address */}
+      {/* Fund Account / Deposit */}
       {credStatus.hasCreds && (
         <Card>
           <CardHeader className="pb-3">
@@ -328,24 +297,68 @@ export default function PolymarketSettings() {
               <Banknote className="h-4 w-4" /> Fund Account
             </CardTitle>
             <CardDescription>
-              Get a deposit address to fund your Polymarket account with USDC on Polygon.
+              Deposit funds to your Polymarket account. Bridge converts deposits to USDC.e on Polygon automatically.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Button variant="secondary" onClick={handleDeposit} disabled={depositLoading || !address}>
-              {depositLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Banknote className="h-4 w-4 mr-2" />}
-              {depositLoading ? "Loading..." : "Get Deposit Address"}
-            </Button>
-            {depositInfo && (
-              <div className="rounded-md border border-border bg-muted/50 p-3 space-y-2">
-                <p className="text-xs font-semibold text-foreground">Deposit Info:</p>
-                <pre className="text-[10px] text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
-                  {JSON.stringify(depositInfo, null, 2)}
-                </pre>
-                <Button variant="ghost" size="sm" onClick={() => copyToClipboard(JSON.stringify(depositInfo))}>
-                  <Copy className="h-3 w-3 mr-1" /> Copy
+          <CardContent className="space-y-4">
+            {/* How deposits work */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground gap-1">
+                  <Info className="h-3.5 w-3.5" /> How deposits work <ChevronDown className="h-3 w-3" />
                 </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 rounded-md border border-border bg-muted/30 p-3 space-y-2 text-xs text-muted-foreground">
+                <p>• Polymarket uses <strong>USDC.e on Polygon</strong> as collateral for all trades.</p>
+                <p>• Bridge deposits from other chains (Ethereum, Solana, Bitcoin, Tron) are <strong>converted automatically</strong>.</p>
+                <p>• Check minimum deposit amounts and supported assets before sending.</p>
+                <p>• Track deposit progress using the status checker below.</p>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Get deposit address button */}
+            {!depositAddresses && (
+              <Button variant="secondary" onClick={handleDeposit} disabled={depositLoading || !address} className="w-full sm:w-auto">
+                {depositLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Banknote className="h-4 w-4 mr-2" />}
+                {depositLoading ? "Loading..." : "Get Deposit Address"}
+              </Button>
+            )}
+
+            {/* Error display */}
+            {depositError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                <p className="text-xs text-destructive">
+                  {depositError.error || "Failed to get deposit address"}
+                  {depositError.upstreamStatus ? ` (status ${depositError.upstreamStatus})` : ""}
+                </p>
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setShowDepositError(!showDepositError)}>
+                  {showDepositError ? "Hide" : "Show"} Details
+                </Button>
+                {showDepositError && (
+                  <pre className="text-[10px] text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
+                    {JSON.stringify(depositError, null, 2)}
+                  </pre>
+                )}
               </div>
+            )}
+
+            {/* Deposit address card with chain selector + QR */}
+            {depositAddresses && (
+              <>
+                <DepositAddressCard
+                  addresses={depositAddresses}
+                  note={depositInfo?.note}
+                />
+                <Separator />
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Deposit Status</h3>
+                  <p className="text-xs text-muted-foreground">Track incoming deposits by checking the status of your deposit address.</p>
+                  <DepositStatusTracker address={trackingAddress} />
+                </div>
+                <Button variant="outline" size="sm" onClick={handleDeposit} disabled={depositLoading}>
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${depositLoading ? "animate-spin" : ""}`} /> Refresh Address
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>

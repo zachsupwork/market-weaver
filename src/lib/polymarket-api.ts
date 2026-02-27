@@ -278,6 +278,22 @@ export async function cancelOrder(orderId: string): Promise<{ ok: boolean; error
   return data;
 }
 
+/** Check deposit status via bridge */
+export async function fetchDepositStatus(address: string): Promise<{
+  ok: boolean;
+  status?: any;
+  error?: string;
+  upstreamStatus?: number;
+  upstreamBody?: string;
+}> {
+  const res = await fetch(
+    `${fnUrl("polymarket-deposit-status")}?address=${encodeURIComponent(address)}`,
+    { headers: { "apikey": ANON_KEY } }
+  );
+  const data = await res.json();
+  return data;
+}
+
 // Legacy placeOrder kept as alias for postSignedOrder
 export async function placeOrder(params: {
   tokenId: string;
