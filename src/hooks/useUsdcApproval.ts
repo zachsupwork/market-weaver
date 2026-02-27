@@ -9,6 +9,8 @@ const CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
 // Neg Risk CTF Exchange on Polygon
 const NEG_RISK_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a" as const;
 
+const MAX_APPROVAL = parseUnits("100000000", 6); // 100M USDC.e — effectively unlimited
+
 const erc20Abi = [
   {
     name: "allowance",
@@ -39,15 +41,35 @@ const erc20Abi = [
   },
 ] as const;
 
+const polygon = {
+  id: 137,
+  name: "Polygon",
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+  rpcUrls: { default: { http: ["https://polygon-rpc.com"] } },
+} as const;
+
+/**
+ * Step 3: "Approve Tokens"
+ * Approves USDC.e spending for both CTF Exchange and Neg Risk Exchange.
+ */
 export function useUsdcApproval(amountUsdc: number) {
   const { address } = useAccount();
   const [needsApproval, setNeedsApproval] = useState(false);
 
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+  // Check CTF Exchange allowance
+  const { data: ctfAllowance, refetch: refetchCtf } = useReadContract({
     address: USDC_ADDRESS,
     abi: erc20Abi,
     functionName: "allowance",
     args: address ? [address, CTF_EXCHANGE] : undefined,
+  });
+
+  // Check Neg Risk Exchange allowance
+  const { data: negAllowance, refetch: refetchNeg } = useReadContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address ? [address, NEG_RISK_EXCHANGE] : undefined,
   });
 
   const { data: balance } = useReadContract({
@@ -57,35 +79,58 @@ export function useUsdcApproval(amountUsdc: number) {
     args: address ? [address] : undefined,
   });
 
-  const { writeContract, data: txHash, isPending: isApproving } = useWriteContract();
+  const { writeContract: write1, data: tx1, isPending: pending1 } = useWriteContract();
+  const { writeContract: write2, data: tx2, isPending: pending2 } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const { isLoading: confirming1, isSuccess: confirmed1 } = useWaitForTransactionReceipt({ hash: tx1 });
+  const { isLoading: confirming2, isSuccess: confirmed2 } = useWaitForTransactionReceipt({ hash: tx2 });
 
   useEffect(() => {
-    if (isConfirmed) {
-      refetchAllowance();
+    if (confirmed1 || confirmed2) {
+      refetchCtf();
+      refetchNeg();
     }
-  }, [isConfirmed, refetchAllowance]);
+  }, [confirmed1, confirmed2, refetchCtf, refetchNeg]);
 
   useEffect(() => {
-    if (allowance !== undefined && amountUsdc > 0) {
+    if (ctfAllowance !== undefined && negAllowance !== undefined && amountUsdc > 0) {
       const required = parseUnits(amountUsdc.toFixed(6), 6);
-      setNeedsApproval((allowance as bigint) < required);
+      const ctfOk = (ctfAllowance as bigint) >= required;
+      const negOk = (negAllowance as bigint) >= required;
+      setNeedsApproval(!ctfOk || !negOk);
+    } else if (amountUsdc <= 0) {
+      // When no amount specified, check if we have any allowance at all
+      const ctfOk = ctfAllowance !== undefined && (ctfAllowance as bigint) > 0n;
+      const negOk = negAllowance !== undefined && (negAllowance as bigint) > 0n;
+      setNeedsApproval(!ctfOk || !negOk);
     }
-  }, [allowance, amountUsdc]);
+  }, [ctfAllowance, negAllowance, amountUsdc]);
 
   const approve = () => {
     if (!address) return;
-    writeContract({
-      address: USDC_ADDRESS,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [CTF_EXCHANGE, parseUnits("1000000", 6)],
-      account: address,
-      chain: { id: 137, name: "Polygon", nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 }, rpcUrls: { default: { http: ["https://polygon-rpc.com"] } } },
-    });
+    const ctfOk = ctfAllowance !== undefined && (ctfAllowance as bigint) > 0n;
+    const negOk = negAllowance !== undefined && (negAllowance as bigint) > 0n;
+
+    if (!ctfOk) {
+      write1({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [CTF_EXCHANGE, MAX_APPROVAL],
+        account: address,
+        chain: polygon,
+      });
+    }
+    if (!negOk) {
+      write2({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [NEG_RISK_EXCHANGE, MAX_APPROVAL],
+        account: address,
+        chain: polygon,
+      });
+    }
   };
 
   const usdcBalance = balance ? Number(balance) / 1e6 : 0;
@@ -93,8 +138,8 @@ export function useUsdcApproval(amountUsdc: number) {
   return {
     needsApproval,
     approve,
-    isApproving: isApproving || isConfirming,
-    isConfirmed,
+    isApproving: pending1 || pending2 || confirming1 || confirming2,
+    isConfirmed: !needsApproval,
     usdcBalance,
   };
 }
