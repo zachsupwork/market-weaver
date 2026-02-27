@@ -53,11 +53,11 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!address) return;
     setDerivingCreds(true);
     try {
-      let { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        const { error } = await supabase.auth.signInAnonymously();
-        if (error) { toast.error("Sign-in required"); setDerivingCreds(false); return; }
-        session = (await supabase.auth.getSession()).data.session;
+        toast.error("Please sign in first to enable trading");
+        setDerivingCreds(false);
+        return;
       }
 
       const timestamp = String(Math.floor(Date.now() / 1000));
@@ -114,12 +114,10 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!size || parseFloat(size) <= 0) { toast.error("Enter a valid size"); return; }
     if (hasInsufficientBalance) { toast.error("Insufficient USDC.e balance"); return; }
 
-    let { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      const { error } = await supabase.auth.signInAnonymously();
-      if (error) { toast.error("Sign in required"); return; }
-      session = (await supabase.auth.getSession()).data.session;
-      if (!session) { toast.error("Session issue"); return; }
+      toast.error("Please sign in first to place orders");
+      return;
     }
 
     if (!showConfirm) { setShowConfirm(true); return; }
@@ -160,10 +158,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const quickSizes = [10, 25, 50, 100];
 
   // ── 3-step checklist matching Polymarket ─────────────────────────
-  const usdcSubLabel = readiness.usdc.needsApproval && readiness.usdc.approvalProgress > 0
-    ? `Approved ${readiness.usdc.approvalProgress}/2 exchanges`
-    : null;
-
   const steps = [
     {
       key: "proxy" as const,
@@ -178,7 +172,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     {
       key: "creds" as const,
       label: "Enable Trading",
-      description: "Sign a message to generate your API keys. No gas required.",
+      description: "Sign a message to generate your API keys.",
       subLabel: null,
       done: readiness.credsReady,
       action: handleDeriveCreds,
@@ -188,12 +182,12 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     {
       key: "usdc" as const,
       label: "Approve Tokens",
-      description: "Approve USDC.e token spending for trading.",
-      subLabel: usdcSubLabel,
+      description: "Approve token spending for trading.",
+      subLabel: null,
       done: readiness.usdcReady,
       action: handleApproveUsdc,
       loading: readiness.usdc.isApproving,
-      buttonLabel: readiness.usdc.approvalProgress > 0 ? `Approve (${readiness.usdc.approvalProgress}/2)` : "Approve",
+      buttonLabel: "Approve",
     },
   ];
 

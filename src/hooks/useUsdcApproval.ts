@@ -107,7 +107,5 @@ export function useUsdcApproval(amountUsdc: number) {
     isConfirmed: !needsApproval,
     usdcBalance,
     approvalProgress: needsApproval ? 0 : 1,
-    ctfApproved: !needsApproval,
-    negApproved: true,
   };
 }
