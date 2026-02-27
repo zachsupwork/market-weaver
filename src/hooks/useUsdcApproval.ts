@@ -3,10 +3,14 @@ import { maxUint256 } from "viem";
 import { useMemo, useEffect } from "react";
 
 const FALLBACK_USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
-const FALLBACK_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
+const FALLBACK_USDC_SPENDER = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
 
 const USDC_E_ADDRESS = (import.meta.env.VITE_USDC_E_ADDRESS || FALLBACK_USDC_E) as `0x${string}`;
-const POLYMARKET_EXCHANGE_ADDRESS = (import.meta.env.VITE_POLYMARKET_EXCHANGE_ADDRESS || FALLBACK_EXCHANGE) as `0x${string}`;
+const POLYMARKET_USDC_SPENDER_ADDRESS = (
+  import.meta.env.VITE_POLYMARKET_USDC_SPENDER_ADDRESS ||
+  import.meta.env.VITE_POLYMARKET_EXCHANGE_ADDRESS ||
+  FALLBACK_USDC_SPENDER
+) as `0x${string}`;
 
 const erc20Abi = [
   {
@@ -57,7 +61,7 @@ export function useUsdcApproval(amountUsdc: number) {
     address: USDC_E_ADDRESS,
     abi: erc20Abi,
     functionName: "allowance",
-    args: address ? [address, POLYMARKET_EXCHANGE_ADDRESS] : undefined,
+    args: address ? [address, POLYMARKET_USDC_SPENDER_ADDRESS] : undefined,
   });
 
   const { data: balance } = useReadContract({
@@ -92,7 +96,7 @@ export function useUsdcApproval(amountUsdc: number) {
       address: USDC_E_ADDRESS,
       abi: erc20Abi,
       functionName: "approve",
-      args: [POLYMARKET_EXCHANGE_ADDRESS, maxUint256],
+      args: [POLYMARKET_USDC_SPENDER_ADDRESS, maxUint256],
       account: address,
       chain: polygon,
     });
