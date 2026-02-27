@@ -44,15 +44,20 @@ serve(async (req) => {
 
     // ── Parse input ──────────────────────────────────────────────
     const body = await req.json();
-    const { address, signature } = body;
+    const { address, signature, timestamp, nonce: rawNonce } = body;
 
     if (!address || !signature) {
       return jsonResp({ ok: false, error: "address and signature required" }, 400);
     }
 
-    // ── Generate timestamp & nonce server-side ───────────────────
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const nonce = "0";
+    // Use client-provided timestamp/nonce so they match the signed EIP-712 message
+    if (!timestamp || !/^\d{10,}$/.test(timestamp)) {
+      return jsonResp({ ok: false, error: "Invalid timestamp — must be numeric unix seconds" }, 400);
+    }
+    const nonce = rawNonce ?? "0";
+    if (!/^\d+$/.test(nonce)) {
+      return jsonResp({ ok: false, error: "Invalid nonce — must be a numeric string" }, 400);
+    }
 
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
 
@@ -63,50 +68,52 @@ serve(async (req) => {
       "POLY_NONCE": nonce,
     };
 
-    console.log(`[l1-derive] Attempting derive for user=${user.id}, address=${address.slice(0, 10)}...`);
+    console.log(`[l1-derive] Attempting derive for user=${user.id}, address=${address.slice(0, 10)}..., ts=${timestamp}, nonce=${nonce}`);
 
-    // ── Step 1: Try GET /auth/derive-api-key ─────────────────────
+    // ── Step 1: Try POST /auth/api-key (create) ─────────────────
     let creds: { apiKey: string; secret: string; passphrase: string } | null = null;
 
-    const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
-      method: "GET",
+    const createRes = await fetch(`${clobHost}/auth/api-key`, {
+      method: "POST",
       headers: l1Headers,
     });
 
-    const deriveBody = await deriveRes.text();
-    console.log(`[l1-derive] derive response status=${deriveRes.status} body=${deriveBody.substring(0, 500)}`);
+    const createBody = await createRes.text();
+    console.log(`[l1-derive] create response status=${createRes.status} body=${createBody.substring(0, 500)}`);
 
-    if (deriveRes.ok) {
+    if (createRes.ok) {
       try {
-        creds = JSON.parse(deriveBody);
+        creds = JSON.parse(createBody);
       } catch {
-        console.error("[l1-derive] Failed to parse derive response as JSON");
+        console.error("[l1-derive] Failed to parse create response as JSON");
       }
+    } else {
+      // NONCE_ALREADY_USED or other 400 → fallback to derive
+      console.log(`[l1-derive] Create failed (${createRes.status}), falling back to GET /auth/derive-api-key`);
     }
 
-    // ── Step 2: Fallback to POST /auth/api-key (create) ─────────
+    // ── Step 2: Fallback to GET /auth/derive-api-key ────────────
     if (!creds || !creds.apiKey) {
-      console.log("[l1-derive] Derive failed or returned no key, falling back to POST /auth/api-key");
-
-      const createRes = await fetch(`${clobHost}/auth/api-key`, {
-        method: "POST",
+      const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
+        method: "GET",
         headers: l1Headers,
       });
 
-      const createBody = await createRes.text();
-      console.log(`[l1-derive] create response status=${createRes.status} body=${createBody.substring(0, 500)}`);
+      const deriveBody = await deriveRes.text();
+      console.log(`[l1-derive] derive response status=${deriveRes.status} body=${deriveBody.substring(0, 500)}`);
 
-      if (!createRes.ok) {
+      if (!deriveRes.ok) {
+        console.error(`[l1-derive] Both create and derive failed. create=${createRes.status} derive=${deriveRes.status}`);
         return jsonResp({
           ok: false,
-          error: `Polymarket credential creation failed (${createRes.status}): ${createBody.substring(0, 300)}`,
+          error: `Polymarket rejected credentials (create=${createRes.status}, derive=${deriveRes.status}): ${deriveBody.substring(0, 300)}`,
         }, 502);
       }
 
       try {
-        creds = JSON.parse(createBody);
+        creds = JSON.parse(deriveBody);
       } catch {
-        return jsonResp({ ok: false, error: `Invalid JSON from Polymarket: ${createBody.substring(0, 200)}` }, 502);
+        return jsonResp({ ok: false, error: `Invalid JSON from Polymarket derive: ${deriveBody.substring(0, 200)}` }, 502);
       }
     }
 
