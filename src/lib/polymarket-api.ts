@@ -294,6 +294,47 @@ export async function fetchDepositStatus(address: string): Promise<{
   return data;
 }
 
+/** Fetch open orders for authenticated user */
+export async function fetchOpenOrders(): Promise<{
+  ok: boolean;
+  orders?: any[];
+  error?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-orders");
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
+/** Fetch trade history for a wallet address */
+export async function fetchTradeHistory(address: string, limit = 100): Promise<any[]> {
+  const res = await fetch(
+    `${fnUrl("polymarket-proxy-trades")}?condition_id=all&limit=${limit}`,
+    { headers: { "apikey": ANON_KEY } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+/** Initiate a withdrawal via Bridge */
+export async function initiateWithdrawal(params: {
+  amount: string;
+  destinationAddress: string;
+  chain?: string;
+}): Promise<{
+  ok: boolean;
+  withdrawal?: any;
+  error?: string;
+  upstreamStatus?: number;
+  upstreamBody?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-withdraw", {
+    body: params,
+  });
+  if (error) return { ok: false, error: error.message };
+  return data;
+}
+
 // Legacy placeOrder kept as alias for postSignedOrder
 export async function placeOrder(params: {
   tokenId: string;
@@ -302,6 +343,5 @@ export async function placeOrder(params: {
   size: number;
   orderType?: string;
 }): Promise<{ ok: boolean; order?: any; error?: string }> {
-  // This builds a simplified order — the real flow requires client-side signing
   return postSignedOrder(params);
 }
