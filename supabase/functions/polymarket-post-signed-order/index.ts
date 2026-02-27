@@ -147,7 +147,9 @@ serve(async (req) => {
     });
 
     const resBody = await res.text();
-    console.log(`[post-order] CLOB response: ${res.status} ${resBody.substring(0, 300)}`);
+    console.log(`[post-order] CLOB ${res.status} headers:`, JSON.stringify(Object.fromEntries(res.headers)));
+    console.log(`[post-order] CLOB body: ${resBody.substring(0, 1000)}`);
+    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, addr=${credRow.address}`);
 
     if (res.ok) {
       let parsed;
@@ -155,12 +157,24 @@ serve(async (req) => {
       return jsonResp({ ok: true, order: parsed });
     } else {
       return jsonResp(
-        { ok: false, error: `Order failed (${res.status}): ${resBody.substring(0, 300)}` },
-        res.status
+        {
+          ok: false,
+          error: `Order failed (${res.status}): ${resBody.substring(0, 500)}`,
+          upstreamStatus: res.status,
+          upstreamBody: resBody.substring(0, 1000),
+          debug: {
+            requestPath,
+            method,
+            address: credRow.address,
+            apiKeyTail,
+            timestamp,
+          },
+        },
+        res.status >= 500 ? 502 : res.status
       );
     }
   } catch (err) {
     console.error("[post-order] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: err.message, stack: err.stack?.substring(0, 500) }, 500);
   }
 });
