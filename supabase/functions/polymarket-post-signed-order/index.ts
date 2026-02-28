@@ -210,7 +210,9 @@ serve(async (req) => {
     const apiKeyTail = creds.apiKey.slice(-6);
     console.log(`[post-order] user=${user.id}, apiKey:…${apiKeyTail}, bodyLen=${orderBody.length}`);
 
-    const headerAddress = String(sendOrderPayload.order?.signer || credRow.address || "").toLowerCase();
+    const credsAddress = String(credRow.address || "").toLowerCase();
+    const signerAddress = String(sendOrderPayload.order?.signer || "").toLowerCase();
+    const headerAddress = credsAddress || signerAddress;
     const baseHeaders: Record<string, string> = {
       "POLY_API_KEY": creds.apiKey,
       "POLY_PASSPHRASE": creds.passphrase,
@@ -246,7 +248,7 @@ serve(async (req) => {
 
     console.log(`[post-order] CLOB ${res.status} headers:`, JSON.stringify(Object.fromEntries(res.headers)));
     console.log(`[post-order] CLOB body: ${resBody.substring(0, 1000)}`);
-    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, addr=${headerAddress}, sigMode=${usedSignatureMode}`);
+    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, polyAddr=${headerAddress}, credsAddr=${credsAddress}, signerAddr=${signerAddress}, sigMode=${usedSignatureMode}`);
 
     if (res.ok) {
       let parsed;
