@@ -63,8 +63,12 @@ Deno.serve(async (req) => {
     }
 
     // Generate HMAC-SHA256 signature
-    const sigTimestamp = Date.now().toString();
-    const message = `${sigTimestamp}${method}${path}${body || ""}`;
+    // IMPORTANT: timestamp must be in SECONDS (not ms) to match Polymarket SDK
+    const sigTimestamp = Math.floor(Date.now() / 1000).toString();
+    let message = `${sigTimestamp}${method}${path}`;
+    if (body !== undefined && body !== null && body !== "") {
+      message += body;
+    }
 
     // Decode base64 secret (handle both standard and URL-safe base64)
     const normalizedSecret = builderSecret.replace(/-/g, '+').replace(/_/g, '/');
@@ -73,7 +77,6 @@ Deno.serve(async (req) => {
     try {
       secretBytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
     } catch {
-      // If still fails, use raw string bytes as the secret
       secretBytes = new TextEncoder().encode(builderSecret);
     }
     const key = await crypto.subtle.importKey(
@@ -84,7 +87,10 @@ Deno.serve(async (req) => {
       ["sign"]
     );
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-    const signature = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    // IMPORTANT: Output must be URL-safe base64 (+ → -, / → _) to match Polymarket SDK
+    const signature = btoa(String.fromCharCode(...new Uint8Array(sig)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
 
     return new Response(
       JSON.stringify({
