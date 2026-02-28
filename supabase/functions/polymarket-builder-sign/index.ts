@@ -66,8 +66,16 @@ Deno.serve(async (req) => {
     const sigTimestamp = Date.now().toString();
     const message = `${sigTimestamp}${method}${path}${body || ""}`;
 
-    // Decode base64 secret
-    const secretBytes = Uint8Array.from(atob(builderSecret), (c) => c.charCodeAt(0));
+    // Decode base64 secret (handle both standard and URL-safe base64)
+    const normalizedSecret = builderSecret.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalizedSecret + '='.repeat((4 - normalizedSecret.length % 4) % 4);
+    let secretBytes: Uint8Array;
+    try {
+      secretBytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    } catch {
+      // If still fails, use raw string bytes as the secret
+      secretBytes = new TextEncoder().encode(builderSecret);
+    }
     const key = await crypto.subtle.importKey(
       "raw",
       secretBytes,
