@@ -131,15 +131,46 @@ serve(async (req) => {
       ? String(rawOrderType)
       : "GTC";
 
-    // Accept either full SendOrder payload ({ order, owner, orderType })
-    // or bare signed order object from client.
-    const sendOrderPayload = signedOrder?.order
-      ? signedOrder
-      : {
-          order: signedOrder,
-          owner: credRow.address,
-          orderType,
-        };
+    // Transform SignedOrder into the CLOB-expected payload format.
+    // The client sends a raw SignedOrder object from @polymarket/clob-client's createOrder().
+    // We must apply the same transformation as orderToJson():
+    //   - salt parsed as integer
+    //   - side mapped to "BUY"/"SELL" string
+    //   - owner set to the API key (NOT the wallet address)
+    function buildOrderPayload(signed: any, apiKey: string, ot: string) {
+      // If already wrapped (has .order sub-object), use as-is but fix owner
+      if (signed?.order?.maker) {
+        return { ...signed, owner: apiKey, orderType: ot };
+      }
+      // Map side: 0 = BUY, 1 = SELL (from @polymarket/order-utils Side enum)
+      let side = "BUY";
+      if (signed.side === 1 || signed.side === "SELL" || signed.side === "1") {
+        side = "SELL";
+      }
+      return {
+        order: {
+          salt: typeof signed.salt === "string" ? parseInt(signed.salt, 10) : signed.salt,
+          maker: signed.maker,
+          signer: signed.signer,
+          taker: signed.taker,
+          tokenId: signed.tokenId,
+          makerAmount: signed.makerAmount,
+          takerAmount: signed.takerAmount,
+          side,
+          expiration: signed.expiration,
+          nonce: signed.nonce,
+          feeRateBps: signed.feeRateBps,
+          signatureType: signed.signatureType,
+          signature: signed.signature,
+        },
+        owner: apiKey,
+        orderType: ot,
+      };
+    }
+
+    const sendOrderPayload = buildOrderPayload(signedOrder, creds.apiKey, orderType);
+
+    console.log(`[post-order] Payload owner=${creds.apiKey.slice(-6)}, maker=${sendOrderPayload.order?.maker}, signer=${sendOrderPayload.order?.signer}`);
 
     // ── Sign L2 HMAC and POST to CLOB ───────────────────────────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
