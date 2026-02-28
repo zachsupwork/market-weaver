@@ -123,7 +123,27 @@ serve(async (req) => {
       try { parsed = JSON.parse(resBody); } catch { parsed = resBody; }
       return jsonResp({ ok: true, result: parsed });
     } else {
-      return jsonResp({ ok: false, error: `Cancel failed (${res.status}): ${resBody.substring(0, 300)}` }, res.status);
+      const upstreamSnippet = resBody.substring(0, 500);
+      const invalidKey = res.status === 401 && /invalid api key|unauthorized/i.test(resBody);
+
+      if (invalidKey) {
+        await adminClient.from("polymarket_user_creds").delete().eq("user_id", user.id);
+        return jsonResp({
+          ok: false,
+          code: "INVALID_API_KEY",
+          error: "Trading credentials expired or invalid. Please re-enable trading in Setup.",
+          upstreamStatus: res.status,
+          upstreamBody: upstreamSnippet,
+        });
+      }
+
+      return jsonResp({
+        ok: false,
+        code: "CANCEL_REJECTED",
+        error: `Cancel failed (${res.status}): ${upstreamSnippet}`,
+        upstreamStatus: res.status,
+        upstreamBody: upstreamSnippet,
+      });
     }
   } catch (err) {
     console.error("[cancel-order] error:", err);
