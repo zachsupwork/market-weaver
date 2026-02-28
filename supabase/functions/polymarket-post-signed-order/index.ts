@@ -22,11 +22,16 @@ function tryDecodeBase64(input: string): Uint8Array | null {
   }
 }
 
-function toUrlSafeBase64(base64: string): string {
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+function toUrlSafeBase64(base64: string, keepPadding = true): string {
+  const converted = base64.replace(/\+/g, "-").replace(/\//g, "_");
+  return keepPadding ? converted : converted.replace(/=+$/g, "");
 }
 
-async function hmacSignFromBytes(secretBytes: Uint8Array, message: string, urlSafe = false): Promise<string> {
+async function hmacSignFromBytes(
+  secretBytes: Uint8Array,
+  message: string,
+  mode: "std" | "urlsafe_padded" | "urlsafe_unpadded" = "urlsafe_padded"
+): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     secretBytes,
@@ -36,7 +41,8 @@ async function hmacSignFromBytes(secretBytes: Uint8Array, message: string, urlSa
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return urlSafe ? toUrlSafeBase64(b64) : b64;
+  if (mode === "std") return b64;
+  return toUrlSafeBase64(b64, mode === "urlsafe_padded");
 }
 
 async function buildSignatureCandidates(secret: string, message: string): Promise<Array<{ value: string; mode: string }>> {
@@ -50,12 +56,14 @@ async function buildSignatureCandidates(secret: string, message: string): Promis
   const out: Array<{ value: string; mode: string }> = [];
   const seen = new Set<string>();
 
+  const formats: Array<"urlsafe_padded" | "std" | "urlsafe_unpadded"> = ["urlsafe_padded", "std", "urlsafe_unpadded"];
+
   for (const variant of variants) {
-    for (const urlSafe of [false, true]) {
-      const value = await hmacSignFromBytes(variant.bytes, message, urlSafe);
+    for (const format of formats) {
+      const value = await hmacSignFromBytes(variant.bytes, message, format);
       if (seen.has(value)) continue;
       seen.add(value);
-      out.push({ value, mode: `${variant.source}:${urlSafe ? "urlsafe" : "std"}` });
+      out.push({ value, mode: `${variant.source}:${format}` });
     }
   }
 
