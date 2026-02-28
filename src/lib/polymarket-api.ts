@@ -256,14 +256,17 @@ export async function createDepositAddress(address: string): Promise<{
 }
 
 /** Submit a signed order to Polymarket via backend L2 auth proxy */
-export async function postSignedOrder(signedOrder: any): Promise<{
+export async function postSignedOrder(
+  signedOrder: any,
+  orderType: "GTC" | "FOK" | "GTD" = "GTC"
+): Promise<{
   ok: boolean;
   order?: any;
   error?: string;
   code?: string;
 }> {
   const { data, error } = await supabase.functions.invoke("polymarket-post-signed-order", {
-    body: { signedOrder },
+    body: { signedOrder, orderType },
   });
   if (error) return { ok: false, error: error.message };
   return data;

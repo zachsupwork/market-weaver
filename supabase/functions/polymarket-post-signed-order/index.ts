@@ -121,18 +121,32 @@ serve(async (req) => {
 
     // ── Parse signed order from client ──────────────────────────
     const body = await req.json();
-    const { signedOrder } = body;
+    const { signedOrder, orderType: rawOrderType } = body;
 
     if (!signedOrder) {
       return jsonResp({ ok: false, error: "signedOrder is required" }, 400);
     }
+
+    const orderType = ["GTC", "FOK", "GTD", "FAK"].includes(String(rawOrderType))
+      ? String(rawOrderType)
+      : "GTC";
+
+    // Accept either full SendOrder payload ({ order, owner, orderType })
+    // or bare signed order object from client.
+    const sendOrderPayload = signedOrder?.order
+      ? signedOrder
+      : {
+          order: signedOrder,
+          owner: credRow.address,
+          orderType,
+        };
 
     // ── Sign L2 HMAC and POST to CLOB ───────────────────────────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const method = "POST";
     const requestPath = "/order";
-    const orderBody = JSON.stringify(signedOrder);
+    const orderBody = JSON.stringify(sendOrderPayload);
 
     const signMessage = timestamp + method + requestPath + orderBody;
     const signature = await hmacSign(creds.secret, signMessage);
