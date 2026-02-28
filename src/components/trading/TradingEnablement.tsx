@@ -21,7 +21,17 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
   const [derivingCreds, setDerivingCreds] = useState(false);
 
   async function handleDeployProxy() {
-    readiness.proxy.deploy();
+    try {
+      await readiness.proxy.deploy();
+      toast.success("Wallet deployed!");
+    } catch (err: any) {
+      const msg = err.message || "Deployment failed";
+      if (msg.includes("rejected") || msg.includes("denied")) {
+        toast.error("Signature cancelled");
+      } else {
+        toast.error(msg);
+      }
+    }
   }
 
   async function handleDeriveCreds() {
@@ -74,8 +84,18 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
     }
   }
 
-  function handleApproveUsdc() {
-    readiness.usdc.approve();
+  async function handleApproveUsdc() {
+    try {
+      await readiness.usdc.approve();
+      toast.success("Tokens approved!");
+    } catch (err: any) {
+      const msg = err.message || "Approval failed";
+      if (msg.includes("rejected") || msg.includes("denied")) {
+        toast.error("Signature cancelled");
+      } else {
+        toast.error(msg);
+      }
+    }
   }
 
   if (readiness.allReady) {
@@ -90,21 +110,21 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
   const steps = [
     {
       key: "proxy" as const,
-      label: "Deploy Proxy Wallet",
-      description: "Deploy a smart contract wallet to enable trading.",
+      label: "Deploy Wallet",
+      description: "Deploy a smart contract wallet for gasless trading.",
       done: readiness.proxyReady,
       action: handleDeployProxy,
-      loading: false,
-      buttonLabel: "Deploy",
+      loading: readiness.proxy.isDeploying,
+      buttonLabel: "Sign",
     },
     {
       key: "usdc" as const,
       label: "Approve Tokens",
-      description: "Approve token spending for trading.",
+      description: "Approve token contracts for trading (single signature).",
       done: readiness.usdcReady,
       action: handleApproveUsdc,
       loading: readiness.usdc.isApproving,
-      buttonLabel: "Approve",
+      buttonLabel: "Sign",
     },
     {
       key: "creds" as const,

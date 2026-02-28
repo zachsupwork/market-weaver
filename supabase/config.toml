@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.polymarket-deposit-status]
 verify_jwt = false
+
+[functions.polymarket-builder-sign]
+verify_jwt = false

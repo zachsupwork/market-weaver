@@ -22,7 +22,7 @@ export interface TradingReadiness {
 export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
   const { isConnected } = useAccount();
   const proxy = useProxyWallet();
-  const usdc = useUsdcApproval(orderAmountUsdc);
+  const usdc = useUsdcApproval(proxy.proxyAddress);
   const [credsReady, setCredsReady] = useState(false);
   const [credsLoading, setCredsLoading] = useState(true);
 

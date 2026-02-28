@@ -1,111 +1,187 @@
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { maxUint256 } from "viem";
-import { polygon } from "wagmi/chains";
-import { useMemo, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useAccount, usePublicClient } from "wagmi";
+import { encodeFunctionData, maxUint256, erc20Abi } from "viem";
+import { useRelayClient } from "./useRelayClient";
 
-const FALLBACK_USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
-// Official Polymarket USDC.e spender (NOT the CTF Exchange 0x4bFb…)
-// Using the correct spender avoids MetaMask "Review alert" warnings
-const FALLBACK_USDC_SPENDER = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
+// ── Contract addresses (Polygon mainnet) ────────────────────────
+const USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
+const CTF_CONTRACT = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
+const CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
+const NEG_RISK_CTF_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a" as const;
+const NEG_RISK_ADAPTER = "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296" as const;
 
-const USDC_E_ADDRESS = (import.meta.env.VITE_USDC_E_ADDRESS || FALLBACK_USDC_E) as `0x${string}`;
-const POLYMARKET_USDC_SPENDER_ADDRESS = (
-  import.meta.env.VITE_POLYMARKET_USDC_SPENDER_ADDRESS ||
-  import.meta.env.VITE_EXCHANGE_ADDRESS ||
-  FALLBACK_USDC_SPENDER
-) as `0x${string}`;
+// ERC-20 approve spenders (USDC.e → 4 contracts)
+const ERC20_SPENDERS = [CTF_CONTRACT, CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
 
-const erc20Abi = [
+// ERC-1155 setApprovalForAll operators (CTF → 3 contracts)
+const ERC1155_OPERATORS = [CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
+
+const erc1155Abi = [
   {
-    name: "allowance",
-    type: "function",
-    stateMutability: "view",
+    name: "setApprovalForAll",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
     inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
     ],
-    outputs: [{ name: "", type: "uint256" }],
+    outputs: [],
   },
   {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
+    name: "isApprovedForAll",
+    type: "function" as const,
+    stateMutability: "view" as const,
     inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
+      { name: "account", type: "address" },
+      { name: "operator", type: "address" },
     ],
     outputs: [{ name: "", type: "bool" }],
   },
+] as const;
+
+const balanceOfAbi = [
   {
     name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
+    type: "function" as const,
+    stateMutability: "view" as const,
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
 
 /**
- * Step 3: "Approve Tokens"
- * Uses ONLY ERC-20 approve() on USDC.e for the Polymarket Exchange spender.
- * No ERC-1155 setApprovalForAll calls are made here.
+ * Step 2: "Approve Tokens"
+ *
+ * Batch-approves all necessary contracts for USDC.e (ERC-20) and
+ * outcome tokens (ERC-1155) via the Polymarket Builder Relayer.
+ * All approvals execute in a single gasless transaction — the user
+ * only signs once and the relayer pays gas.
  */
-export function useUsdcApproval(amountUsdc: number) {
+export function useUsdcApproval(safeAddress: string | null) {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { getClient } = useRelayClient();
 
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: USDC_E_ADDRESS,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: address ? [address, POLYMARKET_USDC_SPENDER_ADDRESS] : undefined,
-  });
+  const [allApproved, setAllApproved] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [usdcBalance, setUsdcBalance] = useState(0);
 
-  const { data: balance } = useReadContract({
-    address: USDC_E_ADDRESS,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-  });
+  // Check all approvals on-chain
+  const checkApprovals = useCallback(async () => {
+    if (!safeAddress || !publicClient) return;
+    setIsChecking(true);
+    try {
+      const safeAddr = safeAddress as `0x${string}`;
 
-  const { writeContract, data: txHash, isPending } = useWriteContract();
-  const { isLoading: confirming, isSuccess: confirmed } = useWaitForTransactionReceipt({ hash: txHash });
+      // Check ERC-20 allowances
+      const erc20Checks = await Promise.all(
+        ERC20_SPENDERS.map((spender) =>
+          publicClient.readContract({
+            address: USDC_E,
+            abi: erc20Abi,
+            functionName: "allowance",
+            args: [safeAddr, spender],
+          } as any)
+        )
+      );
+
+      // Check ERC-1155 approvals
+      const erc1155Checks = await Promise.all(
+        ERC1155_OPERATORS.map((operator) =>
+          publicClient.readContract({
+            address: CTF_CONTRACT,
+            abi: erc1155Abi,
+            functionName: "isApprovedForAll",
+            args: [safeAddr, operator],
+          } as any)
+        )
+      );
+
+      // Check USDC.e balance
+      const balance = await publicClient.readContract({
+        address: USDC_E,
+        abi: balanceOfAbi,
+        functionName: "balanceOf",
+        args: [safeAddr],
+      } as any);
+      setUsdcBalance(Number(balance) / 1e6);
+
+      // All ERC-20 allowances must be > 0, all ERC-1155 must be true
+      const erc20Ok = erc20Checks.every((a) => (a as bigint) > 0n);
+      const erc1155Ok = erc1155Checks.every((a) => a === true);
+      setAllApproved(erc20Ok && erc1155Ok);
+    } catch (err) {
+      console.warn("[useUsdcApproval] Check failed:", err);
+      setAllApproved(false);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [safeAddress, publicClient]);
 
   useEffect(() => {
-    if (confirmed) {
-      refetchAllowance();
+    if (safeAddress) checkApprovals();
+  }, [safeAddress, checkApprovals]);
+
+  // Create batch approval transactions
+  const createApprovalTxs = useCallback(() => {
+    const txs: Array<{ to: string; data: string; value: string }> = [];
+
+    // ERC-20 approvals (USDC.e → 4 spenders)
+    for (const spender of ERC20_SPENDERS) {
+      txs.push({
+        to: USDC_E,
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [spender, maxUint256],
+        }),
+        value: "0",
+      });
     }
-  }, [confirmed, refetchAllowance]);
 
-  const requiredAllowance = useMemo(() => {
-    if (amountUsdc > 0) {
-      return BigInt(Math.floor(amountUsdc * 1_000_000));
+    // ERC-1155 approvals (CTF → 3 operators)
+    for (const operator of ERC1155_OPERATORS) {
+      txs.push({
+        to: CTF_CONTRACT,
+        data: encodeFunctionData({
+          abi: erc1155Abi,
+          functionName: "setApprovalForAll",
+          args: [operator, true],
+        }),
+        value: "0",
+      });
     }
-    return 1n;
-  }, [amountUsdc]);
 
-  const currentAllowance = (allowance as bigint | undefined) ?? 0n;
-  const needsApproval = currentAllowance < requiredAllowance;
+    return txs;
+  }, []);
 
-  const approve = () => {
-    if (!address) return;
-    writeContract({
-      address: USDC_E_ADDRESS,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [POLYMARKET_USDC_SPENDER_ADDRESS, maxUint256],
-      account: address,
-      chain: polygon,
-    });
-  };
-
-  const usdcBalance = balance ? Number(balance) / 1e6 : 0;
+  // Execute all approvals in one gasless batch
+  const approve = useCallback(async () => {
+    if (!address || allApproved) return;
+    setIsApproving(true);
+    try {
+      const client = await getClient();
+      const txs = createApprovalTxs();
+      const response = await client.execute(txs, "Set all token approvals for trading");
+      await response.wait();
+      setAllApproved(true);
+      // Re-check to confirm
+      await checkApprovals();
+    } catch (err: any) {
+      console.error("[useUsdcApproval] Approve failed:", err);
+      throw err;
+    } finally {
+      setIsApproving(false);
+    }
+  }, [address, allApproved, getClient, createApprovalTxs, checkApprovals]);
 
   return {
-    needsApproval,
+    needsApproval: !allApproved,
     approve,
-    isApproving: isPending || confirming,
-    isConfirmed: !needsApproval,
+    isApproving: isApproving || isChecking,
+    isConfirmed: allApproved,
     usdcBalance,
-    approvalProgress: needsApproval ? 0 : 1,
+    approvalProgress: allApproved ? 1 : 0,
   };
 }
