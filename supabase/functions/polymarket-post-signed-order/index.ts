@@ -9,29 +9,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function tryDecodeBase64(input: string): Uint8Array | null {
-  try {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  } catch {
-    return null;
-  }
-}
+/**
+ * Canonical L2 HMAC signature — matches official Polymarket Python client exactly:
+ *   1. urlsafe_b64decode(secret) → key bytes
+ *   2. HMAC-SHA256(key, message)
+ *   3. urlsafe_b64encode(digest) → signature (with padding)
+ */
+async function buildL2Signature(secret: string, message: string): Promise<string> {
+  const trimmed = secret.trim();
+  const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  const binary = atob(padded);
+  const secretBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) secretBytes[i] = binary.charCodeAt(i);
 
-function toUrlSafeBase64(base64: string, keepPadding = true): string {
-  const converted = base64.replace(/\+/g, "-").replace(/\//g, "_");
-  return keepPadding ? converted : converted.replace(/=+$/g, "");
-}
-
-async function hmacSignFromBytes(
-  secretBytes: Uint8Array,
-  message: string,
-  mode: "std" | "urlsafe_padded" | "urlsafe_unpadded" = "urlsafe_padded"
-): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     secretBytes,
@@ -41,33 +32,7 @@ async function hmacSignFromBytes(
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  if (mode === "std") return b64;
-  return toUrlSafeBase64(b64, mode === "urlsafe_padded");
-}
-
-async function buildSignatureCandidates(secret: string, message: string): Promise<Array<{ value: string; mode: string }>> {
-  const trimmed = secret.trim();
-  const variants: Array<{ bytes: Uint8Array; source: string }> = [];
-
-  const decoded = tryDecodeBase64(trimmed);
-  if (decoded) variants.push({ bytes: decoded, source: "base64" });
-  variants.push({ bytes: new TextEncoder().encode(trimmed), source: "raw" });
-
-  const out: Array<{ value: string; mode: string }> = [];
-  const seen = new Set<string>();
-
-  const formats: Array<"urlsafe_padded" | "std" | "urlsafe_unpadded"> = ["urlsafe_padded", "std", "urlsafe_unpadded"];
-
-  for (const variant of variants) {
-    for (const format of formats) {
-      const value = await hmacSignFromBytes(variant.bytes, message, format);
-      if (seen.has(value)) continue;
-      seen.add(value);
-      out.push({ value, mode: `${variant.source}:${format}` });
-    }
-  }
-
-  return out;
+  return b64.replace(/\+/g, "-").replace(/\//g, "_"); // URL-safe with padding
 }
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
@@ -77,7 +42,6 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
-// Simple geoblock check via Cloudflare headers
 function isGeoblocked(req: Request): boolean {
   const country = req.headers.get("cf-ipcountry") || "";
   const blocked = ["US", "CU", "IR", "KP", "SY", "RU"];
@@ -94,16 +58,10 @@ serve(async (req) => {
   }
 
   try {
-    // ── Geoblock check ──────────────────────────────────────────
     if (isGeoblocked(req)) {
-      return jsonResp({
-        ok: false,
-        error: "Trading is not available in your jurisdiction.",
-        code: "GEOBLOCKED",
-      }, 403);
+      return jsonResp({ ok: false, error: "Trading is not available in your jurisdiction.", code: "GEOBLOCKED" }, 403);
     }
 
-    // ── Authenticate user ───────────────────────────────────────
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return jsonResp({ ok: false, error: "Authorization required" }, 401);
@@ -119,7 +77,6 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Invalid auth token" }, 401);
     }
 
-    // ── Load user's encrypted creds ─────────────────────────────
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
       return jsonResp({ ok: false, error: "MASTER_KEY not configured" }, 500);
@@ -133,11 +90,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credError || !credRow) {
-      return jsonResp({
-        ok: false,
-        error: "No trading credentials found. Enable trading in Settings first.",
-        code: "NO_CREDS",
-      }, 400);
+      return jsonResp({ ok: false, error: "No trading credentials found. Enable trading first.", code: "NO_CREDS" }, 400);
     }
 
     let creds: { apiKey: string; secret: string; passphrase: string };
@@ -152,7 +105,6 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Incomplete credentials. Re-derive in Settings." }, 500);
     }
 
-    // ── Parse signed order from client ──────────────────────────
     const body = await req.json();
     const { signedOrder, orderType: rawOrderType } = body;
 
@@ -164,18 +116,10 @@ serve(async (req) => {
       ? String(rawOrderType)
       : "GTC";
 
-    // Transform SignedOrder into the CLOB-expected payload format.
-    // The client sends a raw SignedOrder object from @polymarket/clob-client's createOrder().
-    // We must apply the same transformation as orderToJson():
-    //   - salt parsed as integer
-    //   - side mapped to "BUY"/"SELL" string
-    //   - owner set to the API key (NOT the wallet address)
     function buildOrderPayload(signed: any, apiKey: string, ot: string) {
-      // If already wrapped (has .order sub-object), use as-is but fix owner
       if (signed?.order?.maker) {
         return { ...signed, owner: apiKey, orderType: ot };
       }
-      // Map side: 0 = BUY, 1 = SELL (from @polymarket/order-utils Side enum)
       let side = "BUY";
       if (signed.side === 1 || signed.side === "SELL" || signed.side === "1") {
         side = "SELL";
@@ -203,119 +147,63 @@ serve(async (req) => {
 
     const sendOrderPayload = buildOrderPayload(signedOrder, creds.apiKey, orderType);
 
-    console.log(`[post-order] Payload owner=${creds.apiKey.slice(-6)}, maker=${sendOrderPayload.order?.maker}, signer=${sendOrderPayload.order?.signer}`);
-
-    // ── Sign L2 HMAC and POST to CLOB ───────────────────────────
+    // ── Build L2 HMAC signature (single canonical method) ───────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const method = "POST";
     const requestPath = "/order";
     const orderBody = JSON.stringify(sendOrderPayload);
-
     const signMessage = timestamp + method + requestPath + orderBody;
-    const signatures = await buildSignatureCandidates(creds.secret, signMessage);
+    const signature = await buildL2Signature(creds.secret, signMessage);
 
-    const apiKeyTail = creds.apiKey.slice(-6);
-    console.log(`[post-order] user=${user.id}, apiKey:…${apiKeyTail}, bodyLen=${orderBody.length}`);
+    const polyAddress = (credRow.address || "").toLowerCase();
 
-    const credsAddress = String(credRow.address || "");
-    const signerAddressRaw = String(sendOrderPayload.order?.signer || "");
-    const signerAddress = signerAddressRaw.toLowerCase();
+    console.log(`[post-order] user=${user.id}, apiKey=…${creds.apiKey.slice(-6)}, addr=${polyAddress}, bodyLen=${orderBody.length}`);
 
-    const addressCandidates = Array.from(
-      new Set(
-        [credsAddress, credsAddress.toLowerCase(), signerAddressRaw, signerAddress]
-          .map((v) => v.trim())
-          .filter(Boolean)
-      )
-    );
+    const res = await fetch(`${clobHost}${requestPath}`, {
+      method,
+      headers: {
+        "POLY_ADDRESS": polyAddress,
+        "POLY_API_KEY": creds.apiKey,
+        "POLY_PASSPHRASE": creds.passphrase,
+        "POLY_TIMESTAMP": timestamp,
+        "POLY_SIGNATURE": signature,
+        "Content-Type": "application/json",
+      },
+      body: orderBody,
+    });
 
-    const baseHeaders: Record<string, string> = {
-      "POLY_API_KEY": creds.apiKey,
-      "POLY_PASSPHRASE": creds.passphrase,
-      "POLY_TIMESTAMP": timestamp,
-      "Content-Type": "application/json",
-    };
-
-    let res: Response | null = null;
-    let resBody = "";
-    let usedSignatureMode = "";
-    let usedHeaderAddress = addressCandidates[0] || "";
-
-    outer:
-    for (const addr of addressCandidates) {
-      for (const sig of signatures) {
-        usedSignatureMode = sig.mode;
-        usedHeaderAddress = addr;
-        const hdrs = { ...baseHeaders, POLY_ADDRESS: addr, POLY_SIGNATURE: sig.value };
-
-        res = await fetch(`${clobHost}${requestPath}`, {
-          method,
-          headers: hdrs,
-          body: orderBody,
-        });
-
-        resBody = await res.text();
-        console.log(`[post-order] try=${sig.mode} addr=${addr} status=${res.status}`);
-
-        const invalidSig = res.status === 400 && /invalid signature/i.test(resBody);
-        const unauthorized = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
-
-        if (invalidSig || unauthorized) {
-          continue;
-        }
-
-        break outer;
-      }
-    }
-
-    if (!res) {
-      return jsonResp({ ok: false, error: "Failed to submit order request" }, 500);
-    }
-
-    console.log(`[post-order] CLOB ${res.status} headers:`, JSON.stringify(Object.fromEntries(res.headers)));
-    console.log(`[post-order] CLOB body: ${resBody.substring(0, 1000)}`);
-    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, polyAddr=${usedHeaderAddress}, credsAddr=${credsAddress.toLowerCase()}, signerAddr=${signerAddress}, sigMode=${usedSignatureMode}`);
+    const resBody = await res.text();
+    console.log(`[post-order] CLOB status=${res.status} body=${resBody.substring(0, 500)}`);
 
     if (res.ok) {
       let parsed;
       try { parsed = JSON.parse(resBody); } catch { parsed = resBody; }
-      return jsonResp({ ok: true, order: parsed, signatureMode: usedSignatureMode });
-    } else {
-      const upstreamSnippet = resBody.substring(0, 1000);
-      const invalidKey = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
+      return jsonResp({ ok: true, order: parsed });
+    }
 
-      if (invalidKey) {
-        // Stored user creds are stale/invalid; clear them so client can re-derive cleanly.
-        await adminClient.from("polymarket_user_creds").delete().eq("user_id", user.id);
-
-        return jsonResp({
-          ok: false,
-          code: "INVALID_API_KEY",
-          error: "Trading credentials expired or invalid. Please re-enable trading in Setup.",
-          upstreamStatus: res.status,
-          upstreamBody: upstreamSnippet,
-        });
-      }
-
+    // Handle invalid API key: delete stale creds so user can re-derive
+    const invalidKey = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
+    if (invalidKey) {
+      await adminClient.from("polymarket_user_creds").delete().eq("user_id", user.id);
       return jsonResp({
         ok: false,
-        code: "ORDER_REJECTED",
-        error: `Order failed (${res.status}): ${resBody.substring(0, 500)}`,
+        code: "INVALID_API_KEY",
+        error: "Trading credentials expired. Please re-enable trading.",
         upstreamStatus: res.status,
-        upstreamBody: upstreamSnippet,
-        debug: {
-          requestPath,
-          method,
-          address: usedHeaderAddress,
-          apiKeyTail,
-          timestamp,
-          signatureMode: usedSignatureMode,
-        },
+        upstreamBody: resBody.substring(0, 500),
       });
     }
+
+    return jsonResp({
+      ok: false,
+      code: "ORDER_REJECTED",
+      error: `Order failed (${res.status}): ${resBody.substring(0, 500)}`,
+      upstreamStatus: res.status,
+      upstreamBody: resBody.substring(0, 500),
+    });
   } catch (err) {
     console.error("[post-order] error:", err);
-    return jsonResp({ ok: false, error: err.message, stack: err.stack?.substring(0, 500) }, 500);
+    return jsonResp({ ok: false, error: err.message }, 500);
   }
 });

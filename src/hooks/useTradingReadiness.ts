@@ -2,7 +2,7 @@ import { useAccount } from "wagmi";
 import { useProxyWallet } from "./useProxyWallet";
 import { useUsdcApproval } from "./useUsdcApproval";
 import { useState, useEffect, useCallback } from "react";
-import { checkUserCredsStatus } from "@/lib/polymarket-api";
+import { testUserCreds } from "@/lib/polymarket-api";
 import { supabase } from "@/integrations/supabase/client";
 
 export type TradingStep = "proxy" | "creds" | "usdc" | "ready";
@@ -34,8 +34,9 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
         setCredsReady(false);
         return;
       }
-      const status = await checkUserCredsStatus();
-      setCredsReady(status.hasCreds);
+      // Live-validate creds against Polymarket CLOB (not just check existence)
+      const result = await testUserCreds();
+      setCredsReady(result.valid);
     } catch {
       setCredsReady(false);
     } finally {
@@ -47,11 +48,9 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
     if (isConnected) refreshCreds();
   }, [isConnected, refreshCreds]);
 
-  // For EOA users, proxy is always ready when connected
   const proxyReady = proxy.isDeployed;
   const usdcReady = !usdc.needsApproval;
 
-  // Step sequence: proxy → usdc (approve) → creds (signature) → ready
   let currentStep: TradingStep = "proxy";
   if (proxyReady) currentStep = "usdc";
   if (proxyReady && usdcReady) currentStep = "creds";

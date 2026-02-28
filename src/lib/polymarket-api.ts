@@ -240,6 +240,18 @@ export async function checkUserCredsStatus(): Promise<{
   return data;
 }
 
+/** Validate stored creds actually work against the CLOB (live check) */
+export async function testUserCreds(): Promise<{
+  valid: boolean;
+  hasCreds: boolean;
+  deleted?: boolean;
+  reason?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("polymarket-test-creds");
+  if (error) return { valid: false, hasCreds: false };
+  return data;
+}
+
 /** Get deposit address for funding */
 export async function createDepositAddress(address: string): Promise<{
   ok: boolean;
