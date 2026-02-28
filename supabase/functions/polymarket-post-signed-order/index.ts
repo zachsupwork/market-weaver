@@ -9,32 +9,57 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function base64ToBytes(base64: string): Uint8Array {
-  const sanitized = base64
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .replace(/[^A-Za-z0-9+/=]/g, "");
-
-  const binary = atob(sanitized);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+function tryDecodeBase64(input: string): Uint8Array | null {
+  try {
+    const normalized = input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 function toUrlSafeBase64(base64: string): string {
-  return base64.replace(/\+/g, "-").replace(/\//g, "_");
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function hmacSign(secret: string, message: string): Promise<string> {
+async function hmacSignFromBytes(secretBytes: Uint8Array, message: string, urlSafe = false): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(secret.trim()),
+    secretBytes,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return urlSafe ? toUrlSafeBase64(b64) : b64;
+}
+
+async function buildSignatureCandidates(secret: string, message: string): Promise<Array<{ value: string; mode: string }>> {
+  const trimmed = secret.trim();
+  const variants: Array<{ bytes: Uint8Array; source: string }> = [];
+
+  const decoded = tryDecodeBase64(trimmed);
+  if (decoded) variants.push({ bytes: decoded, source: "base64" });
+  variants.push({ bytes: new TextEncoder().encode(trimmed), source: "raw" });
+
+  const out: Array<{ value: string; mode: string }> = [];
+  const seen = new Set<string>();
+
+  for (const variant of variants) {
+    for (const urlSafe of [false, true]) {
+      const value = await hmacSignFromBytes(variant.bytes, message, urlSafe);
+      if (seen.has(value)) continue;
+      seen.add(value);
+      out.push({ value, mode: `${variant.source}:${urlSafe ? "urlsafe" : "std"}` });
+    }
+  }
+
+  return out;
 }
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
@@ -180,36 +205,53 @@ serve(async (req) => {
     const orderBody = JSON.stringify(sendOrderPayload);
 
     const signMessage = timestamp + method + requestPath + orderBody;
-    const signature = await hmacSign(creds.secret, signMessage);
+    const signatures = await buildSignatureCandidates(creds.secret, signMessage);
 
     const apiKeyTail = creds.apiKey.slice(-6);
     console.log(`[post-order] user=${user.id}, apiKey:…${apiKeyTail}, bodyLen=${orderBody.length}`);
 
-    const headerAddress = sendOrderPayload.order?.signer || credRow.address;
-    const hdrs: Record<string, string> = {
+    const headerAddress = String(sendOrderPayload.order?.signer || credRow.address || "").toLowerCase();
+    const baseHeaders: Record<string, string> = {
       "POLY_API_KEY": creds.apiKey,
       "POLY_PASSPHRASE": creds.passphrase,
       "POLY_TIMESTAMP": timestamp,
-      "POLY_SIGNATURE": signature,
       "POLY_ADDRESS": headerAddress,
       "Content-Type": "application/json",
     };
 
-    const res = await fetch(`${clobHost}${requestPath}`, {
-      method,
-      headers: hdrs,
-      body: orderBody,
-    });
+    let res: Response | null = null;
+    let resBody = "";
+    let usedSignatureMode = "";
 
-    const resBody = await res.text();
+    for (const sig of signatures) {
+      usedSignatureMode = sig.mode;
+      const hdrs = { ...baseHeaders, POLY_SIGNATURE: sig.value };
+
+      res = await fetch(`${clobHost}${requestPath}`, {
+        method,
+        headers: hdrs,
+        body: orderBody,
+      });
+
+      resBody = await res.text();
+      console.log(`[post-order] try=${sig.mode} status=${res.status}`);
+
+      const invalidSig = res.status === 400 && /invalid signature/i.test(resBody);
+      if (!invalidSig) break;
+    }
+
+    if (!res) {
+      return jsonResp({ ok: false, error: "Failed to submit order request" }, 500);
+    }
+
     console.log(`[post-order] CLOB ${res.status} headers:`, JSON.stringify(Object.fromEntries(res.headers)));
     console.log(`[post-order] CLOB body: ${resBody.substring(0, 1000)}`);
-    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, addr=${credRow.address}`);
+    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, addr=${headerAddress}, sigMode=${usedSignatureMode}`);
 
     if (res.ok) {
       let parsed;
       try { parsed = JSON.parse(resBody); } catch { parsed = resBody; }
-      return jsonResp({ ok: true, order: parsed });
+      return jsonResp({ ok: true, order: parsed, signatureMode: usedSignatureMode });
     } else {
       const upstreamSnippet = resBody.substring(0, 1000);
       const invalidKey = res.status === 401 && /invalid api key|unauthorized/i.test(resBody);
@@ -236,9 +278,10 @@ serve(async (req) => {
         debug: {
           requestPath,
           method,
-          address: credRow.address,
+          address: headerAddress,
           apiKeyTail,
           timestamp,
+          signatureMode: usedSignatureMode,
         },
       });
     }
