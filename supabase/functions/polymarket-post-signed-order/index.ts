@@ -210,36 +210,55 @@ serve(async (req) => {
     const apiKeyTail = creds.apiKey.slice(-6);
     console.log(`[post-order] user=${user.id}, apiKey:…${apiKeyTail}, bodyLen=${orderBody.length}`);
 
-    const credsAddress = String(credRow.address || "").toLowerCase();
-    const signerAddress = String(sendOrderPayload.order?.signer || "").toLowerCase();
-    const headerAddress = credsAddress || signerAddress;
+    const credsAddress = String(credRow.address || "");
+    const signerAddressRaw = String(sendOrderPayload.order?.signer || "");
+    const signerAddress = signerAddressRaw.toLowerCase();
+
+    const addressCandidates = Array.from(
+      new Set(
+        [credsAddress, credsAddress.toLowerCase(), signerAddressRaw, signerAddress]
+          .map((v) => v.trim())
+          .filter(Boolean)
+      )
+    );
+
     const baseHeaders: Record<string, string> = {
       "POLY_API_KEY": creds.apiKey,
       "POLY_PASSPHRASE": creds.passphrase,
       "POLY_TIMESTAMP": timestamp,
-      "POLY_ADDRESS": headerAddress,
       "Content-Type": "application/json",
     };
 
     let res: Response | null = null;
     let resBody = "";
     let usedSignatureMode = "";
+    let usedHeaderAddress = addressCandidates[0] || "";
 
-    for (const sig of signatures) {
-      usedSignatureMode = sig.mode;
-      const hdrs = { ...baseHeaders, POLY_SIGNATURE: sig.value };
+    outer:
+    for (const addr of addressCandidates) {
+      for (const sig of signatures) {
+        usedSignatureMode = sig.mode;
+        usedHeaderAddress = addr;
+        const hdrs = { ...baseHeaders, POLY_ADDRESS: addr, POLY_SIGNATURE: sig.value };
 
-      res = await fetch(`${clobHost}${requestPath}`, {
-        method,
-        headers: hdrs,
-        body: orderBody,
-      });
+        res = await fetch(`${clobHost}${requestPath}`, {
+          method,
+          headers: hdrs,
+          body: orderBody,
+        });
 
-      resBody = await res.text();
-      console.log(`[post-order] try=${sig.mode} status=${res.status}`);
+        resBody = await res.text();
+        console.log(`[post-order] try=${sig.mode} addr=${addr} status=${res.status}`);
 
-      const invalidSig = res.status === 400 && /invalid signature/i.test(resBody);
-      if (!invalidSig) break;
+        const invalidSig = res.status === 400 && /invalid signature/i.test(resBody);
+        const unauthorized = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
+
+        if (invalidSig || unauthorized) {
+          continue;
+        }
+
+        break outer;
+      }
     }
 
     if (!res) {
@@ -248,7 +267,7 @@ serve(async (req) => {
 
     console.log(`[post-order] CLOB ${res.status} headers:`, JSON.stringify(Object.fromEntries(res.headers)));
     console.log(`[post-order] CLOB body: ${resBody.substring(0, 1000)}`);
-    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, polyAddr=${headerAddress}, credsAddr=${credsAddress}, signerAddr=${signerAddress}, sigMode=${usedSignatureMode}`);
+    console.log(`[post-order] Request sent: path=${requestPath}, bodyLen=${orderBody.length}, polyAddr=${usedHeaderAddress}, credsAddr=${credsAddress.toLowerCase()}, signerAddr=${signerAddress}, sigMode=${usedSignatureMode}`);
 
     if (res.ok) {
       let parsed;
@@ -256,7 +275,7 @@ serve(async (req) => {
       return jsonResp({ ok: true, order: parsed, signatureMode: usedSignatureMode });
     } else {
       const upstreamSnippet = resBody.substring(0, 1000);
-      const invalidKey = res.status === 401 && /invalid api key|unauthorized/i.test(resBody);
+      const invalidKey = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
 
       if (invalidKey) {
         // Stored user creds are stale/invalid; clear them so client can re-derive cleanly.
@@ -280,7 +299,7 @@ serve(async (req) => {
         debug: {
           requestPath,
           method,
-          address: headerAddress,
+          address: usedHeaderAddress,
           apiKeyTail,
           timestamp,
           signatureMode: usedSignatureMode,
