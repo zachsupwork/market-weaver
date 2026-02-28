@@ -43,11 +43,6 @@ export default function PolymarketSettings() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         setSupabaseUser(session.user);
-      } else {
-        try {
-          const { error } = await supabase.auth.signInAnonymously();
-          if (error) console.warn("Auto anonymous sign-in failed:", error.message);
-        } catch {}
       }
     });
     return () => subscription.unsubscribe();

@@ -26,10 +26,6 @@ export function OnboardingFlow({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         setSupaUser(session.user);
-      } else {
-        try {
-          await supabase.auth.signInAnonymously();
-        } catch {}
       }
     });
     return () => subscription.unsubscribe();

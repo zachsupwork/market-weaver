@@ -12,6 +12,7 @@ import {
   sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
+import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -29,6 +30,7 @@ const Index = () => {
   const [search, setSearch] = useState("");
   const { data: markets, isLoading, error } = useMarkets({ limit: 100, offset: 0 });
   const { isConnected } = useAccount();
+  const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
   const filtered = useMemo(() => {
     if (!markets) return [];
@@ -184,30 +186,40 @@ const Index = () => {
               const noPrice = market.outcomePrices?.[1];
 
               return (
-                <Link
+                <div
                   key={market.condition_id}
-                  to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                  className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary"
+                  className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary"
                 >
-                  <div className="flex items-start gap-3 mb-3">
-                    {market.icon && (
-                      <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
-                    )}
-                    <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
-                      {market.question}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Yes</span>
-                      <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+                  <Link
+                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
+                    className="block"
+                  >
+                    <div className="flex items-start gap-3 mb-3">
+                      {market.icon && (
+                        <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
+                      )}
+                      <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
+                        {market.question}
+                      </h3>
                     </div>
-                    <div className="h-6 w-px bg-border" />
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">No</span>
-                      <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
-                    </div>
+                  </Link>
+
+                  {/* Quick trade buttons - Polymarket style */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={(e) => { e.preventDefault(); setTradeModal({ market, outcome: 0 }); }}
+                      className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
+                    >
+                      Buy Yes {yesPrice !== undefined ? formatPrice(yesPrice) : ""}
+                    </button>
+                    <button
+                      onClick={(e) => { e.preventDefault(); setTradeModal({ market, outcome: 1 }); }}
+                      className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
+                    >
+                      Buy No {noPrice !== undefined ? formatPrice(noPrice) : ""}
+                    </button>
                   </div>
+
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <BarChart3 className="h-3 w-3" />
@@ -223,7 +235,7 @@ const Index = () => {
                       </span>
                     )}
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -235,6 +247,15 @@ const Index = () => {
           </div>
         )}
       </div>
+
+      {/* Quick trade modal */}
+      {tradeModal && (
+        <QuickTradeModal
+          market={tradeModal.market}
+          initialOutcome={tradeModal.outcome}
+          onClose={() => setTradeModal(null)}
+        />
+      )}
     </div>
   );
 };
