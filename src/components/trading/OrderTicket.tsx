@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { postSignedOrder } from "@/lib/polymarket-api";
+import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
 import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus } from "lucide-react";
 import { useAccount } from "wagmi";
@@ -8,6 +8,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
 import { TradingEnablement } from "@/components/trading/TradingEnablement";
 import { supabase } from "@/integrations/supabase/client";
+import { ClobClient, Side as ClobSide, SignatureType } from "@polymarket/clob-client";
+import { ethers } from "ethers";
 
 interface OrderTicketProps {
   tokenId: string;
@@ -66,18 +68,39 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
     setSubmitting(true);
     try {
-      const orderData = {
-        tokenID: tokenId,
-        side: side.toUpperCase(),
-        price: price.toFixed(2),
-        size: shares.toFixed(2),
-        type: orderType,
-        feeRateBps: "0",
-        nonce: Math.floor(Math.random() * 1e15).toString(),
-        expiration: "0",
-      };
+      const credsStatus = await checkUserCredsStatus();
+      if (!credsStatus.hasCreds || !credsStatus.address) {
+        toast.error("Trading credentials missing. Re-enable trading in Setup below.");
+        await readiness.refreshCreds();
+        return;
+      }
 
-      const result = await postSignedOrder(orderData);
+      if (!(window as any).ethereum) {
+        throw new Error("Wallet provider not found");
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
+      const signer = provider.getSigner();
+      const clobClient = new ClobClient(
+        "https://clob.polymarket.com",
+        137,
+        signer,
+        undefined,
+        SignatureType.POLY_PROXY,
+        credsStatus.address
+      );
+
+      const signedOrder = await clobClient.createOrder({
+        tokenID: tokenId,
+        side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
+        price,
+        size: Number(shares.toFixed(6)),
+        feeRateBps: 0,
+        nonce: Math.floor(Math.random() * 1e15),
+        expiration: 0,
+      });
+
+      const result = await postSignedOrder(signedOrder, orderType);
 
       if (result.ok) {
         toast.success(`${side} ${outcome} order placed — $${amount.toFixed(2)}`);
