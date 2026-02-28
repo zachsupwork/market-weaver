@@ -11,6 +11,7 @@ import {
   sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
+import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -60,6 +61,7 @@ const LiveMarkets = () => {
   const limit = 100;
   const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
   const { isConnected } = useAccount();
+  const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
   const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
     if (!markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
@@ -111,32 +113,57 @@ const LiveMarkets = () => {
 
     const yesPrice = market.outcomePrices?.[0];
     const noPrice = market.outcomePrices?.[1];
+    const isLive = hasValidId && market.statusLabel === "LIVE";
 
-    const content = (
-      <div className={cn(
-        "group block rounded-xl border border-border bg-card p-5 transition-all",
-        dimmed ? "opacity-60" : "hover:border-primary/30 hover:glow-primary"
+    return (
+      <div key={market.id || market.condition_id || market.question} className={cn(
+        "group rounded-xl border border-border bg-card p-5 transition-all",
+        dimmed ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 hover:glow-primary"
       )}>
-        <div className="flex items-start gap-3 mb-3">
-          {market.icon && (
-            <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
-          )}
-          <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
-            {market.question}
-          </h3>
-        </div>
+        <Link
+          to={isLive ? `/trade/${encodeURIComponent(market.condition_id)}` : "#"}
+          className="block"
+          onClick={(e) => { if (!isLive) e.preventDefault(); }}
+        >
+          <div className="flex items-start gap-3 mb-3">
+            {market.icon && (
+              <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
+            )}
+            <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
+              {market.question}
+            </h3>
+          </div>
+        </Link>
 
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Yes</span>
-            <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+        {/* Quick trade buttons for live markets */}
+        {isLive && !dimmed ? (
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={() => setTradeModal({ market, outcome: 0 })}
+              className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
+            >
+              Buy Yes {formatPrice(yesPrice)}
+            </button>
+            <button
+              onClick={() => setTradeModal({ market, outcome: 1 })}
+              className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
+            >
+              Buy No {formatPrice(noPrice)}
+            </button>
           </div>
-          <div className="h-6 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">No</span>
-            <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+        ) : (
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Yes</span>
+              <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+            </div>
+            <div className="h-6 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">No</span>
+              <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
@@ -152,16 +179,6 @@ const LiveMarkets = () => {
           </span>
         </div>
       </div>
-    );
-
-    if (!hasValidId || market.statusLabel !== "LIVE") {
-      return <div key={market.id || market.condition_id || market.question} className="cursor-not-allowed">{content}</div>;
-    }
-
-    return (
-      <Link key={market.condition_id} to={`/trade/${encodeURIComponent(market.condition_id)}`} className="block">
-        {content}
-      </Link>
     );
   };
 
@@ -227,7 +244,6 @@ const LiveMarkets = () => {
           </div>
         )}
 
-        {/* LIVE markets */}
         {liveMarkets.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {liveMarkets.map((market) => renderMarketCard(market))}
@@ -240,7 +256,6 @@ const LiveMarkets = () => {
           </div>
         )}
 
-        {/* Closed / Unavailable section */}
         {otherMarkets.length > 0 && (
           <div className="mt-8">
             <button
@@ -258,7 +273,6 @@ const LiveMarkets = () => {
           </div>
         )}
 
-        {/* Ended / Resolved section — always last */}
         {endedMarkets.length > 0 && (
           <div className="mt-8">
             <button
@@ -298,6 +312,15 @@ const LiveMarkets = () => {
           </div>
         )}
       </div>
+
+      {/* Quick trade modal */}
+      {tradeModal && (
+        <QuickTradeModal
+          market={tradeModal.market}
+          initialOutcome={tradeModal.outcome}
+          onClose={() => setTradeModal(null)}
+        />
+      )}
     </div>
   );
 };

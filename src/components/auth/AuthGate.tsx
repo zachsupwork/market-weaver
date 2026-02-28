@@ -30,45 +30,13 @@ export function AuthGate({ children, autoAnonymous = false }: AuthGateProps) {
     supabase.auth.getSession().then(async ({ data: { session: existing } }) => {
       if (existing) {
         setSession(existing);
-        setLoading(false);
-      } else if (autoAnonymous) {
-        // Silently attempt anonymous sign-in
-        try {
-          const { error: anonErr } = await supabase.auth.signInAnonymously();
-          if (anonErr) {
-            console.warn("Anonymous sign-in failed:", anonErr.message);
-            setError(anonErr.message.includes("not enabled")
-              ? "Anonymous sign-in is not enabled. Please sign in with email."
-              : anonErr.message);
-          }
-        } catch {
-          // fall through to manual auth
-        }
-        setLoading(false);
-      } else {
-        setLoading(false);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, [autoAnonymous]);
 
-  async function handleAnonymous() {
-    setSigningIn(true);
-    setError(null);
-    try {
-      const { error: err } = await supabase.auth.signInAnonymously();
-      if (err) {
-        setError(err.message.includes("not enabled")
-          ? "Anonymous sign-in is not enabled on this project. Use email sign-in instead."
-          : err.message);
-      }
-    } catch (e: any) {
-      setError(e.message || "Sign-in failed");
-    } finally {
-      setSigningIn(false);
-    }
-  }
 
   async function handleEmailOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -121,24 +89,15 @@ export function AuthGate({ children, autoAnonymous = false }: AuthGateProps) {
         {mode === "choice" && !otpSent && (
           <div className="space-y-2">
             <Button
-              onClick={handleAnonymous}
-              disabled={signingIn}
-              variant="default"
-              className="w-full"
-            >
-              {signingIn ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserCircle className="h-4 w-4 mr-2" />}
-              Continue as Guest
-            </Button>
-            <Button
               onClick={() => setMode("email")}
-              variant="outline"
+              variant="default"
               className="w-full"
             >
               <Mail className="h-4 w-4 mr-2" />
               Sign in with Email
             </Button>
             <p className="text-[10px] text-muted-foreground text-center">
-              Guest sessions are anonymous — no email needed. Your credentials are still encrypted per-session.
+              Sign in with your email to securely store encrypted trading credentials.
             </p>
           </div>
         )}

@@ -23,8 +23,8 @@ export function useMarkets(params?: {
       }
       return data;
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 }
 

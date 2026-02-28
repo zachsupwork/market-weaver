@@ -86,7 +86,7 @@ const Trade = () => {
   const [chartTab, setChartTab] = useState<"price" | "volume">("price");
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "ALL">("1W");
   const [activeTab, setActiveTab] = useState<"trade" | "orderbook" | "trades" | "community" | "analytics" | "data">("trade");
-  const [wsEnabled, setWsEnabled] = useState(false);
+  const [wsEnabled, setWsEnabled] = useState(true);
   const [showRawJson, setShowRawJson] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [commentName, setCommentName] = useState("");
