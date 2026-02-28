@@ -34,8 +34,7 @@ async function hmacSign(secret: string, message: string): Promise<string> {
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return toUrlSafeBase64(sigB64);
+  return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
