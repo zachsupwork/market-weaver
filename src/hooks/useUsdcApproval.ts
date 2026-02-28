@@ -1,5 +1,6 @@
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { maxUint256 } from "viem";
+import { polygon } from "wagmi/chains";
 import { useMemo, useEffect } from "react";
 
 const FALLBACK_USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
@@ -41,13 +42,6 @@ const erc20Abi = [
     outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
-
-const polygon = {
-  id: 137,
-  name: "Polygon",
-  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-  rpcUrls: { default: { http: ["https://polygon-rpc.com"] } },
-} as const;
 
 /**
  * Step 3: "Approve Tokens"
