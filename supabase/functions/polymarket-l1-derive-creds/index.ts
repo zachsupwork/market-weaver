@@ -16,6 +16,65 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
+function tryDecodeBase64(input: string): Uint8Array | null {
+  try {
+    const normalized = input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function toUrlSafeBase64(base64: string): string {
+  return base64.replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+async function signL2(secret: string, message: string): Promise<string> {
+  const secretBytes = tryDecodeBase64(secret.trim());
+  if (!secretBytes) throw new Error("Invalid API secret format");
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return toUrlSafeBase64(b64); // Keep '=' padding (canonical Polymarket format)
+}
+
+async function validateDerivedCreds(
+  clobHost: string,
+  address: string,
+  creds: { apiKey: string; secret: string; passphrase: string }
+): Promise<{ ok: boolean; status?: number; body?: string }> {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const method = "GET";
+  const requestPath = "/auth/api-keys";
+  const signMessage = timestamp + method + requestPath;
+  const signature = await signL2(creds.secret, signMessage);
+
+  const res = await fetch(`${clobHost}${requestPath}`, {
+    method,
+    headers: {
+      "POLY_ADDRESS": address,
+      "POLY_API_KEY": creds.apiKey,
+      "POLY_PASSPHRASE": creds.passphrase,
+      "POLY_TIMESTAMP": timestamp,
+      "POLY_SIGNATURE": signature,
+    },
+  });
+
+  const body = await res.text();
+  return { ok: res.ok, status: res.status, body: body.substring(0, 500) };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -119,6 +178,16 @@ serve(async (req) => {
 
     if (!creds?.apiKey || !creds?.secret || !creds?.passphrase) {
       return jsonResp({ ok: false, error: "Incomplete credentials returned from Polymarket" }, 502);
+    }
+
+    // Validate credentials immediately to avoid storing unusable keys
+    const validation = await validateDerivedCreds(clobHost, address, creds);
+    if (!validation.ok) {
+      console.error(`[l1-derive] Validation failed status=${validation.status} body=${validation.body}`);
+      return jsonResp({
+        ok: false,
+        error: `Credential validation failed (${validation.status}): ${validation.body ?? "Unknown error"}`,
+      }, 502);
     }
 
     // ── Encrypt and store per-user ───────────────────────────────
