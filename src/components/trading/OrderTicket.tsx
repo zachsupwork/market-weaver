@@ -2,11 +2,11 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Circle } from "lucide-react";
-import { useAccount, useSignTypedData } from "wagmi";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check } from "lucide-react";
+import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
-import { deriveApiCreds } from "@/lib/polymarket-api";
+import { TradingEnablement } from "@/components/trading/TradingEnablement";
 import { supabase } from "@/integrations/supabase/client";
 
 interface OrderTicketProps {
@@ -27,9 +27,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
-  const [derivingCreds, setDerivingCreds] = useState(false);
   const { isConnected, address } = useAccount();
-  const { signTypedDataAsync } = useSignTypedData();
 
   const totalUsdc = parseFloat(price || "0") * parseFloat(size || "0");
   const readiness = useTradingReadiness(side === "BUY" ? totalUsdc : 0);
@@ -42,67 +40,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
   const hasInsufficientBalance = side === "BUY" && totalUsdc > readiness.usdc.usdcBalance && readiness.usdc.usdcBalance > 0;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
-
-  // ── Step 1: Deploy Proxy Wallet ─────────────────────────────────
-  async function handleDeployProxy() {
-    readiness.proxy.deploy();
-  }
-
-  // ── Step 2: Enable Trading (ClobAuth EIP-712 signature) ─────────
-  async function handleDeriveCreds() {
-    if (!address) return;
-    setDerivingCreds(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Please sign in first to enable trading");
-        setDerivingCreds(false);
-        return;
-      }
-
-      const timestamp = String(Math.floor(Date.now() / 1000));
-      const nonce = "0";
-      const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
-      const types = {
-        ClobAuth: [
-          { name: "address", type: "address" },
-          { name: "timestamp", type: "string" },
-          { name: "nonce", type: "uint256" },
-          { name: "message", type: "string" },
-        ],
-      } as const;
-      const message = {
-        address,
-        timestamp,
-        nonce: BigInt(nonce),
-        message: "This message attests that I control the given wallet",
-      } as const;
-
-      const signature = await signTypedDataAsync({ account: address, domain, types, primaryType: "ClobAuth", message });
-      const result = await deriveApiCreds({ address, signature, timestamp, nonce });
-
-      if (result.ok) {
-        toast.success("Trading enabled!");
-        await readiness.refreshCreds();
-      } else {
-        toast.error(result.error || "Credential derivation failed");
-      }
-    } catch (err: any) {
-      const msg = err.message || "Failed";
-      if (msg.includes("rejected") || msg.includes("denied")) {
-        toast.error("Signature cancelled");
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setDerivingCreds(false);
-    }
-  }
-
-  // ── Step 3: Approve USDC.e ──────────────────────────────────────
-  function handleApproveUsdc() {
-    readiness.usdc.approve();
-  }
 
   // ── Order submission ────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
@@ -157,39 +94,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
   const quickSizes = [10, 25, 50, 100];
 
-  // ── 3-step checklist matching Polymarket ─────────────────────────
-  const steps = [
-    {
-      key: "proxy" as const,
-      label: "Deploy Proxy Wallet",
-      description: "Deploy a smart contract wallet to enable trading.",
-      subLabel: null,
-      done: readiness.proxyReady,
-      action: handleDeployProxy,
-      loading: false,
-      buttonLabel: "Deploy",
-    },
-    {
-      key: "creds" as const,
-      label: "Enable Trading",
-      description: "Sign a message to generate your API keys.",
-      subLabel: null,
-      done: readiness.credsReady,
-      action: handleDeriveCreds,
-      loading: derivingCreds || readiness.credsLoading,
-      buttonLabel: "Sign",
-    },
-    {
-      key: "usdc" as const,
-      label: "Approve Tokens",
-      description: "Approve token spending for trading.",
-      subLabel: null,
-      done: readiness.usdcReady,
-      action: handleApproveUsdc,
-      loading: readiness.usdc.isApproving,
-      buttonLabel: "Approve",
-    },
-  ];
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-card p-4">
@@ -226,62 +130,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
       {/* 3-Step Setup Checklist */}
       {isConnected && ageConfirmed && !readiness.allReady && (
-        <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground">Setup Required</p>
-          {steps.map((step, i) => {
-            const isCurrent = readiness.currentStep === step.key;
-            const isDisabled = !isCurrent && !step.done;
-            return (
-              <div key={step.key} className="flex items-start gap-2.5">
-                {step.done ? (
-                  <div className="mt-0.5 h-4 w-4 rounded-full bg-yes/20 flex items-center justify-center shrink-0">
-                    <Check className="h-2.5 w-2.5 text-yes" />
-                  </div>
-                ) : (
-                  <div className={cn(
-                    "mt-0.5 h-4 w-4 rounded-full border-2 shrink-0",
-                    isCurrent ? "border-primary" : "border-muted-foreground/30"
-                  )} />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={cn(
-                      "text-xs font-medium",
-                      step.done ? "text-muted-foreground line-through" : isCurrent ? "text-foreground" : "text-muted-foreground/50"
-                    )}>
-                      Step {i + 1}: {step.label}
-                    </span>
-                    {isCurrent && !step.done && (
-                      <button
-                        type="button"
-                        onClick={step.action}
-                        disabled={step.loading}
-                        className="shrink-0 rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
-                      >
-                        {step.loading ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          step.buttonLabel
-                        )}
-                      </button>
-                    )}
-                    {step.done && (
-                      <span className="text-[10px] text-yes font-medium">Done</span>
-                    )}
-                  </div>
-                  <p className={cn(
-                    "text-[10px] mt-0.5",
-                    step.done ? "text-muted-foreground/50" : isCurrent ? "text-muted-foreground" : "text-muted-foreground/30"
-                  )}>
-                    {step.description}
-                  </p>
-                  {step.subLabel && !step.done && isCurrent && (
-                    <p className="text-[10px] mt-0.5 text-primary font-medium">{step.subLabel}</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div className="mb-4">
+          <TradingEnablement orderAmount={side === "BUY" ? totalUsdc : 0} readiness={readiness} compact />
         </div>
       )}
 

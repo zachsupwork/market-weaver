@@ -101,6 +101,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          onboarding_completed: boolean
+          updated_at: string
+          user_id: string
+          username: string | null
+          wallet_address: string | null
+          welcome_signed: boolean
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
+          user_id: string
+          username?: string | null
+          wallet_address?: string | null
+          welcome_signed?: boolean
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+          wallet_address?: string | null
+          welcome_signed?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
