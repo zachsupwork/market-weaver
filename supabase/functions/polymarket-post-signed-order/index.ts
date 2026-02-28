@@ -9,17 +9,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+function tryDecodeBase64(input: string): Uint8Array | null {
+  try {
+    const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 async function hmacSign(secret: string, message: string): Promise<string> {
+  const trimmed = secret.trim();
+  const secretBytes = tryDecodeBase64(trimmed) ?? new TextEncoder().encode(trimmed);
+
   const key = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(secret),
+    secretBytes,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
