@@ -16,29 +16,21 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
-function tryDecodeBase64(input: string): Uint8Array | null {
-  try {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  } catch {
-    return null;
-  }
-}
+/**
+ * Build the canonical L2 HMAC signature exactly as the official Polymarket Python client does:
+ *   1. urlsafe_b64decode(secret) → HMAC key
+ *   2. HMAC-SHA256(key, message)
+ *   3. urlsafe_b64encode(digest) → signature (WITH padding)
+ */
+async function buildL2Signature(secret: string, message: string): Promise<string> {
+  // Decode the secret from URL-safe base64 (lenient on padding)
+  const trimmed = secret.trim();
+  const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  const binary = atob(padded);
+  const secretBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) secretBytes[i] = binary.charCodeAt(i);
 
-function toUrlSafeBase64(base64: string, keepPadding = true): string {
-  const converted = base64.replace(/\+/g, "-").replace(/\//g, "_");
-  return keepPadding ? converted : converted.replace(/=+$/g, "");
-}
-
-async function hmacSignFromBytes(
-  secretBytes: Uint8Array,
-  message: string,
-  mode: "std" | "urlsafe_padded" | "urlsafe_unpadded" = "urlsafe_padded"
-): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     secretBytes,
@@ -47,34 +39,9 @@ async function hmacSignFromBytes(
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  // URL-safe base64 encode WITH padding (matches Python's urlsafe_b64encode)
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  if (mode === "std") return b64;
-  return toUrlSafeBase64(b64, mode === "urlsafe_padded");
-}
-
-async function buildSignatureCandidates(secret: string, message: string): Promise<Array<{ value: string; mode: string }>> {
-  const trimmed = secret.trim();
-  const variants: Array<{ bytes: Uint8Array; source: string }> = [];
-
-  const decoded = tryDecodeBase64(trimmed);
-  if (decoded) variants.push({ bytes: decoded, source: "base64" });
-  variants.push({ bytes: new TextEncoder().encode(trimmed), source: "raw" });
-
-  const out: Array<{ value: string; mode: string }> = [];
-  const seen = new Set<string>();
-
-  const formats: Array<"urlsafe_padded" | "std" | "urlsafe_unpadded"> = ["urlsafe_padded", "std", "urlsafe_unpadded"];
-
-  for (const variant of variants) {
-    for (const format of formats) {
-      const value = await hmacSignFromBytes(variant.bytes, message, format);
-      if (seen.has(value)) continue;
-      seen.add(value);
-      out.push({ value, mode: `${variant.source}:${format}` });
-    }
-  }
-
-  return out;
+  return b64.replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 async function sleep(ms: number) {
@@ -85,49 +52,41 @@ async function validateDerivedCreds(
   clobHost: string,
   address: string,
   creds: { apiKey: string; secret: string; passphrase: string }
-): Promise<{ ok: boolean; status?: number; body?: string; mode?: string; usedAddress?: string }> {
+): Promise<{ ok: boolean; status?: number; body?: string }> {
   const method = "GET";
   const requestPath = "/auth/api-keys";
-  const addressCandidates = Array.from(new Set([address, address.toLowerCase()].map((v) => v.trim()).filter(Boolean)));
+  const addr = address.toLowerCase();
 
-  let lastStatus: number | undefined;
-  let lastBody = "";
-
-  // Newly created keys can take a moment to propagate; retry before treating as failure.
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // Retry up to 5 times with increasing backoff to handle propagation delays
+  for (let attempt = 1; attempt <= 5; attempt++) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signMessage = timestamp + method + requestPath;
-    const signatures = await buildSignatureCandidates(creds.secret, signMessage);
+    const signature = await buildL2Signature(creds.secret, signMessage);
 
-    for (const addr of addressCandidates) {
-      for (const sig of signatures) {
-        const res = await fetch(`${clobHost}${requestPath}`, {
-          method,
-          headers: {
-            "POLY_ADDRESS": addr,
-            "POLY_API_KEY": creds.apiKey,
-            "POLY_PASSPHRASE": creds.passphrase,
-            "POLY_TIMESTAMP": timestamp,
-            "POLY_SIGNATURE": sig.value,
-          },
-        });
+    const res = await fetch(`${clobHost}${requestPath}`, {
+      method,
+      headers: {
+        "POLY_ADDRESS": addr,
+        "POLY_API_KEY": creds.apiKey,
+        "POLY_PASSPHRASE": creds.passphrase,
+        "POLY_TIMESTAMP": timestamp,
+        "POLY_SIGNATURE": signature,
+      },
+    });
 
-        const body = await res.text();
-        lastStatus = res.status;
-        lastBody = body.substring(0, 500);
+    const body = await res.text();
+    console.log(`[l1-derive] validate attempt=${attempt} status=${res.status} body=${body.substring(0, 300)}`);
 
-        if (res.ok) {
-          return { ok: true, status: res.status, body: lastBody, mode: sig.mode, usedAddress: addr };
-        }
-      }
+    if (res.ok) {
+      return { ok: true, status: res.status, body: body.substring(0, 300) };
     }
 
-    if (attempt < 3) {
-      await sleep(500 * attempt);
+    if (attempt < 5) {
+      await sleep(1000 * attempt); // 1s, 2s, 3s, 4s backoff
     }
   }
 
-  return { ok: false, status: lastStatus, body: lastBody };
+  return { ok: false };
 }
 
 serve(async (req) => {
@@ -140,7 +99,7 @@ serve(async (req) => {
   }
 
   try {
-    // ── Authenticate user via Supabase JWT ────────────────────────
+    // ── Authenticate user via JWT ────────────────────────────────
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return jsonResp({ ok: false, error: "Authorization header required" }, 401);
@@ -164,7 +123,6 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "address and signature required" }, 400);
     }
 
-    // Use client-provided timestamp/nonce so they match the signed EIP-712 message
     if (!timestamp || !/^\d{10,}$/.test(timestamp)) {
       return jsonResp({ ok: false, error: "Invalid timestamp — must be numeric unix seconds" }, 400);
     }
@@ -201,13 +159,11 @@ serve(async (req) => {
       } catch {
         console.error("[l1-derive] Failed to parse create response as JSON");
       }
-    } else {
-      // NONCE_ALREADY_USED or other 400 → fallback to derive
-      console.log(`[l1-derive] Create failed (${createRes.status}), falling back to GET /auth/derive-api-key`);
     }
 
     // ── Step 2: Fallback to GET /auth/derive-api-key ────────────
     if (!creds || !creds.apiKey) {
+      console.log(`[l1-derive] Create failed (${createRes.status}), falling back to GET /auth/derive-api-key`);
       const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
         method: "GET",
         headers: l1Headers,
@@ -217,7 +173,6 @@ serve(async (req) => {
       console.log(`[l1-derive] derive response status=${deriveRes.status} body=${deriveBody.substring(0, 500)}`);
 
       if (!deriveRes.ok) {
-        console.error(`[l1-derive] Both create and derive failed. create=${createRes.status} derive=${deriveRes.status}`);
         return jsonResp({
           ok: false,
           error: `Polymarket rejected credentials (create=${createRes.status}, derive=${deriveRes.status}): ${deriveBody.substring(0, 300)}`,
@@ -235,14 +190,19 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Incomplete credentials returned from Polymarket" }, 502);
     }
 
-    // Validate credentials immediately, but don't hard-fail on transient propagation delays.
+    console.log(`[l1-derive] Got creds apiKey=…${creds.apiKey.slice(-6)}, secretLen=${creds.secret.length}`);
+
+    // ── HARD VALIDATE: creds MUST pass L2 auth before we store them ──
     const validation = await validateDerivedCreds(clobHost, address, creds);
     if (!validation.ok) {
-      console.error(`[l1-derive] Validation failed status=${validation.status} body=${validation.body}`);
-      console.warn("[l1-derive] Proceeding to store newly-created creds despite failed immediate validation (will self-heal via order-time invalidation if truly bad)");
-    } else {
-      console.log(`[l1-derive] Validation passed mode=${validation.mode} addr=${validation.usedAddress}`);
+      console.error(`[l1-derive] VALIDATION FAILED after 5 attempts — NOT storing credentials`);
+      return jsonResp({
+        ok: false,
+        error: "Derived credentials failed validation against Polymarket. Please try again — the signature may have expired.",
+      }, 502);
     }
+
+    console.log(`[l1-derive] Validation PASSED`);
 
     // ── Encrypt and store per-user ───────────────────────────────
     const masterKey = Deno.env.get("MASTER_KEY");
@@ -277,7 +237,7 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Failed to store credentials" }, 500);
     }
 
-    console.log(`[l1-derive] Credentials stored for user=${user.id}`);
+    console.log(`[l1-derive] Credentials stored and validated for user=${user.id}`);
     return jsonResp({ ok: true });
   } catch (err) {
     console.error("[l1-derive] error:", err);
