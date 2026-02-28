@@ -51,11 +51,11 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
   const proxyReady = proxy.isDeployed;
   const usdcReady = !usdc.needsApproval;
 
-  // Step sequence: proxy (auto-done for EOA) → creds → usdc → ready
+  // Step sequence: proxy → usdc (approve) → creds (signature) → ready
   let currentStep: TradingStep = "proxy";
-  if (proxyReady) currentStep = "creds";
-  if (proxyReady && credsReady) currentStep = "usdc";
-  if (proxyReady && credsReady && usdcReady) currentStep = "ready";
+  if (proxyReady) currentStep = "usdc";
+  if (proxyReady && usdcReady) currentStep = "creds";
+  if (proxyReady && usdcReady && credsReady) currentStep = "ready";
 
   return {
     currentStep,

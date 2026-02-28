@@ -98,15 +98,6 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
       buttonLabel: "Deploy",
     },
     {
-      key: "creds" as const,
-      label: "Enable Trading",
-      description: "Sign a message to generate your API keys.",
-      done: readiness.credsReady,
-      action: handleDeriveCreds,
-      loading: derivingCreds || readiness.credsLoading,
-      buttonLabel: "Sign",
-    },
-    {
       key: "usdc" as const,
       label: "Approve Tokens",
       description: "Approve token spending for trading.",
@@ -114,6 +105,15 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
       action: handleApproveUsdc,
       loading: readiness.usdc.isApproving,
       buttonLabel: "Approve",
+    },
+    {
+      key: "creds" as const,
+      label: "Enable Trading",
+      description: "Sign a message to generate your API keys.",
+      done: readiness.credsReady,
+      action: handleDeriveCreds,
+      loading: derivingCreds || readiness.credsLoading,
+      buttonLabel: "Sign",
     },
   ];
 
