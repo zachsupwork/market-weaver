@@ -9,6 +9,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 import { walletConfig, walletConnectConfigured } from "@/lib/wallet-config";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AgeGate } from "@/components/AgeGate";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useEffect } from "react";
 import { useAccount } from "wagmi";
 import Index from "./pages/Index";
@@ -22,6 +23,7 @@ import ExploreEvents from "./pages/ExploreEvents";
 import EventDetail from "./pages/EventDetail";
 import Admin from "./pages/Admin";
 import PolymarketSettings from "./pages/PolymarketSettings";
+import BuilderKeys from "./pages/BuilderKeys";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,31 +61,34 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AgeGate>
-              <WalletConnectBanner />
-              <WalletDebugLogger />
-              <AppHeader />
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/live" element={<LiveMarkets />} />
-                <Route path="/trade/:conditionId" element={<Trade />} />
-                <Route path="/portfolio" element={<Portfolio />} />
-                <Route path="/account" element={<Account />} />
-                <Route path="/leaderboard" element={<Leaderboard />} />
-                <Route path="/market/:slug" element={<MarketDetail />} />
-                <Route path="/events" element={<ExploreEvents />} />
-                <Route path="/events/:eventId" element={<EventDetail />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/settings/polymarket" element={<PolymarketSettings />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-              <footer className="border-t border-border py-4 mt-8">
-                <div className="container text-center">
-                  <p className="text-[10px] text-muted-foreground">
-                    PolyView is a third-party client for Polymarket. Not affiliated with or endorsed by Polymarket Inc.
-                    Prediction market trading involves substantial risk of loss.
-                  </p>
-                </div>
-              </footer>
+              <OnboardingFlow>
+                <WalletConnectBanner />
+                <WalletDebugLogger />
+                <AppHeader />
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/live" element={<LiveMarkets />} />
+                  <Route path="/trade/:conditionId" element={<Trade />} />
+                  <Route path="/portfolio" element={<Portfolio />} />
+                  <Route path="/account" element={<Account />} />
+                  <Route path="/leaderboard" element={<Leaderboard />} />
+                  <Route path="/market/:slug" element={<MarketDetail />} />
+                  <Route path="/events" element={<ExploreEvents />} />
+                  <Route path="/events/:eventId" element={<EventDetail />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/settings/polymarket" element={<PolymarketSettings />} />
+                  <Route path="/settings/api-keys" element={<BuilderKeys />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+                <footer className="border-t border-border py-4 mt-8">
+                  <div className="container text-center">
+                    <p className="text-[10px] text-muted-foreground">
+                      PolyView is a third-party client for Polymarket. Not affiliated with or endorsed by Polymarket Inc.
+                      Prediction market trading involves substantial risk of loss.
+                    </p>
+                  </div>
+                </footer>
+              </OnboardingFlow>
             </AgeGate>
           </BrowserRouter>
         </TooltipProvider>

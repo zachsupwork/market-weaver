@@ -53,6 +53,7 @@ export function AccountDropdown() {
     { icon: ClipboardList, label: "Orders", to: "/account?tab=orders" },
     { icon: History, label: "Trades", to: "/account?tab=trades" },
     { icon: Settings, label: "Settings", to: "/settings/polymarket" },
+    { icon: Settings, label: "API Keys", to: "/settings/api-keys" },
   ];
 
   return (
