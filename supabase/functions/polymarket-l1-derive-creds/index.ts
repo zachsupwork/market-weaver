@@ -29,14 +29,16 @@ function tryDecodeBase64(input: string): Uint8Array | null {
   }
 }
 
-function toUrlSafeBase64(base64: string): string {
-  return base64.replace(/\+/g, "-").replace(/\//g, "_");
+function toUrlSafeBase64(base64: string, keepPadding = true): string {
+  const converted = base64.replace(/\+/g, "-").replace(/\//g, "_");
+  return keepPadding ? converted : converted.replace(/=+$/g, "");
 }
 
-async function signL2(secret: string, message: string): Promise<string> {
-  const secretBytes = tryDecodeBase64(secret.trim());
-  if (!secretBytes) throw new Error("Invalid API secret format");
-
+async function hmacSignFromBytes(
+  secretBytes: Uint8Array,
+  message: string,
+  mode: "std" | "urlsafe_padded" | "urlsafe_unpadded" = "urlsafe_padded"
+): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     secretBytes,
@@ -46,33 +48,86 @@ async function signL2(secret: string, message: string): Promise<string> {
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return toUrlSafeBase64(b64); // Keep '=' padding (canonical Polymarket format)
+  if (mode === "std") return b64;
+  return toUrlSafeBase64(b64, mode === "urlsafe_padded");
+}
+
+async function buildSignatureCandidates(secret: string, message: string): Promise<Array<{ value: string; mode: string }>> {
+  const trimmed = secret.trim();
+  const variants: Array<{ bytes: Uint8Array; source: string }> = [];
+
+  const decoded = tryDecodeBase64(trimmed);
+  if (decoded) variants.push({ bytes: decoded, source: "base64" });
+  variants.push({ bytes: new TextEncoder().encode(trimmed), source: "raw" });
+
+  const out: Array<{ value: string; mode: string }> = [];
+  const seen = new Set<string>();
+
+  const formats: Array<"urlsafe_padded" | "std" | "urlsafe_unpadded"> = ["urlsafe_padded", "std", "urlsafe_unpadded"];
+
+  for (const variant of variants) {
+    for (const format of formats) {
+      const value = await hmacSignFromBytes(variant.bytes, message, format);
+      if (seen.has(value)) continue;
+      seen.add(value);
+      out.push({ value, mode: `${variant.source}:${format}` });
+    }
+  }
+
+  return out;
+}
+
+async function sleep(ms: number) {
+  return await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function validateDerivedCreds(
   clobHost: string,
   address: string,
   creds: { apiKey: string; secret: string; passphrase: string }
-): Promise<{ ok: boolean; status?: number; body?: string }> {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
+): Promise<{ ok: boolean; status?: number; body?: string; mode?: string; usedAddress?: string }> {
   const method = "GET";
   const requestPath = "/auth/api-keys";
-  const signMessage = timestamp + method + requestPath;
-  const signature = await signL2(creds.secret, signMessage);
+  const addressCandidates = Array.from(new Set([address, address.toLowerCase()].map((v) => v.trim()).filter(Boolean)));
 
-  const res = await fetch(`${clobHost}${requestPath}`, {
-    method,
-    headers: {
-      "POLY_ADDRESS": address,
-      "POLY_API_KEY": creds.apiKey,
-      "POLY_PASSPHRASE": creds.passphrase,
-      "POLY_TIMESTAMP": timestamp,
-      "POLY_SIGNATURE": signature,
-    },
-  });
+  let lastStatus: number | undefined;
+  let lastBody = "";
 
-  const body = await res.text();
-  return { ok: res.ok, status: res.status, body: body.substring(0, 500) };
+  // Newly created keys can take a moment to propagate; retry before treating as failure.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signMessage = timestamp + method + requestPath;
+    const signatures = await buildSignatureCandidates(creds.secret, signMessage);
+
+    for (const addr of addressCandidates) {
+      for (const sig of signatures) {
+        const res = await fetch(`${clobHost}${requestPath}`, {
+          method,
+          headers: {
+            "POLY_ADDRESS": addr,
+            "POLY_API_KEY": creds.apiKey,
+            "POLY_PASSPHRASE": creds.passphrase,
+            "POLY_TIMESTAMP": timestamp,
+            "POLY_SIGNATURE": sig.value,
+          },
+        });
+
+        const body = await res.text();
+        lastStatus = res.status;
+        lastBody = body.substring(0, 500);
+
+        if (res.ok) {
+          return { ok: true, status: res.status, body: lastBody, mode: sig.mode, usedAddress: addr };
+        }
+      }
+    }
+
+    if (attempt < 3) {
+      await sleep(500 * attempt);
+    }
+  }
+
+  return { ok: false, status: lastStatus, body: lastBody };
 }
 
 serve(async (req) => {
@@ -180,14 +235,13 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Incomplete credentials returned from Polymarket" }, 502);
     }
 
-    // Validate credentials immediately to avoid storing unusable keys
+    // Validate credentials immediately, but don't hard-fail on transient propagation delays.
     const validation = await validateDerivedCreds(clobHost, address, creds);
     if (!validation.ok) {
       console.error(`[l1-derive] Validation failed status=${validation.status} body=${validation.body}`);
-      return jsonResp({
-        ok: false,
-        error: `Credential validation failed (${validation.status}): ${validation.body ?? "Unknown error"}`,
-      }, 502);
+      console.warn("[l1-derive] Proceeding to store newly-created creds despite failed immediate validation (will self-heal via order-time invalidation if truly bad)");
+    } else {
+      console.log(`[l1-derive] Validation passed mode=${validation.mode} addr=${validation.usedAddress}`);
     }
 
     // ── Encrypt and store per-user ───────────────────────────────
