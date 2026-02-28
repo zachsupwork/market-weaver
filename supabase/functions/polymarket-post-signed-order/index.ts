@@ -9,32 +9,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function tryDecodeBase64(input: string): Uint8Array | null {
-  try {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  } catch {
-    return null;
-  }
+function base64ToBytes(base64: string): Uint8Array {
+  const sanitized = base64
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .replace(/[^A-Za-z0-9+/=]/g, "");
+
+  const binary = atob(sanitized);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function toUrlSafeBase64(base64: string): string {
+  return base64.replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 async function hmacSign(secret: string, message: string): Promise<string> {
-  const trimmed = secret.trim();
-  const secretBytes = tryDecodeBase64(trimmed) ?? new TextEncoder().encode(trimmed);
-
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    base64ToBytes(secret.trim()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return toUrlSafeBase64(sigB64);
 }
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
@@ -185,12 +186,13 @@ serve(async (req) => {
     const apiKeyTail = creds.apiKey.slice(-6);
     console.log(`[post-order] user=${user.id}, apiKey:…${apiKeyTail}, bodyLen=${orderBody.length}`);
 
+    const headerAddress = sendOrderPayload.order?.signer || credRow.address;
     const hdrs: Record<string, string> = {
       "POLY_API_KEY": creds.apiKey,
       "POLY_PASSPHRASE": creds.passphrase,
       "POLY_TIMESTAMP": timestamp,
       "POLY_SIGNATURE": signature,
-      "POLY_ADDRESS": credRow.address,
+      "POLY_ADDRESS": headerAddress,
       "Content-Type": "application/json",
     };
 
