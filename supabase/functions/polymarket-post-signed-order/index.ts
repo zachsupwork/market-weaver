@@ -165,22 +165,36 @@ serve(async (req) => {
       try { parsed = JSON.parse(resBody); } catch { parsed = resBody; }
       return jsonResp({ ok: true, order: parsed });
     } else {
-      return jsonResp(
-        {
+      const upstreamSnippet = resBody.substring(0, 1000);
+      const invalidKey = res.status === 401 && /invalid api key|unauthorized/i.test(resBody);
+
+      if (invalidKey) {
+        // Stored user creds are stale/invalid; clear them so client can re-derive cleanly.
+        await adminClient.from("polymarket_user_creds").delete().eq("user_id", user.id);
+
+        return jsonResp({
           ok: false,
-          error: `Order failed (${res.status}): ${resBody.substring(0, 500)}`,
+          code: "INVALID_API_KEY",
+          error: "Trading credentials expired or invalid. Please re-enable trading in Setup.",
           upstreamStatus: res.status,
-          upstreamBody: resBody.substring(0, 1000),
-          debug: {
-            requestPath,
-            method,
-            address: credRow.address,
-            apiKeyTail,
-            timestamp,
-          },
+          upstreamBody: upstreamSnippet,
+        });
+      }
+
+      return jsonResp({
+        ok: false,
+        code: "ORDER_REJECTED",
+        error: `Order failed (${res.status}): ${resBody.substring(0, 500)}`,
+        upstreamStatus: res.status,
+        upstreamBody: upstreamSnippet,
+        debug: {
+          requestPath,
+          method,
+          address: credRow.address,
+          apiKeyTail,
+          timestamp,
         },
-        res.status >= 500 ? 502 : res.status
-      );
+      });
     }
   } catch (err) {
     console.error("[post-order] error:", err);

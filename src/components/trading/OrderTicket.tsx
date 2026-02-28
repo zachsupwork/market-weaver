@@ -85,8 +85,9 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         setShowConfirm(false);
       } else if (result.code === "GEOBLOCKED") {
         toast.error("Trading is not available in your jurisdiction");
-      } else if (result.code === "NO_CREDS") {
-        toast.error("Enable trading first (Step 2 below)");
+      } else if (result.code === "NO_CREDS" || result.code === "INVALID_API_KEY") {
+        toast.error("Trading credentials expired. Re-enable trading in Setup below.");
+        await readiness.refreshCreds();
       } else {
         toast.error(result.error || "Order failed");
       }
