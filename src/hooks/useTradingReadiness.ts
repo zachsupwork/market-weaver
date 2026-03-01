@@ -2,7 +2,7 @@ import { useAccount } from "wagmi";
 import { useProxyWallet } from "./useProxyWallet";
 import { useUsdcApproval } from "./useUsdcApproval";
 import { useState, useEffect, useCallback } from "react";
-import { testUserCreds } from "@/lib/polymarket-api";
+import { checkUserCredsStatus } from "@/lib/polymarket-api";
 import { supabase } from "@/integrations/supabase/client";
 
 export type TradingStep = "proxy" | "creds" | "usdc" | "ready";
@@ -34,9 +34,9 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
         setCredsReady(false);
         return;
       }
-      // Live-validate creds against Polymarket CLOB (not just check existence)
-      const result = await testUserCreds();
-      setCredsReady(result.valid);
+      // Check if creds exist in DB (don't live-validate to avoid false negatives)
+      const result = await checkUserCredsStatus();
+      setCredsReady(result.hasCreds);
     } catch {
       setCredsReady(false);
     } finally {

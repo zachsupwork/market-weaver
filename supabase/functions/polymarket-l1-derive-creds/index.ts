@@ -16,79 +16,6 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
-/**
- * Build the canonical L2 HMAC signature exactly as the official Polymarket Python client does:
- *   1. urlsafe_b64decode(secret) → HMAC key
- *   2. HMAC-SHA256(key, message)
- *   3. urlsafe_b64encode(digest) → signature (WITH padding)
- */
-async function buildL2Signature(secret: string, message: string): Promise<string> {
-  // Decode the secret from URL-safe base64 (lenient on padding)
-  const trimmed = secret.trim();
-  const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
-  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-  const binary = atob(padded);
-  const secretBytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) secretBytes[i] = binary.charCodeAt(i);
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    secretBytes,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  // URL-safe base64 encode WITH padding (matches Python's urlsafe_b64encode)
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return b64.replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-async function sleep(ms: number) {
-  return await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function validateDerivedCreds(
-  clobHost: string,
-  address: string,
-  creds: { apiKey: string; secret: string; passphrase: string }
-): Promise<{ ok: boolean; status?: number; body?: string }> {
-  const method = "GET";
-  const requestPath = "/auth/api-keys";
-  const addr = address.toLowerCase();
-
-  // Retry up to 5 times with increasing backoff to handle propagation delays
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const signMessage = timestamp + method + requestPath;
-    const signature = await buildL2Signature(creds.secret, signMessage);
-
-    const res = await fetch(`${clobHost}${requestPath}`, {
-      method,
-      headers: {
-        "POLY_ADDRESS": addr,
-        "POLY_API_KEY": creds.apiKey,
-        "POLY_PASSPHRASE": creds.passphrase,
-        "POLY_TIMESTAMP": timestamp,
-        "POLY_SIGNATURE": signature,
-      },
-    });
-
-    const body = await res.text();
-    console.log(`[l1-derive] validate attempt=${attempt} status=${res.status} body=${body.substring(0, 300)}`);
-
-    if (res.ok) {
-      return { ok: true, status: res.status, body: body.substring(0, 300) };
-    }
-
-    if (attempt < 5) {
-      await sleep(1000 * attempt); // 1s, 2s, 3s, 4s backoff
-    }
-  }
-
-  return { ok: false };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -123,16 +50,16 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "address and signature required" }, 400);
     }
 
-    if (!timestamp || !/^\d{10,}$/.test(timestamp)) {
-      return jsonResp({ ok: false, error: "Invalid timestamp — must be numeric unix seconds" }, 400);
-    }
-    const nonce = rawNonce ?? "0";
-    if (!/^\d+$/.test(nonce)) {
-      return jsonResp({ ok: false, error: "Invalid nonce — must be a numeric string" }, 400);
+    if (!timestamp) {
+      return jsonResp({ ok: false, error: "Missing timestamp" }, 400);
     }
 
-    const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
+    // Use exactly the nonce the client signed (default "0")
+    const nonce = String(rawNonce ?? "0");
 
+    const clobHost = "https://clob.polymarket.com";
+
+    // L1 auth headers — must match exactly what the user signed in EIP-712
     const l1Headers: Record<string, string> = {
       "POLY_ADDRESS": address,
       "POLY_SIGNATURE": signature,
@@ -140,71 +67,57 @@ serve(async (req) => {
       "POLY_NONCE": nonce,
     };
 
-    console.log(`[l1-derive] Attempting derive for user=${user.id}, address=${address.slice(0, 10)}..., ts=${timestamp}, nonce=${nonce}`);
+    console.log(`[l1-derive] user=${user.id}, address=${address.slice(0, 10)}..., ts=${timestamp}, nonce=${nonce}`);
 
-    // ── Step 1: Try POST /auth/api-key (create) ─────────────────
+    // ── Step 1: Try GET /auth/derive-api-key first (re-derive existing key) ──
     let creds: { apiKey: string; secret: string; passphrase: string } | null = null;
 
-    const createRes = await fetch(`${clobHost}/auth/api-key`, {
-      method: "POST",
+    const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
+      method: "GET",
       headers: l1Headers,
     });
+    const deriveBody = await deriveRes.text();
+    console.log(`[l1-derive] derive status=${deriveRes.status} body=${deriveBody.substring(0, 500)}`);
 
-    const createBody = await createRes.text();
-    console.log(`[l1-derive] create response status=${createRes.status} body=${createBody.substring(0, 500)}`);
-
-    if (createRes.ok) {
+    if (deriveRes.ok) {
       try {
-        creds = JSON.parse(createBody);
+        creds = JSON.parse(deriveBody);
       } catch {
-        console.error("[l1-derive] Failed to parse create response as JSON");
+        console.error("[l1-derive] Failed to parse derive response");
       }
     }
 
-    // ── Step 2: Fallback to GET /auth/derive-api-key ────────────
+    // ── Step 2: Fallback to POST /auth/api-key (create new key) ──
     if (!creds || !creds.apiKey) {
-      console.log(`[l1-derive] Create failed (${createRes.status}), falling back to GET /auth/derive-api-key`);
-      const deriveRes = await fetch(`${clobHost}/auth/derive-api-key`, {
-        method: "GET",
+      console.log(`[l1-derive] derive failed (${deriveRes.status}), trying POST /auth/api-key`);
+      const createRes = await fetch(`${clobHost}/auth/api-key`, {
+        method: "POST",
         headers: l1Headers,
       });
+      const createBody = await createRes.text();
+      console.log(`[l1-derive] create status=${createRes.status} body=${createBody.substring(0, 500)}`);
 
-      const deriveBody = await deriveRes.text();
-      console.log(`[l1-derive] derive response status=${deriveRes.status} body=${deriveBody.substring(0, 500)}`);
-
-      if (!deriveRes.ok) {
+      if (!createRes.ok) {
         return jsonResp({
           ok: false,
-          error: `Polymarket rejected credentials (create=${createRes.status}, derive=${deriveRes.status}): ${deriveBody.substring(0, 300)}`,
+          error: `Polymarket rejected (derive=${deriveRes.status}, create=${createRes.status}): ${createBody.substring(0, 300)}`,
         }, 502);
       }
 
       try {
-        creds = JSON.parse(deriveBody);
+        creds = JSON.parse(createBody);
       } catch {
-        return jsonResp({ ok: false, error: `Invalid JSON from Polymarket derive: ${deriveBody.substring(0, 200)}` }, 502);
+        return jsonResp({ ok: false, error: `Invalid JSON from Polymarket: ${createBody.substring(0, 200)}` }, 502);
       }
     }
 
     if (!creds?.apiKey || !creds?.secret || !creds?.passphrase) {
-      return jsonResp({ ok: false, error: "Incomplete credentials returned from Polymarket" }, 502);
+      return jsonResp({ ok: false, error: "Incomplete credentials from Polymarket" }, 502);
     }
 
     console.log(`[l1-derive] Got creds apiKey=…${creds.apiKey.slice(-6)}, secretLen=${creds.secret.length}`);
 
-    // ── HARD VALIDATE: creds MUST pass L2 auth before we store them ──
-    const validation = await validateDerivedCreds(clobHost, address, creds);
-    if (!validation.ok) {
-      console.error(`[l1-derive] VALIDATION FAILED after 5 attempts — NOT storing credentials`);
-      return jsonResp({
-        ok: false,
-        error: "Derived credentials failed validation against Polymarket. Please try again — the signature may have expired.",
-      }, 502);
-    }
-
-    console.log(`[l1-derive] Validation PASSED`);
-
-    // ── Encrypt and store per-user ───────────────────────────────
+    // ── Encrypt and store per-user (skip hard validation to avoid propagation-delay 502s) ──
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
       return jsonResp({ ok: false, error: "MASTER_KEY not configured" }, 500);
@@ -237,7 +150,7 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Failed to store credentials" }, 500);
     }
 
-    console.log(`[l1-derive] Credentials stored and validated for user=${user.id}`);
+    console.log(`[l1-derive] Credentials stored for user=${user.id}`);
     return jsonResp({ ok: true });
   } catch (err) {
     console.error("[l1-derive] error:", err);

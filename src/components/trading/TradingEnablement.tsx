@@ -46,8 +46,8 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
       }
 
       const timestamp = String(Math.floor(Date.now() / 1000));
-      // Use a unique nonce so Polymarket can mint a fresh API key when needed
-      const nonce = Date.now().toString();
+      // Polymarket derive uses nonce "0" by convention
+      const nonce = "0";
       const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
       const types = {
         ClobAuth: [
