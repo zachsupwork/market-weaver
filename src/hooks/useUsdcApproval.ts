@@ -1,20 +1,14 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAccount, usePublicClient } from "wagmi";
 import { encodeFunctionData, maxUint256, erc20Abi } from "viem";
 import { useRelayClient } from "./useRelayClient";
-
-// ── Contract addresses (Polygon mainnet) ────────────────────────
-const USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
-const CTF_CONTRACT = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
-const CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" as const;
-const NEG_RISK_CTF_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a" as const;
-const NEG_RISK_ADAPTER = "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296" as const;
-
-// ERC-20 approve spenders (USDC.e → 4 contracts)
-const ERC20_SPENDERS = [CTF_CONTRACT, CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
-
-// ERC-1155 setApprovalForAll operators (CTF → 3 contracts)
-const ERC1155_OPERATORS = [CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
+import {
+  USDC_E,
+  USDC_NATIVE,
+  CTF_CONTRACT,
+  ERC20_SPENDERS,
+  ERC1155_OPERATORS,
+} from "@/lib/tokens";
 
 const erc1155Abi = [
   {
@@ -52,10 +46,8 @@ const balanceOfAbi = [
 /**
  * Step 2: "Approve Tokens"
  *
- * Batch-approves all necessary contracts for USDC.e (ERC-20) and
- * outcome tokens (ERC-1155) via the Polymarket Builder Relayer.
- * All approvals execute in a single gasless transaction — the user
- * only signs once and the relayer pays gas.
+ * Checks USDC.e approvals + balances for both USDC.e and native USDC.
+ * Approvals execute via the Polymarket Builder Relayer (gasless).
  */
 export function useUsdcApproval(traderAddress: string | null) {
   const { address } = useAccount();
@@ -65,20 +57,20 @@ export function useUsdcApproval(traderAddress: string | null) {
   const [allApproved, setAllApproved] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
-  const [usdcBalance, setUsdcBalance] = useState(0);
+  const [usdcBalance, setUsdcBalance] = useState(0);        // USDC.e
+  const [usdcNativeBalance, setUsdcNativeBalance] = useState(0); // native USDC
 
-  // Check all approvals on-chain
   const checkApprovals = useCallback(async () => {
     if (!traderAddress || !publicClient) return;
     setIsChecking(true);
     try {
       const traderAddr = traderAddress as `0x${string}`;
 
-      // Check ERC-20 allowances
+      // Check ERC-20 allowances (USDC.e)
       const erc20Checks = await Promise.all(
         ERC20_SPENDERS.map((spender) =>
           publicClient.readContract({
-            address: USDC_E,
+            address: USDC_E.address,
             abi: erc20Abi,
             functionName: "allowance",
             args: [traderAddr, spender],
@@ -99,15 +91,23 @@ export function useUsdcApproval(traderAddress: string | null) {
       );
 
       // Check USDC.e balance
-      const balance = await publicClient.readContract({
-        address: USDC_E,
+      const balE = await publicClient.readContract({
+        address: USDC_E.address,
         abi: balanceOfAbi,
         functionName: "balanceOf",
         args: [traderAddr],
       } as any);
-      setUsdcBalance(Number(balance) / 1e6);
+      setUsdcBalance(Number(balE) / 1e6);
 
-      // All ERC-20 allowances must be > 0, all ERC-1155 must be true
+      // Check native USDC balance
+      const balNative = await publicClient.readContract({
+        address: USDC_NATIVE.address,
+        abi: balanceOfAbi,
+        functionName: "balanceOf",
+        args: [traderAddr],
+      } as any);
+      setUsdcNativeBalance(Number(balNative) / 1e6);
+
       const erc20Ok = erc20Checks.every((a) => (a as bigint) > 0n);
       const erc1155Ok = erc1155Checks.every((a) => a === true);
       setAllApproved(erc20Ok && erc1155Ok);
@@ -128,10 +128,9 @@ export function useUsdcApproval(traderAddress: string | null) {
   const createApprovalTxs = useCallback(() => {
     const txs: Array<{ to: string; data: string; value: string }> = [];
 
-    // ERC-20 approvals (USDC.e → 4 spenders)
     for (const spender of ERC20_SPENDERS) {
       txs.push({
-        to: USDC_E,
+        to: USDC_E.address,
         data: encodeFunctionData({
           abi: erc20Abi,
           functionName: "approve",
@@ -141,7 +140,6 @@ export function useUsdcApproval(traderAddress: string | null) {
       });
     }
 
-    // ERC-1155 approvals (CTF → 3 operators)
     for (const operator of ERC1155_OPERATORS) {
       txs.push({
         to: CTF_CONTRACT,
@@ -157,7 +155,6 @@ export function useUsdcApproval(traderAddress: string | null) {
     return txs;
   }, []);
 
-  // Execute all approvals in one gasless batch
   const approve = useCallback(async () => {
     if (!address || allApproved) return;
     setIsApproving(true);
@@ -167,7 +164,6 @@ export function useUsdcApproval(traderAddress: string | null) {
       const response = await client.execute(txs, "Set all token approvals for trading");
       await response.wait();
       setAllApproved(true);
-      // Re-check to confirm
       await checkApprovals();
     } catch (err: any) {
       console.error("[useUsdcApproval] Approve failed:", err);
@@ -183,6 +179,8 @@ export function useUsdcApproval(traderAddress: string | null) {
     isApproving: isApproving || isChecking,
     isConfirmed: allApproved,
     usdcBalance,
+    usdcNativeBalance,
     approvalProgress: allApproved ? 1 : 0,
+    recheckBalances: checkApprovals,
   };
 }

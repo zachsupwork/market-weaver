@@ -2,15 +2,16 @@ import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft } from "lucide-react";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft, ExternalLink } from "lucide-react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
 import { TradingEnablement } from "@/components/trading/TradingEnablement";
 import { supabase } from "@/integrations/supabase/client";
-import { ClobClient, Side as ClobSide, SignatureType } from "@polymarket/clob-client";
+import { ClobClient, Side as ClobSide } from "@polymarket/clob-client";
 import { ethers } from "ethers";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
+import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
 
 interface OrderTicketProps {
   tokenId: string;
@@ -24,7 +25,7 @@ const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
 
 export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTradable = true }: OrderTicketProps) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
-  const [amount, setAmount] = useState(0); // Dollar amount
+  const [amount, setAmount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -44,6 +45,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     : (shares * price).toFixed(2);
 
   const hasInsufficientBalance = side === "BUY" && amount > readiness.usdc.usdcBalance;
+  const hasNativeUsdcButNoE = readiness.usdc.usdcNativeBalance > 0 && readiness.usdc.usdcBalance < amount;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
   const quickAmounts = [1, 5, 10, 100];
@@ -60,7 +62,14 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
     if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
     if (amount <= 0) { toast.error("Enter an amount"); return; }
-    if (hasInsufficientBalance) { toast.error(`Not enough USDC.e. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e on Polygon.`); return; }
+    if (hasInsufficientBalance) {
+      if (hasNativeUsdcButNoE) {
+        toast.error(`You have $${readiness.usdc.usdcNativeBalance.toFixed(2)} USDC but trading requires USDC.e. Convert USDC → USDC.e first.`);
+      } else {
+        toast.error(`Not enough USDC.e. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e on Polygon.`);
+      }
+      return;
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -86,7 +95,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
-      // EOA signing — order.signer must match the API key address
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
@@ -113,7 +121,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         expiration: 0,
       });
 
-      // Verify signer matches EOA
       const orderSigner = ((signedOrder as any)?.order?.signer ?? (signedOrder as any)?.signer ?? "").toLowerCase();
       console.log("[OrderTicket] signerAddr", eoaAddr, "orderSigner", orderSigner);
       if (orderSigner && orderSigner !== eoaAddr) {
@@ -180,15 +187,63 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         </div>
       )}
 
-      {isConnected && ageConfirmed && readiness.allReady && !hasInsufficientBalance && (
-        <div className="mb-3 rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
-          <Check className="h-3.5 w-3.5 text-yes shrink-0" />
-          <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
+      {/* Balance breakdown */}
+      {isConnected && (
+        <div className="mb-3 space-y-1 px-1">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">USDC.e <span className="text-[9px] opacity-60">(tradeable)</span></span>
+            <span className="font-mono text-foreground">${readiness.usdc.usdcBalance.toFixed(2)}</span>
+          </div>
+          {readiness.usdc.usdcNativeBalance > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">USDC <span className="text-[9px] opacity-60">(not tradeable)</span></span>
+              <span className="font-mono text-muted-foreground">${readiness.usdc.usdcNativeBalance.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Convert USDC → USDC.e CTA */}
+      {isConnected && hasNativeUsdcButNoE && side === "BUY" && (
+        <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-2.5 space-y-1.5">
+          <p className="text-[10px] text-warning font-medium flex items-center gap-1">
+            <ArrowRightLeft className="h-3 w-3" />
+            You have USDC, but trading requires USDC.e
+          </p>
+          <p className="text-[9px] text-muted-foreground">
+            Convert your native USDC to USDC.e (bridged) on Polygon to trade.
+          </p>
+          <a
+            href={USDC_TO_USDC_E_SWAP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all"
+          >
+            Convert USDC → USDC.e <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+        </div>
+      )}
+
+      {/* Wallet ready banner (replaces misleading "all steps complete") */}
+      {isConnected && ageConfirmed && readiness.allReady && (
+        <div className={cn(
+          "mb-3 rounded-md p-2 flex items-center gap-2",
+          readiness.usdc.usdcBalance > 0
+            ? "border border-yes/20 bg-yes/5"
+            : "border border-primary/20 bg-primary/5"
+        )}>
+          <Check className="h-3.5 w-3.5 shrink-0 text-yes" />
+          <div className="text-[10px]">
+            <span className="text-yes font-medium">Wallet ready</span>
+            {readiness.usdc.usdcBalance === 0 && (
+              <span className="text-muted-foreground ml-1">— Fund your wallet with USDC.e to trade</span>
+            )}
+          </div>
         </div>
       )}
 
       {/* Fund + Approve helper panel */}
-      {isConnected && ageConfirmed && (readiness.usdc.usdcBalance === 0 || readiness.usdc.needsApproval || (!isPolygon)) && (
+      {isConnected && ageConfirmed && readiness.allReady && (readiness.usdc.usdcBalance === 0 || readiness.usdc.needsApproval || !isPolygon) && (
         <div className="mb-3 rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
           <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <ArrowRightLeft className="h-3.5 w-3.5 text-primary" /> Fund & Approve
@@ -207,14 +262,14 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           {readiness.usdc.usdcBalance === 0 && (
             <div className="space-y-1">
               <p className="text-[10px] text-muted-foreground">
-                Send <span className="font-semibold text-foreground">USDC.e</span> on Polygon to your wallet:
+                Send <span className="font-semibold text-foreground">USDC.e</span> on Polygon to your trading wallet:
               </p>
               <div className="flex items-center gap-1.5">
                 <code className="text-[9px] font-mono bg-muted rounded px-1.5 py-0.5 text-foreground break-all flex-1">
-                  {address}
+                  {proxyAddress || address}
                 </code>
                 <button type="button" onClick={() => {
-                  navigator.clipboard.writeText(address || "");
+                  navigator.clipboard.writeText(proxyAddress || address || "");
                   toast.success("Address copied!");
                 }} className="shrink-0 rounded-md bg-muted hover:bg-accent p-1 transition-all">
                   <Copy className="h-3 w-3 text-muted-foreground" />
@@ -239,13 +294,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         </div>
       )}
 
-      {isConnected && (
-        <div className="flex justify-between text-xs mb-3 px-1">
-          <span className="text-muted-foreground">Bal.</span>
-          <span className="font-mono text-foreground">${readiness.usdc.usdcBalance.toFixed(2)}</span>
-        </div>
-      )}
-
       {/* Side toggle */}
       <div className="flex gap-1 mb-4">
         <button type="button" onClick={() => { setSide("BUY"); setShowConfirm(false); }}
@@ -258,7 +306,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           )}>Sell</button>
       </div>
 
-      {/* Dollar amount input - Polymarket style */}
+      {/* Dollar amount input */}
       <div className="mb-4">
         <div className="flex items-center justify-center gap-4 py-3">
           <button type="button" onClick={() => adjustAmount(-1)} disabled={amount <= 0 || !isConnected}
@@ -338,7 +386,11 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
             <span className="font-mono text-yes">+${potentialReturn}</span>
           </div>
           {hasInsufficientBalance && (
-            <p className="text-[10px] text-destructive font-medium">Insufficient USDC.e balance</p>
+            <p className="text-[10px] text-destructive font-medium">
+              {hasNativeUsdcButNoE
+                ? "You have USDC but need USDC.e — convert above"
+                : "Insufficient USDC.e balance"}
+            </p>
           )}
         </div>
       )}
