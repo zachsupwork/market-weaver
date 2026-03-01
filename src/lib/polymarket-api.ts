@@ -267,6 +267,16 @@ export async function createDepositAddress(address: string): Promise<{
   return data;
 }
 
+/** Read edge function error body, handling ReadableStream */
+async function readEdgeBody(ctxBody: unknown): Promise<string | null> {
+  if (!ctxBody) return null;
+  if (typeof ctxBody === "string") return ctxBody;
+  if (ctxBody instanceof ReadableStream || (ctxBody && typeof (ctxBody as any).getReader === "function")) {
+    return await new Response(ctxBody as ReadableStream).text();
+  }
+  return JSON.stringify(ctxBody);
+}
+
 /** Submit a signed order to Polymarket via backend L2 auth proxy */
 export async function postSignedOrder(
   signedOrder: any,
@@ -281,16 +291,17 @@ export async function postSignedOrder(
     body: { signedOrder, orderType },
   });
   if (error) {
-    // Extract the real JSON error body from the edge function response
     const ctxBody = (error as any)?.context?.body;
-    if (ctxBody) {
+    const bodyText = await readEdgeBody(ctxBody);
+    if (bodyText) {
       try {
-        const text = typeof ctxBody === "string" ? ctxBody : await ctxBody.text?.() ?? String(ctxBody);
-        const parsed = JSON.parse(text);
+        const parsed = JSON.parse(bodyText);
         console.error("[postSignedOrder] edge function error body:", parsed);
-        return parsed;
+        const msg = parsed.error || parsed.message || parsed.details || bodyText;
+        return { ok: false, error: msg, code: parsed.code, ...(parsed.order ? { order: parsed.order } : {}) };
       } catch {
-        return { ok: false, error: `${error.message}: ${String(ctxBody).slice(0, 500)}` };
+        console.error("[postSignedOrder] edge function raw error:", bodyText);
+        return { ok: false, error: bodyText.slice(0, 500) };
       }
     }
     return { ok: false, error: error.message };
