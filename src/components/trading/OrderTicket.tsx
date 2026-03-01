@@ -95,15 +95,17 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
-      // Pass proxyAddress as funderAddress (6th arg) so the order's "maker"
-      // points to the Trading Wallet (Safe/proxy) where the USDC.e balance lives.
+      // When using a Gnosis Safe proxy as maker (funder), Polymarket requires
+      // signatureType=2 (POLY_GNOSIS_SAFE) so the CLOB validates the EOA
+      // signature against the Safe's owner rather than expecting maker==signer.
+      const useProxy = !!proxyAddress;
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
         signer,
-        undefined,         // creds – not needed for client-side signing
-        undefined,         // signatureType – default EOA
-        proxyAddress ?? undefined,  // funderAddress → sets maker to proxy wallet
+        undefined,           // creds – not needed for client-side signing
+        useProxy ? 2 : 0,    // 2 = POLY_GNOSIS_SAFE, 0 = EOA
+        useProxy ? proxyAddress : undefined,  // funderAddress → sets maker to proxy wallet
       );
 
       const eoaAddr = (await signer.getAddress()).toLowerCase();
@@ -159,6 +161,9 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           readiness.usdc.recheckBalances();
         } else if (isAuthError) {
           toast.error("Order failed: Please check your Polymarket credentials in Settings and re-derive if needed.", { duration: 6000 });
+          await readiness.refreshCreds();
+        } else if (errLower.includes("invalid signature")) {
+          toast.error("Order signature invalid. This usually means the signing wallet doesn't match the API credentials. Please re-derive credentials in Settings.", { duration: 8000 });
           await readiness.refreshCreds();
         } else {
           toast.error(errMsg);
