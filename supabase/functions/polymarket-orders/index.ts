@@ -88,7 +88,9 @@ serve(async (req) => {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const requestPath = "/data/orders";
     const signMessage = timestamp + "GET" + requestPath;
-    const signature = await hmacSign(creds.secret, signMessage);
+    const signature = toUrlSafeBase64(await hmacSign(creds.secret, signMessage));
+
+    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${credRow.address}`);
 
     const res = await fetch(`${clobHost}${requestPath}`, {
       method: "GET",
