@@ -147,6 +147,18 @@ serve(async (req) => {
 
     const sendOrderPayload = buildOrderPayload(signedOrder, creds.apiKey, orderType);
 
+    // ── Early signer validation ────────────────────────────────
+    const incomingSigner = (signedOrder?.order?.signer ?? signedOrder?.signer ?? "").toLowerCase();
+    const storedAddr = (credRow.address || "").toLowerCase();
+    if (incomingSigner && storedAddr && incomingSigner !== storedAddr) {
+      console.error(`[post-order] SIGNER_MISMATCH: order.signer=${incomingSigner} stored=${storedAddr}`);
+      return jsonResp({
+        ok: false,
+        code: "SIGNER_MISMATCH",
+        error: "Order signer wallet does not match the wallet that created your Polymarket API key. Re-enable trading using the same wallet you are placing orders with.",
+      }, 400);
+    }
+
     // ── Build L2 HMAC signature (single canonical method) ───────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
