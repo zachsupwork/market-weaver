@@ -77,11 +77,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         return;
       }
 
-      if (!proxyAddress) {
-        toast.error("Proxy wallet not found. Deploy it in Setup below.");
-        return;
-      }
-
       if (!(window as any).ethereum) {
         throw new Error("Wallet provider not found");
       }
@@ -89,21 +84,17 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
-      // EOA signing so order.signer matches the API key address
+      // EOA signing — order.signer must match the API key address
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
-        signer,
-        undefined,
-        SignatureType.EOA,
-        proxyAddress
+        signer
       );
 
       const eoaAddr = (await signer.getAddress()).toLowerCase();
       console.log("[OrderTicket] Creating order:", {
         signerAddress: eoaAddr,
-        proxyAddress,
-        signatureType: "EOA (0)",
+        signatureType: "EOA (default)",
         tokenId,
         side,
         price,
