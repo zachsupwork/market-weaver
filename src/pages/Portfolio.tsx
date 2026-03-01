@@ -1,11 +1,12 @@
 import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
-import { Wallet, AlertCircle, Loader2, History, PieChart } from "lucide-react";
+import { Wallet, AlertCircle, Loader2, History, PieChart, ClipboardList } from "lucide-react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { DepositWithdraw } from "@/components/wallet/DepositWithdraw";
+import { OrdersPanel } from "@/components/orders/OrdersPanel";
 import { formatUnits } from "viem";
 
 const USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const;
@@ -20,7 +21,7 @@ const erc20Abi = [
   },
 ] as const;
 
-type Tab = "positions" | "history" | "wallet";
+type Tab = "positions" | "orders" | "history" | "wallet";
 
 const Portfolio = () => {
   const { isConnected, address } = useAccount();
@@ -48,6 +49,7 @@ const Portfolio = () => {
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: "positions", label: "Positions", icon: PieChart },
+    { id: "orders", label: "Orders", icon: ClipboardList },
     { id: "history", label: "Trade History", icon: History },
     { id: "wallet", label: "Wallet", icon: Wallet },
   ];
@@ -148,6 +150,9 @@ const Portfolio = () => {
                 )}
               </>
             )}
+
+            {/* Orders tab */}
+            {tab === "orders" && <OrdersPanel />}
 
             {/* Trade History tab */}
             {tab === "history" && (
