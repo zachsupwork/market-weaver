@@ -92,6 +92,10 @@ serve(async (req) => {
     
     // Build request path with query params
     const clobParams = new URLSearchParams();
+    // The maker is the proxy/Safe address stored in creds
+    if (credRow.address) {
+      clobParams.set("maker", credRow.address);
+    }
     if (statusFilter && statusFilter !== "ALL") {
       clobParams.set("state", statusFilter);
     }
@@ -106,7 +110,9 @@ serve(async (req) => {
     const signMessage = timestamp + "GET" + signPath;
     const signature = toUrlSafeBase64(await hmacSign(creds.secret, signMessage));
 
-    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${credRow.address} statusFilter=${statusFilter || "ALL"}`);
+    const polyAddress = (credRow.address || "").toLowerCase();
+
+    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${polyAddress} apiKey=…${creds.apiKey.slice(-6)} statusFilter=${statusFilter || "ALL"}`);
 
     const res = await fetch(`${clobHost}${requestPath}`, {
       method: "GET",
@@ -115,7 +121,7 @@ serve(async (req) => {
         "POLY_PASSPHRASE": creds.passphrase,
         "POLY_TIMESTAMP": timestamp,
         "POLY_SIGNATURE": signature,
-        "POLY_ADDRESS": credRow.address,
+        "POLY_ADDRESS": polyAddress,
         "Accept": "application/json",
       },
     });
@@ -131,10 +137,11 @@ serve(async (req) => {
     }
 
     let parsed;
-    try { parsed = JSON.parse(resBody); } catch { parsed = []; }
+    try { parsed = JSON.parse(resBody); } catch { parsed = {}; }
 
-    const orders = Array.isArray(parsed) ? parsed : [];
-    console.log(`[orders] user=${user.id} returning ${orders.length} orders`);
+    // CLOB returns { data: [...], next_cursor, limit, count }
+    const orders = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : [];
+    console.log(`[orders] user=${user.id} returning ${orders.length} orders (raw count=${parsed?.count ?? "?"})`);
 
     return jsonResp({ ok: true, orders, rawCount: orders.length });
   } catch (err) {
