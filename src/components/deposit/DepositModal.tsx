@@ -8,15 +8,6 @@ import { QRCodeSVG } from "qrcode.react";
 import { createDepositAddress } from "@/lib/polymarket-api";
 import { toast } from "sonner";
 
-const SUPPORTED_TOKENS = [
-  { id: "usdc", label: "USDC", icon: "$" },
-  { id: "usdc.e", label: "USDC.e", icon: "$" },
-  { id: "usdt", label: "USDT", icon: "₮" },
-  { id: "eth", label: "ETH", icon: "Ξ" },
-  { id: "sol", label: "SOL", icon: "◎" },
-  { id: "arb", label: "ARB", icon: "A" },
-] as const;
-
 const SUPPORTED_CHAINS = [
   { id: "evm", label: "Ethereum / Polygon / Base", field: "evm" },
   { id: "svm", label: "Solana", field: "svm" },
@@ -32,7 +23,6 @@ interface DepositModalProps {
 export function DepositModal({ trigger, balance }: DepositModalProps) {
   const { address } = useAccount();
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState("usdc");
   const [chain, setChain] = useState("evm");
   const [loading, setLoading] = useState(false);
   const [addresses, setAddresses] = useState<Record<string, string> | null>(null);
@@ -78,7 +68,7 @@ export function DepositModal({ trigger, balance }: DepositModalProps) {
       <DialogTrigger asChild>
         {trigger || (
           <Button className="gap-1.5">
-            <ArrowDownToLine className="h-4 w-4" /> Deposit
+            <ArrowDownToLine className="h-4 w-4" /> Deposit via Bridge
           </Button>
         )}
       </DialogTrigger>
@@ -86,11 +76,18 @@ export function DepositModal({ trigger, balance }: DepositModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowDownToLine className="h-5 w-5 text-primary" />
-            Transfer Crypto
+            Deposit to Polymarket Bridge
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5">
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
+            <p className="text-[10px] text-warning font-medium mb-1">⚠️ Bridge Deposit Address</p>
+            <p className="text-[10px] text-muted-foreground">
+              This address is for depositing crypto via the Polymarket Bridge. Funds will be converted to USDC.e and credited to your Polymarket account. This is <strong>not</strong> your trading wallet address.
+            </p>
+          </div>
+
           {/* Balance display */}
           {balance && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
@@ -99,31 +96,9 @@ export function DepositModal({ trigger, balance }: DepositModalProps) {
             </div>
           )}
 
-          {/* Token selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Supported Token</label>
-            <Select value={token} onValueChange={setToken}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPORTED_TOKENS.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <span className="flex items-center gap-2">
-                      <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {t.icon}
-                      </span>
-                      {t.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* Chain selector */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Supported Chain</label>
+            <label className="text-xs font-medium text-muted-foreground">Send From Chain</label>
             <Select value={chain} onValueChange={setChain}>
               <SelectTrigger>
                 <SelectValue />
@@ -136,6 +111,9 @@ export function DepositModal({ trigger, balance }: DepositModalProps) {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[9px] text-muted-foreground">
+              Send any supported token from this chain. It will be converted to USDC.e automatically.
+            </p>
           </div>
 
           {/* Deposit address */}

@@ -46,7 +46,6 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
       }
 
       const timestamp = String(Math.floor(Date.now() / 1000));
-      // Polymarket derive uses nonce "0" by convention
       const nonce = "0";
       const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
       const types = {
@@ -103,7 +102,12 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
     return (
       <div className="rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
         <Check className="h-3.5 w-3.5 text-yes shrink-0" />
-        <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
+        <div className="text-[10px]">
+          <span className="text-yes font-medium">Wallet ready</span>
+          {readiness.usdc.usdcBalance === 0 && (
+            <span className="text-muted-foreground ml-1">— Fund your wallet with USDC.e to trade</span>
+          )}
+        </div>
       </div>
     );
   }
