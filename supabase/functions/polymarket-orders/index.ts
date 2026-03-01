@@ -86,7 +86,7 @@ serve(async (req) => {
     // ── Fetch open orders from CLOB ──
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const requestPath = "/orders";
+    const requestPath = "/data/orders";
     const signMessage = timestamp + "GET" + requestPath;
     const signature = await hmacSign(creds.secret, signMessage);
 
