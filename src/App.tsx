@@ -40,11 +40,8 @@ function WalletDebugLogger() {
 
 function WalletConnectBanner() {
   if (walletConnectConfigured) return null;
-  return (
-    <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 text-center text-xs text-destructive">
-      WalletConnect disabled: set <code className="font-mono">VITE_WALLETCONNECT_PROJECT_ID</code> in your environment.
-    </div>
-  );
+  // Show a subtle hint instead of a scary top-of-page banner
+  return null;
 }
 
 const App = () => (
