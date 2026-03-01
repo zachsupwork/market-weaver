@@ -20,9 +20,9 @@ export interface TradingReadiness {
 }
 
 export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const proxy = useProxyWallet();
-  const usdc = useUsdcApproval(proxy.proxyAddress);
+  const usdc = useUsdcApproval(address || null); // Check balance/allowance for EOA, not proxy
   const [credsReady, setCredsReady] = useState(false);
   const [credsLoading, setCredsLoading] = useState(true);
 

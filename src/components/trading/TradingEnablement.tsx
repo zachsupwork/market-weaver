@@ -103,7 +103,9 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
     return (
       <div className="rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
         <Check className="h-3.5 w-3.5 text-yes shrink-0" />
-        <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
+        <span className="text-[10px] text-yes font-medium">
+          Setup complete{readiness.usdc.usdcBalance > 0 ? " — ready to trade" : " — fund USDC.e to start trading"}
+        </span>
       </div>
     );
   }
