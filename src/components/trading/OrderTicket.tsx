@@ -1,14 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
 import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus } from "lucide-react";
-import { useAccount } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
 import { TradingEnablement } from "@/components/trading/TradingEnablement";
+import { FundingRequiredBanner } from "@/components/trading/FundingRequiredBanner";
 import { supabase } from "@/integrations/supabase/client";
-import { ClobClient, Side as ClobSide, SignatureType } from "@polymarket/clob-client";
+import { ClobClient, Side as ClobSide } from "@polymarket/clob-client";
 import { ethers } from "ethers";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
 
@@ -24,12 +26,13 @@ const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
 
 export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTradable = true }: OrderTicketProps) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
-  const [amount, setAmount] = useState(0); // Dollar amount
+  const [amount, setAmount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
   const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const { proxyAddress } = useProxyWallet();
 
   const readiness = useTradingReadiness(side === "BUY" ? amount : 0);
@@ -41,10 +44,42 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     ? (shares * (1 - price)).toFixed(2)
     : (shares * price).toFixed(2);
 
-  const hasInsufficientBalance = side === "BUY" && amount > readiness.usdc.usdcBalance && readiness.usdc.usdcBalance > 0;
-  const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
+  const isPolygon = chainId === polygon.id;
+  const requiredUsdc = side === "BUY" ? amount : 0;
+  const hasSufficientBalance = requiredUsdc <= 0 || readiness.usdc.usdcBalance >= requiredUsdc;
+  const needsFunding = isPolygon && requiredUsdc > 0 && !hasSufficientBalance;
+  const needsApproval = isPolygon && hasSufficientBalance && readiness.usdc.needsApproval;
 
+  // Block confirm when: wrong chain, insufficient balance, needs approval, or setup incomplete
+  const canConfirm = isConnected && isPolygon && isTradable && amount > 0 &&
+    hasSufficientBalance && !readiness.usdc.needsApproval && readiness.allReady &&
+    localStorage.getItem(TRADING_AGE_KEY) === "true";
+
+  const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
   const quickAmounts = [1, 5, 10, 100];
+
+  // Auto-refresh polling when funding is needed
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevBalance = useRef(readiness.usdc.usdcBalance);
+
+  useEffect(() => {
+    if (needsFunding || needsApproval) {
+      pollingRef.current = setInterval(() => {
+        readiness.usdc.refresh?.();
+      }, 6000);
+      return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    } else {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    }
+  }, [needsFunding, needsApproval]);
+
+  // Toast on balance/approval changes
+  useEffect(() => {
+    if (prevBalance.current < requiredUsdc && readiness.usdc.usdcBalance >= requiredUsdc && requiredUsdc > 0) {
+      toast.success("USDC.e received — you can approve now.");
+    }
+    prevBalance.current = readiness.usdc.usdcBalance;
+  }, [readiness.usdc.usdcBalance, requiredUsdc]);
 
   function adjustAmount(delta: number) {
     setAmount((prev) => Math.max(0, Math.round((prev + delta) * 100) / 100));
@@ -53,12 +88,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isConnected || !address) { toast.error("Connect your wallet first"); return; }
-    if (!isTradable) { toast.error("This market is not currently tradable"); return; }
-    if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
-    if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
-    if (amount <= 0) { toast.error("Enter an amount"); return; }
-    if (hasInsufficientBalance) { toast.error("Insufficient USDC.e balance"); return; }
+    if (!canConfirm) return;
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -178,10 +208,10 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         </div>
       )}
 
-      {isConnected && ageConfirmed && readiness.allReady && (
+      {isConnected && ageConfirmed && readiness.allReady && !needsFunding && !needsApproval && (
         <div className="mb-3 rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
           <Check className="h-3.5 w-3.5 text-yes shrink-0" />
-          <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
+          <span className="text-[10px] text-yes font-medium">Trading enabled — ready to place orders</span>
         </div>
       )}
 
@@ -204,7 +234,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           )}>Sell</button>
       </div>
 
-      {/* Dollar amount input - Polymarket style */}
+      {/* Dollar amount input */}
       <div className="mb-4">
         <div className="flex items-center justify-center gap-4 py-3">
           <button type="button" onClick={() => adjustAmount(-1)} disabled={amount <= 0 || !isConnected}
@@ -283,9 +313,21 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
             <span className="text-muted-foreground">Potential Return</span>
             <span className="font-mono text-yes">+${potentialReturn}</span>
           </div>
-          {hasInsufficientBalance && (
-            <p className="text-[10px] text-destructive font-medium">Insufficient USDC.e balance</p>
-          )}
+        </div>
+      )}
+
+      {/* Funding / Approval banner */}
+      {isConnected && ageConfirmed && readiness.allReady && address && (needsFunding || needsApproval || !isPolygon) && (
+        <div className="mb-3">
+          <FundingRequiredBanner
+            traderAddress={address}
+            requiredUsdc={requiredUsdc}
+            usdcBalance={readiness.usdc.usdcBalance}
+            needsApproval={readiness.usdc.needsApproval}
+            isApproving={readiness.usdc.isApproving}
+            onApprove={readiness.usdc.approve}
+            onRefresh={() => readiness.usdc.refresh?.()}
+          />
         </div>
       )}
 
@@ -308,7 +350,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || amount <= 0 || !isConnected || !isTradable || hasInsufficientBalance || !readiness.allReady || !ageConfirmed}
+        disabled={submitting || !canConfirm}
         className={cn(
           "w-full rounded-lg py-3 text-sm font-bold transition-all disabled:opacity-50",
           side === "BUY" ? "bg-yes text-yes-foreground hover:bg-yes/90" : "bg-no text-no-foreground hover:bg-no/90"
@@ -318,8 +360,14 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           <Loader2 className="h-4 w-4 animate-spin mx-auto" />
         ) : !isConnected ? (
           "Connect Wallet"
+        ) : !isPolygon ? (
+          "Switch to Polygon"
         ) : !readiness.allReady ? (
           "Complete Setup Above"
+        ) : needsFunding ? (
+          "Fund USDC.e First"
+        ) : needsApproval ? (
+          "Approve First"
         ) : showConfirm ? (
           `Confirm ${side} ${outcome}`
         ) : amount > 0 ? (
