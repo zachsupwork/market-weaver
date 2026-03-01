@@ -57,7 +57,7 @@ const balanceOfAbi = [
  * All approvals execute in a single gasless transaction — the user
  * only signs once and the relayer pays gas.
  */
-export function useUsdcApproval(safeAddress: string | null) {
+export function useUsdcApproval(traderAddress: string | null) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { getClient } = useRelayClient();
@@ -69,10 +69,10 @@ export function useUsdcApproval(safeAddress: string | null) {
 
   // Check all approvals on-chain
   const checkApprovals = useCallback(async () => {
-    if (!safeAddress || !publicClient) return;
+    if (!traderAddress || !publicClient) return;
     setIsChecking(true);
     try {
-      const safeAddr = safeAddress as `0x${string}`;
+      const traderAddr = traderAddress as `0x${string}`;
 
       // Check ERC-20 allowances
       const erc20Checks = await Promise.all(
@@ -81,7 +81,7 @@ export function useUsdcApproval(safeAddress: string | null) {
             address: USDC_E,
             abi: erc20Abi,
             functionName: "allowance",
-            args: [safeAddr, spender],
+            args: [traderAddr, spender],
           } as any)
         )
       );
@@ -93,7 +93,7 @@ export function useUsdcApproval(safeAddress: string | null) {
             address: CTF_CONTRACT,
             abi: erc1155Abi,
             functionName: "isApprovedForAll",
-            args: [safeAddr, operator],
+            args: [traderAddr, operator],
           } as any)
         )
       );
@@ -103,7 +103,7 @@ export function useUsdcApproval(safeAddress: string | null) {
         address: USDC_E,
         abi: balanceOfAbi,
         functionName: "balanceOf",
-        args: [safeAddr],
+        args: [traderAddr],
       } as any);
       setUsdcBalance(Number(balance) / 1e6);
 
@@ -117,11 +117,11 @@ export function useUsdcApproval(safeAddress: string | null) {
     } finally {
       setIsChecking(false);
     }
-  }, [safeAddress, publicClient]);
+  }, [traderAddress, publicClient]);
 
   useEffect(() => {
-    if (safeAddress) checkApprovals();
-  }, [safeAddress, checkApprovals]);
+    if (traderAddress) checkApprovals();
+  }, [traderAddress, checkApprovals]);
 
   // Create batch approval transactions
   const createApprovalTxs = useCallback(() => {
