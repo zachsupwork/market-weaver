@@ -166,6 +166,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           await readiness.refreshCreds();
         } else if (errLower.includes("invalid nonce") || errLower.includes("nonce")) {
           toast.error("Order failed due to a nonce error. Please try again.", { duration: 5000 });
+        } else {
           toast.error(errMsg);
         }
       }
