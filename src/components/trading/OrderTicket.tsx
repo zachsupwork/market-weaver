@@ -95,10 +95,15 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
+      // Pass proxyAddress as funderAddress (6th arg) so the order's "maker"
+      // points to the Trading Wallet (Safe/proxy) where the USDC.e balance lives.
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
-        signer
+        signer,
+        undefined,         // creds – not needed for client-side signing
+        undefined,         // signatureType – default EOA
+        proxyAddress ?? undefined,  // funderAddress → sets maker to proxy wallet
       );
 
       const eoaAddr = (await signer.getAddress()).toLowerCase();
@@ -140,9 +145,18 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         const isAuthError = result.code === "GEOBLOCKED" || result.code === "NO_CREDS" || result.code === "INVALID_API_KEY"
           || errLower.includes("expired") || errLower.includes("unauthorized") || errLower.includes("invalid api key")
           || errLower.includes("signer") || errLower.includes("not match");
+        const isBalanceError = errLower.includes("not enough balance") || errLower.includes("balance/allowance")
+          || errLower.includes("insufficient") || errLower.includes("allowance");
 
         if (result.code === "GEOBLOCKED") {
           toast.error("Trading is not available in your jurisdiction.");
+        } else if (isBalanceError) {
+          toast.error(
+            `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
+            { duration: 8000 }
+          );
+          // Re-check approvals in case they lapsed
+          readiness.usdc.recheckBalances();
         } else if (isAuthError) {
           toast.error("Order failed: Please check your Polymarket credentials in Settings and re-derive if needed.", { duration: 6000 });
           await readiness.refreshCreds();
