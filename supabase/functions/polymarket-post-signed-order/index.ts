@@ -158,7 +158,9 @@ serve(async (req) => {
 
     const polyAddress = (credRow.address || "").toLowerCase();
 
+    const orderParsed = JSON.parse(orderBody);
     console.log(`[post-order] user=${user.id}, apiKey=…${creds.apiKey.slice(-6)}, addr=${polyAddress}, bodyLen=${orderBody.length}`);
+    console.log(`[post-order] order.maker=${orderParsed?.order?.maker}, order.signer=${orderParsed?.order?.signer}, signatureType=${orderParsed?.order?.signatureType}`);
 
     const res = await fetch(`${clobHost}${requestPath}`, {
       method,

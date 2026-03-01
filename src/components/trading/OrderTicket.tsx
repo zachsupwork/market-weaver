@@ -89,15 +89,26 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
-      // funderAddress must be the proxy/Safe address (maker), not the EOA
+      // funderAddress = proxy/Safe (maker), signer = EOA
+      // POLY_GNOSIS_SAFE (2) because useProxyWallet deploys a Gnosis Safe
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
         signer,
         undefined,
-        SignatureType.POLY_PROXY,
+        SignatureType.POLY_GNOSIS_SAFE,
         proxyAddress
       );
+
+      console.log("[OrderTicket] Creating order:", {
+        signerAddress: await signer.getAddress(),
+        proxyAddress,
+        signatureType: "POLY_GNOSIS_SAFE (2)",
+        tokenId,
+        side,
+        price,
+        size: Number(shares.toFixed(6)),
+      });
 
       const signedOrder = await clobClient.createOrder({
         tokenID: tokenId,
