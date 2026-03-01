@@ -280,7 +280,21 @@ export async function postSignedOrder(
   const { data, error } = await supabase.functions.invoke("polymarket-post-signed-order", {
     body: { signedOrder, orderType },
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // Extract the real JSON error body from the edge function response
+    const ctxBody = (error as any)?.context?.body;
+    if (ctxBody) {
+      try {
+        const text = typeof ctxBody === "string" ? ctxBody : await ctxBody.text?.() ?? String(ctxBody);
+        const parsed = JSON.parse(text);
+        console.error("[postSignedOrder] edge function error body:", parsed);
+        return parsed;
+      } catch {
+        return { ok: false, error: `${error.message}: ${String(ctxBody).slice(0, 500)}` };
+      }
+    }
+    return { ok: false, error: error.message };
+  }
   return data;
 }
 
