@@ -57,13 +57,10 @@ const balanceOfAbi = [
  * All approvals execute in a single gasless transaction — the user
  * only signs once and the relayer pays gas.
  */
-export function useUsdcApproval(traderAddress: string | null) {
+export function useUsdcApproval(safeAddress: string | null) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { getClient } = useRelayClient();
-
-  // Use the provided traderAddress (should be EOA) for balance/allowance checks
-  const checkAddress = traderAddress || (address as string | undefined) || null;
 
   const [allApproved, setAllApproved] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
@@ -72,10 +69,10 @@ export function useUsdcApproval(traderAddress: string | null) {
 
   // Check all approvals on-chain
   const checkApprovals = useCallback(async () => {
-    if (!checkAddress || !publicClient) return;
+    if (!safeAddress || !publicClient) return;
     setIsChecking(true);
     try {
-      const safeAddr = checkAddress as `0x${string}`;
+      const safeAddr = safeAddress as `0x${string}`;
 
       // Check ERC-20 allowances
       const erc20Checks = await Promise.all(
@@ -120,11 +117,11 @@ export function useUsdcApproval(traderAddress: string | null) {
     } finally {
       setIsChecking(false);
     }
-  }, [checkAddress, publicClient]);
+  }, [safeAddress, publicClient]);
 
   useEffect(() => {
-    if (checkAddress) checkApprovals();
-  }, [checkAddress, checkApprovals]);
+    if (safeAddress) checkApprovals();
+  }, [safeAddress, checkApprovals]);
 
   // Create batch approval transactions
   const createApprovalTxs = useCallback(() => {
@@ -186,6 +183,5 @@ export function useUsdcApproval(traderAddress: string | null) {
     isConfirmed: allApproved,
     usdcBalance,
     approvalProgress: allApproved ? 1 : 0,
-    refresh: checkApprovals,
   };
 }
