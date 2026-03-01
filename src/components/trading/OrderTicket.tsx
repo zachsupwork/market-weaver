@@ -262,7 +262,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
           {readiness.usdc.usdcBalance === 0 && (
             <div className="space-y-1">
               <p className="text-[10px] text-muted-foreground">
-                Send <span className="font-semibold text-foreground">USDC.e</span> on Polygon to your trading wallet:
+                Send <span className="font-semibold text-foreground">USDC.e</span> on Polygon to your <span className="font-semibold text-foreground">Trading Wallet (Safe/proxy)</span>:
               </p>
               <div className="flex items-center gap-1.5">
                 <code className="text-[9px] font-mono bg-muted rounded px-1.5 py-0.5 text-foreground break-all flex-1">
@@ -277,6 +277,9 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
               </div>
               <p className="text-[9px] text-muted-foreground">
                 USDC.e contract: <code className="font-mono">0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code>
+              </p>
+              <p className="text-[9px] text-muted-foreground italic">
+                Your MetaMask balance is not used until you transfer to the Trading Wallet.
               </p>
             </div>
           )}

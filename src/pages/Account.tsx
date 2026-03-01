@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAccount, useBalance, useReadContract } from "wagmi";
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSearchParams, Link } from "react-router-dom";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits, erc20Abi } from "viem";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Wallet, RefreshCw, Loader2, PieChart, ClipboardList, History,
   ArrowDownToLine, ArrowUpFromLine, AlertCircle, Info, ChevronDown,
-  DollarSign, ExternalLink, Banknote, Settings,
+  DollarSign, ExternalLink, Banknote, Settings, Copy, Check, ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,10 @@ import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
+import { useProxyWallet } from "@/hooks/useProxyWallet";
+import { QRCodeSVG } from "qrcode.react";
+import { POLYGON_USDCE_ADDRESS, POLYGON_USDC_ADDRESS } from "@/lib/constants/tokens";
+import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
 import {
   createDepositAddress,
   fetchOpenOrders,
@@ -29,12 +34,11 @@ import {
   cancelOrder,
 } from "@/lib/polymarket-api";
 
-const USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const;
-const erc20Abi = [
+const balanceOfAbi = [
   {
     name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
+    type: "function" as const,
+    stateMutability: "view" as const,
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
@@ -57,41 +61,102 @@ export default function Account() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get("tab") as Tab) || "balances";
   const [tab, setTab] = useState<Tab>(initialTab);
+  const { proxyAddress } = useProxyWallet();
 
-  // Balances
+  // ── Balances ──────────────────────────────────────────────
   const { data: maticBalance, refetch: refetchMatic } = useBalance({ address });
-  const { data: usdcRaw, refetch: refetchUsdc } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: erc20Abi,
+
+  // Trading Wallet (proxy) USDC.e
+  const { data: proxyUsdcERaw, refetch: refetchProxyUsdcE } = useReadContract({
+    address: POLYGON_USDCE_ADDRESS,
+    abi: balanceOfAbi,
+    functionName: "balanceOf",
+    args: proxyAddress ? [proxyAddress as `0x${string}`] : undefined,
+    query: { enabled: !!proxyAddress },
+  });
+
+  // My Wallet (EOA) USDC.e
+  const { data: eoaUsdcERaw, refetch: refetchEoaUsdcE } = useReadContract({
+    address: POLYGON_USDCE_ADDRESS,
+    abi: balanceOfAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    query: { enabled: !!address },
   });
+
+  // My Wallet (EOA) native USDC (for display)
+  const { data: eoaUsdcRaw, refetch: refetchEoaUsdc } = useReadContract({
+    address: POLYGON_USDC_ADDRESS,
+    abi: balanceOfAbi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
   const [balanceUpdated, setBalanceUpdated] = useState<Date | null>(null);
 
-  const usdcFormatted = usdcRaw ? parseFloat(formatUnits(usdcRaw as bigint, 6)).toFixed(2) : "0.00";
+  const proxyUsdcE = proxyUsdcERaw ? parseFloat(formatUnits(proxyUsdcERaw as bigint, 6)) : 0;
+  const eoaUsdcE = eoaUsdcERaw ? parseFloat(formatUnits(eoaUsdcERaw as bigint, 6)) : 0;
+  const eoaUsdc = eoaUsdcRaw ? parseFloat(formatUnits(eoaUsdcRaw as bigint, 6)) : 0;
   const maticFormatted = maticBalance ? parseFloat(formatUnits(maticBalance.value, maticBalance.decimals)).toFixed(4) : "0";
 
-  // Positions
+  // ── Transfer EOA → Proxy ─────────────────────────────────
+  const [transferAmount, setTransferAmount] = useState("");
+  const { writeContract, data: txHash, isPending: isSending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+
+  useEffect(() => {
+    if (isConfirmed && txHash) {
+      toast({ title: "Transfer confirmed!" });
+      setTransferAmount("");
+      refreshBalances();
+    }
+  }, [isConfirmed]);
+
+  function handleTransfer() {
+    if (!address || !proxyAddress || !transferAmount) return;
+    const parsedAmt = parseFloat(transferAmount);
+    if (isNaN(parsedAmt) || parsedAmt <= 0 || parsedAmt > eoaUsdcE) return;
+    writeContract({
+      account: address,
+      chain: polygon,
+      address: POLYGON_USDCE_ADDRESS,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [proxyAddress as `0x${string}`, parseUnits(transferAmount, 6)],
+    });
+  }
+
+  // ── Deposit address (copied) ─────────────────────────────
+  const [copied, setCopied] = useState(false);
+  function copyAddress(addr: string) {
+    navigator.clipboard.writeText(addr);
+    setCopied(true);
+    toast({ title: "Address copied!" });
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // ── Positions ────────────────────────────────────────────
   const { data: positions, isLoading: posLoading, error: posError, refetch: refetchPositions } = usePositions();
 
-  // Deposit
+  // ── Bridge Deposit (secondary) ───────────────────────────
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositInfo, setDepositInfo] = useState<any>(null);
   const [depositError, setDepositError] = useState<any>(null);
 
-  // Withdraw
+  // ── Withdraw ─────────────────────────────────────────────
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawDest, setWithdrawDest] = useState("");
   const [withdrawChain, setWithdrawChain] = useState("polygon");
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<any>(null);
 
-  // Orders
+  // ── Orders ───────────────────────────────────────────────
   const [orders, setOrders] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
 
-  // Trades
+  // ── Trades ───────────────────────────────────────────────
   const [trades, setTrades] = useState<any[]>([]);
   const [tradesLoading, setTradesLoading] = useState(false);
 
@@ -101,21 +166,17 @@ export default function Account() {
   }
 
   const refreshBalances = useCallback(async () => {
-    await Promise.all([refetchMatic(), refetchUsdc()]);
+    await Promise.all([refetchMatic(), refetchProxyUsdcE(), refetchEoaUsdcE(), refetchEoaUsdc()]);
     setBalanceUpdated(new Date());
-  }, [refetchMatic, refetchUsdc]);
+  }, [refetchMatic, refetchProxyUsdcE, refetchEoaUsdcE, refetchEoaUsdc]);
 
-  // Load orders
   async function loadOrders() {
     setOrdersLoading(true);
     setOrdersError(null);
     try {
       const res = await fetchOpenOrders();
-      if (res.ok) {
-        setOrders(res.orders || []);
-      } else {
-        setOrdersError(res.error || "Failed to load orders");
-      }
+      if (res.ok) setOrders(res.orders || []);
+      else setOrdersError(res.error || "Failed to load orders");
     } catch (err: any) {
       setOrdersError(err.message);
     } finally {
@@ -123,7 +184,6 @@ export default function Account() {
     }
   }
 
-  // Load trades
   async function loadTrades() {
     if (!address) return;
     setTradesLoading(true);
@@ -137,14 +197,12 @@ export default function Account() {
     }
   }
 
-  // Auto-load on tab switch
   useEffect(() => {
     if (tab === "orders" && orders.length === 0 && !ordersLoading) loadOrders();
     if (tab === "trades" && trades.length === 0 && !tradesLoading) loadTrades();
     if (tab === "positions" && !posLoading) refetchPositions();
   }, [tab]);
 
-  // Deposit handler
   async function handleDeposit() {
     if (!address) return;
     setDepositLoading(true);
@@ -153,15 +211,10 @@ export default function Account() {
       const result = await createDepositAddress(address);
       if (result.ok) {
         setDepositInfo(result.deposit);
-        toast({ title: "Deposit address retrieved" });
+        toast({ title: "Bridge deposit address retrieved" });
       } else {
-        console.error("[Account] deposit failed:", result);
         setDepositError(result);
-        toast({
-          title: `Deposit failed${result.upstreamStatus ? ` (${result.upstreamStatus})` : ""}`,
-          description: result.error || "Unknown error",
-          variant: "destructive",
-        });
+        toast({ title: "Deposit failed", description: result.error || "Unknown error", variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -170,7 +223,6 @@ export default function Account() {
     }
   }
 
-  // Withdraw handler
   async function handleWithdraw() {
     if (!withdrawAmount || !withdrawDest) {
       toast({ title: "Enter amount and destination", variant: "destructive" });
@@ -179,21 +231,12 @@ export default function Account() {
     setWithdrawLoading(true);
     setWithdrawResult(null);
     try {
-      const res = await initiateWithdrawal({
-        amount: withdrawAmount,
-        destinationAddress: withdrawDest,
-        chain: withdrawChain,
-      });
+      const res = await initiateWithdrawal({ amount: withdrawAmount, destinationAddress: withdrawDest, chain: withdrawChain });
       if (res.ok) {
         setWithdrawResult(res.withdrawal);
         toast({ title: "Withdrawal initiated" });
       } else {
-        console.error("[Account] withdraw failed:", res);
-        toast({
-          title: `Withdraw failed${res.upstreamStatus ? ` (${res.upstreamStatus})` : ""}`,
-          description: res.error || "Unknown error",
-          variant: "destructive",
-        });
+        toast({ title: "Withdraw failed", description: res.error || "Unknown error", variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -202,16 +245,11 @@ export default function Account() {
     }
   }
 
-  // Cancel order
   async function handleCancelOrder(orderId: string) {
     try {
       const res = await cancelOrder(orderId);
-      if (res.ok) {
-        toast({ title: "Order cancelled" });
-        loadOrders();
-      } else {
-        toast({ title: "Cancel failed", description: res.error, variant: "destructive" });
-      }
+      if (res.ok) { toast({ title: "Order cancelled" }); loadOrders(); }
+      else toast({ title: "Cancel failed", description: res.error, variant: "destructive" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -258,12 +296,12 @@ export default function Account() {
         {/* Quick stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="p-3">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">USDC</span>
-            <p className="font-mono text-lg font-bold">${usdcFormatted}</p>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Trading USDC.e</span>
+            <p className="font-mono text-lg font-bold">${proxyUsdcE.toFixed(2)}</p>
           </Card>
           <Card className="p-3">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">POL</span>
-            <p className="font-mono text-lg font-bold">{maticFormatted}</p>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">My Wallet USDC.e</span>
+            <p className="font-mono text-lg font-bold">${eoaUsdcE.toFixed(2)}</p>
           </Card>
           <Card className="p-3">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Positions</span>
@@ -303,24 +341,59 @@ export default function Account() {
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh
               </Button>
             </div>
+
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="text-[10px] text-muted-foreground">
+                Trading uses your <strong className="text-foreground">Trading Wallet (Safe/proxy)</strong>. Fund it with <strong className="text-foreground">USDC.e</strong> on Polygon.
+              </p>
+            </div>
+
             {balanceUpdated && (
               <p className="text-[10px] text-muted-foreground">Last updated: {balanceUpdated.toLocaleTimeString()}</p>
             )}
+
             <div className="grid gap-3 sm:grid-cols-2">
-              <Card>
+              {/* Trading Wallet USDC.e */}
+              <Card className="border-primary/20">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                       <DollarSign className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">USDC</p>
-                      <p className="text-[10px] text-muted-foreground">Polygon (PoS)</p>
+                      <p className="text-sm font-semibold">Trading Wallet (USDC.e)</p>
+                      <p className="text-[10px] text-muted-foreground">Safe/proxy — used for orders</p>
                     </div>
                   </div>
-                  <p className="font-mono text-2xl font-bold">${usdcFormatted}</p>
+                  <p className="font-mono text-2xl font-bold">${proxyUsdcE.toFixed(2)}</p>
+                  {proxyAddress && (
+                    <p className="text-[9px] font-mono text-muted-foreground mt-1 break-all">{proxyAddress}</p>
+                  )}
                 </CardContent>
               </Card>
+
+              {/* My Wallet USDC.e */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
+                      <Wallet className="h-4 w-4 text-accent-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">My Wallet (USDC.e)</p>
+                      <p className="text-[10px] text-muted-foreground">Your connected wallet</p>
+                    </div>
+                  </div>
+                  <p className="font-mono text-2xl font-bold">${eoaUsdcE.toFixed(2)}</p>
+                  {eoaUsdc > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      + ${eoaUsdc.toFixed(2)} native USDC <span className="opacity-60">(not tradeable)</span>
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* POL */}
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -336,6 +409,65 @@ export default function Account() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Transfer EOA → Proxy */}
+            {address && proxyAddress && eoaUsdcE > 0 && (
+              <Card className="border-primary/20">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ArrowRightLeft className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold">Transfer USDC.e → Trading Wallet</p>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Move USDC.e from your connected wallet to your Trading Wallet so you can place orders.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[5, 10].map((v) => (
+                      <Button key={v} type="button" variant="outline" size="sm" className="text-xs font-mono"
+                        disabled={eoaUsdcE < v}
+                        onClick={() => setTransferAmount(String(v))}>
+                        ${v}
+                      </Button>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" className="text-xs font-mono"
+                      onClick={() => setTransferAmount(String(Math.floor(eoaUsdcE * 100) / 100))}>
+                      Max (${(Math.floor(eoaUsdcE * 100) / 100).toFixed(2)})
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      className="font-mono text-xs flex-1"
+                      step="0.01"
+                    />
+                    <Button onClick={handleTransfer}
+                      disabled={isSending || isConfirming || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > eoaUsdcE}
+                      className="gap-1.5">
+                      {(isSending || isConfirming) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
+                      Transfer
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Convert USDC → USDC.e */}
+            {eoaUsdc > 0 && eoaUsdcE === 0 && (
+              <div className="rounded-md border border-warning/30 bg-warning/5 p-3 space-y-1.5">
+                <p className="text-xs font-medium text-warning flex items-center gap-1">
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  You have ${eoaUsdc.toFixed(2)} native USDC but trading requires USDC.e
+                </p>
+                <a href={USDC_TO_USDC_E_SWAP_URL} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all">
+                  Convert USDC → USDC.e <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button onClick={() => changeTab("deposit")} className="gap-1.5">
                 <ArrowDownToLine className="h-4 w-4" /> Deposit
@@ -350,56 +482,134 @@ export default function Account() {
         {/* ─── Deposit Tab ────────────────────────────── */}
         {tab === "deposit" && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Deposit Funds</h2>
+            <h2 className="text-lg font-semibold">Fund Trading Wallet</h2>
 
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground gap-1">
-                  <Info className="h-3.5 w-3.5" /> How deposits work <ChevronDown className="h-3 w-3" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 rounded-md border border-border bg-muted/30 p-3 space-y-2 text-xs text-muted-foreground">
-                <p>• Polymarket uses <strong className="text-foreground">USDC.e on Polygon</strong> as collateral.</p>
-                <p>• Bridge deposits from other chains are <strong className="text-foreground">converted automatically</strong>.</p>
-                <p>• Check minimum deposit amounts and supported assets before sending.</p>
-                <p>• Track deposit progress using the status checker below.</p>
-              </CollapsibleContent>
-            </Collapsible>
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="text-[10px] text-muted-foreground">
+                To trade, fund the <strong className="text-foreground">Trading Wallet</strong> address below with <strong className="text-foreground">USDC.e</strong> on Polygon.
+              </p>
+            </div>
 
-            {!depositAddresses && (
-              <Button onClick={handleDeposit} disabled={depositLoading} className="w-full sm:w-auto gap-1.5">
-                {depositLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
-                {depositLoading ? "Loading…" : "Get Deposit Address"}
-              </Button>
-            )}
+            {/* PRIMARY: Trading Wallet address for USDC.e on Polygon */}
+            {proxyAddress ? (
+              <Card className="border-primary/20">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm font-semibold">Deposit USDC.e (Polygon)</p>
+                      <p className="text-[10px] text-muted-foreground">Send USDC.e to your Trading Wallet</p>
+                    </div>
+                  </div>
 
-            {depositError && (
-              <Card className="border-destructive/30 bg-destructive/5">
-                <CardContent className="p-3 space-y-2">
-                  <p className="text-xs text-destructive">
-                    {depositError.error}{depositError.upstreamStatus ? ` (${depositError.upstreamStatus})` : ""}
+                  <div className="flex justify-center">
+                    <div className="bg-white p-3 rounded-lg">
+                      <QRCodeSVG value={proxyAddress} size={160} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono break-all bg-background rounded px-3 py-2 border border-border">
+                      {proxyAddress}
+                    </code>
+                    <Button variant="outline" size="icon" onClick={() => copyAddress(proxyAddress)} className="shrink-0">
+                      {copied ? <Check className="h-4 w-4 text-yes" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+
+                  <p className="text-[9px] text-muted-foreground text-center">
+                    USDC.e contract: <code className="font-mono">0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code>
                   </p>
-                  <details className="text-[10px] text-muted-foreground">
-                    <summary className="cursor-pointer">Details</summary>
-                    <pre className="mt-1 whitespace-pre-wrap break-all">{JSON.stringify(depositError, null, 2)}</pre>
-                  </details>
+
+                  <div className="text-center">
+                    <p className="font-mono text-lg font-bold">${proxyUsdcE.toFixed(2)} <span className="text-xs text-muted-foreground font-normal">USDC.e</span></p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-warning/30 bg-warning/5">
+                <CardContent className="p-4 text-center space-y-2">
+                  <AlertCircle className="h-6 w-6 text-warning mx-auto" />
+                  <p className="text-sm text-warning font-medium">Trading wallet not deployed</p>
+                  <p className="text-[10px] text-muted-foreground">Complete the setup steps in the Trade page to deploy your Trading Wallet.</p>
                 </CardContent>
               </Card>
             )}
 
-            {depositAddresses && (
-              <div className="space-y-4">
-                <DepositAddressCard addresses={depositAddresses} note={depositInfo?.note} />
-                <Separator />
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium">Deposit Status</h3>
-                  <DepositStatusTracker address={trackingAddress} />
-                </div>
-                <Button variant="outline" size="sm" onClick={handleDeposit} disabled={depositLoading} className="gap-1.5">
-                  <RefreshCw className={cn("h-3.5 w-3.5", depositLoading && "animate-spin")} /> Refresh Address
-                </Button>
-              </div>
+            {/* Transfer from EOA */}
+            {address && proxyAddress && eoaUsdcE > 0 && (
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ArrowRightLeft className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold">Or transfer from your wallet</p>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    You have ${eoaUsdcE.toFixed(2)} USDC.e in your connected wallet.
+                  </p>
+                  <div className="flex gap-2">
+                    {[5, 10].map((v) => (
+                      <Button key={v} type="button" variant="outline" size="sm" className="text-xs font-mono"
+                        disabled={eoaUsdcE < v}
+                        onClick={() => setTransferAmount(String(v))}>
+                        ${v}
+                      </Button>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" className="text-xs font-mono"
+                      onClick={() => setTransferAmount(String(Math.floor(eoaUsdcE * 100) / 100))}>
+                      Max
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input type="number" placeholder="0.00" value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      className="font-mono text-xs flex-1" step="0.01" />
+                    <Button onClick={handleTransfer}
+                      disabled={isSending || isConfirming || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > eoaUsdcE}
+                      className="gap-1.5">
+                      {(isSending || isConfirming) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
+                      Transfer
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             )}
+
+            <Separator />
+
+            {/* SECONDARY: Bridge deposit (other chains) */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground gap-1">
+                  <Info className="h-3.5 w-3.5" /> Other chains / Bridge deposit <ChevronDown className="h-3 w-3" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                  <p>Bridge deposits from other chains (Ethereum, Solana, Tron, Bitcoin) are converted to USDC.e automatically and credited to your Polymarket account.</p>
+                  <p className="text-[10px]">Note: This uses a separate bridge address, not your Trading Wallet.</p>
+                </div>
+                {!depositAddresses && (
+                  <Button onClick={handleDeposit} disabled={depositLoading} variant="outline" className="gap-1.5">
+                    {depositLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
+                    {depositLoading ? "Loading…" : "Get Bridge Deposit Address"}
+                  </Button>
+                )}
+                {depositError && (
+                  <Card className="border-destructive/30 bg-destructive/5">
+                    <CardContent className="p-3">
+                      <p className="text-xs text-destructive">{depositError.error}</p>
+                    </CardContent>
+                  </Card>
+                )}
+                {depositAddresses && (
+                  <div className="space-y-3">
+                    <DepositAddressCard addresses={depositAddresses} note={depositInfo?.note} />
+                    <DepositStatusTracker address={trackingAddress} />
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
 
@@ -416,29 +626,18 @@ export default function Account() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">Amount (USDC)</label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={withdrawAmount}
-                    onChange={(e) => setWithdrawAmount(e.target.value)}
-                    className="font-mono"
-                  />
+                  <Input type="number" placeholder="0.00" value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)} className="font-mono" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">Destination Address</label>
-                  <Input
-                    placeholder="0x..."
-                    value={withdrawDest}
-                    onChange={(e) => setWithdrawDest(e.target.value)}
-                    className="font-mono text-xs"
-                  />
+                  <Input placeholder="0x..." value={withdrawDest}
+                    onChange={(e) => setWithdrawDest(e.target.value)} className="font-mono text-xs" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">Destination Chain</label>
                   <Select value={withdrawChain} onValueChange={setWithdrawChain}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="polygon">Polygon</SelectItem>
                       <SelectItem value="ethereum">Ethereum</SelectItem>
@@ -452,7 +651,6 @@ export default function Account() {
                   {withdrawLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpFromLine className="h-4 w-4" />}
                   {withdrawLoading ? "Processing…" : "Withdraw"}
                 </Button>
-
                 {withdrawResult && (
                   <Card className="border-primary/30 bg-primary/5">
                     <CardContent className="p-3 space-y-2">
@@ -552,12 +750,7 @@ export default function Account() {
                           <Badge variant="outline" className="text-[10px] h-5">{order.status || "open"}</Badge>
                         </div>
                       </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleCancelOrder(order.id)}
-                        className="shrink-0"
-                      >
+                      <Button variant="destructive" size="sm" onClick={() => handleCancelOrder(order.id)} className="shrink-0">
                         Cancel
                       </Button>
                     </CardContent>
