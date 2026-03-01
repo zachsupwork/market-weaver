@@ -133,16 +133,31 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         toast.success(`${side} ${outcome} order placed — $${amount.toFixed(2)}`);
         setAmount(0);
         setShowConfirm(false);
-      } else if (result.code === "GEOBLOCKED") {
-        toast.error("Trading is not available in your jurisdiction");
-      } else if (result.code === "NO_CREDS" || result.code === "INVALID_API_KEY") {
-        toast.error("Trading credentials expired. Re-enable trading in Setup below.");
-        await readiness.refreshCreds();
       } else {
-        toast.error(result.error || "Order failed");
+        // User-friendly error mapping
+        const errMsg = result.error || "Order failed";
+        const errLower = errMsg.toLowerCase();
+        const isAuthError = result.code === "GEOBLOCKED" || result.code === "NO_CREDS" || result.code === "INVALID_API_KEY"
+          || errLower.includes("expired") || errLower.includes("unauthorized") || errLower.includes("invalid api key")
+          || errLower.includes("signer") || errLower.includes("not match");
+
+        if (result.code === "GEOBLOCKED") {
+          toast.error("Trading is not available in your jurisdiction.");
+        } else if (isAuthError) {
+          toast.error("Order failed: Please check your Polymarket credentials in Settings and re-derive if needed.", { duration: 6000 });
+          await readiness.refreshCreds();
+        } else {
+          toast.error(errMsg);
+        }
       }
     } catch (err: any) {
-      toast.error(err.message || "Order failed");
+      const msg = err.message || "Order failed";
+      const msgLower = msg.toLowerCase();
+      if (msgLower.includes("signer") || msgLower.includes("credential") || msgLower.includes("unauthorized")) {
+        toast.error("Order failed: Please check your Polymarket credentials in Settings.", { duration: 6000 });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }

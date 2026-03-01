@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { deriveApiCreds, checkUserCredsStatus, createDepositAddress } from "@/lib/polymarket-api";
+import { deriveApiCreds, checkUserCredsStatus, createDepositAddress, testUserCreds } from "@/lib/polymarket-api";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
@@ -34,6 +34,8 @@ export default function PolymarketSettings() {
   const [supabaseUser, setSupabaseUser] = useState<any>(null);
   const [depositError, setDepositError] = useState<any>(null);
   const [showDepositError, setShowDepositError] = useState(false);
+  const [testingAuth, setTestingAuth] = useState(false);
+  const [authTestResult, setAuthTestResult] = useState<{ valid: boolean; reason?: string } | null>(null);
 
   // Check Supabase auth state — attempt anonymous sign-in automatically
   useEffect(() => {
@@ -255,7 +257,7 @@ export default function PolymarketSettings() {
               <Loader2 className="h-4 w-4 animate-spin" /> Checking status...
             </div>
           ) : credStatus.hasCreds ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Badge className="bg-primary/20 text-primary border-primary/30">
                   <CheckCircle className="h-3 w-3 mr-1" /> Active
@@ -265,10 +267,50 @@ export default function PolymarketSettings() {
                 <p>Address: <span className="font-mono">{credStatus.address}</span></p>
                 <p>Last updated: {credStatus.updatedAt ? new Date(credStatus.updatedAt).toLocaleString() : "—"}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}>
-                {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Re-derive Credentials
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}>
+                  {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Re-derive Credentials
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={testingAuth}
+                  onClick={async () => {
+                    setTestingAuth(true);
+                    setAuthTestResult(null);
+                    try {
+                      const result = await testUserCreds();
+                      setAuthTestResult({ valid: result.valid, reason: result.reason });
+                      if (result.valid) {
+                        toast({ title: "Authentication OK", description: "Your Polymarket credentials are valid and working." });
+                      } else if (result.deleted) {
+                        toast({ title: "Credentials expired", description: "Stale credentials were removed. Please re-derive.", variant: "destructive" });
+                        await refreshCreds();
+                      } else {
+                        toast({ title: "Authentication failed", description: result.reason || "Credentials are invalid. Try re-deriving.", variant: "destructive" });
+                      }
+                    } catch (err: any) {
+                      setAuthTestResult({ valid: false, reason: err.message });
+                      toast({ title: "Test failed", description: err.message, variant: "destructive" });
+                    } finally {
+                      setTestingAuth(false);
+                    }
+                  }}
+                >
+                  {testingAuth ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Activity className="h-4 w-4 mr-2" />}
+                  Test Authentication
+                </Button>
+              </div>
+              {authTestResult && (
+                <div className={`rounded-md border p-3 text-xs ${authTestResult.valid ? "border-primary/30 bg-primary/5 text-primary" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
+                  {authTestResult.valid ? (
+                    <span className="flex items-center gap-1.5"><CheckCircle className="h-3.5 w-3.5" /> Polymarket CLOB authentication successful</span>
+                  ) : (
+                    <span className="flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" /> Auth failed{authTestResult.reason ? `: ${authTestResult.reason}` : ". Re-derive your credentials."}</span>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
