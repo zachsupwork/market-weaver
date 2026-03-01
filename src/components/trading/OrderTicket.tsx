@@ -89,21 +89,21 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
 
-      // funderAddress = proxy/Safe (maker), signer = EOA
-      // POLY_GNOSIS_SAFE (2) because useProxyWallet deploys a Gnosis Safe
+      // EOA signing so order.signer matches the API key address
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
         signer,
         undefined,
-        SignatureType.POLY_GNOSIS_SAFE,
+        SignatureType.EOA,
         proxyAddress
       );
 
+      const eoaAddr = (await signer.getAddress()).toLowerCase();
       console.log("[OrderTicket] Creating order:", {
-        signerAddress: await signer.getAddress(),
+        signerAddress: eoaAddr,
         proxyAddress,
-        signatureType: "POLY_GNOSIS_SAFE (2)",
+        signatureType: "EOA (0)",
         tokenId,
         side,
         price,
@@ -119,6 +119,13 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         nonce: Math.floor(Math.random() * 1e15),
         expiration: 0,
       });
+
+      // Verify signer matches EOA
+      const orderSigner = ((signedOrder as any)?.order?.signer ?? (signedOrder as any)?.signer ?? "").toLowerCase();
+      console.log("[OrderTicket] signerAddr", eoaAddr, "orderSigner", orderSigner);
+      if (orderSigner && orderSigner !== eoaAddr) {
+        throw new Error(`Signer mismatch: order signed by ${orderSigner} but your wallet is ${eoaAddr}. Re-enable trading with the same wallet.`);
+      }
 
       const result = await postSignedOrder(signedOrder, orderType);
 
