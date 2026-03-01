@@ -17,22 +17,30 @@ export interface PolymarketOrder {
   outcome: string;
   owner: string;
   type: string;
-  // computed
   remainingSize?: string;
   totalValue?: string;
 }
 
 export type OrderFilter = "all" | "live" | "matched" | "cancelled";
 
-export function useOrders(enabled = true) {
+const STATUS_MAP: Record<OrderFilter, string | undefined> = {
+  all: undefined,     // no filter — get everything
+  live: "LIVE",
+  matched: "MATCHED",
+  cancelled: "CANCELLED",
+};
+
+export function useOrders(enabled = true, statusFilter: OrderFilter = "all") {
   const queryClient = useQueryClient();
+  const apiStatus = STATUS_MAP[statusFilter];
 
   const query = useQuery({
-    queryKey: ["polymarket-orders"],
+    queryKey: ["polymarket-orders", statusFilter],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return [];
-      const result = await fetchOpenOrders();
+      const result = await fetchOpenOrders(apiStatus);
+      console.log("[useOrders] result:", { ok: result.ok, count: result.orders?.length, rawCount: result.rawCount, error: result.error });
       if (!result.ok) {
         console.error("[useOrders] fetch error:", result);
         throw new Error(result.error || "Failed to fetch orders");
@@ -40,9 +48,9 @@ export function useOrders(enabled = true) {
       return (result.orders || []).map(normalizeOrder);
     },
     enabled,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
-    staleTime: 5_000,
+    staleTime: 10_000,
   });
 
   const cancelMutation = useMutation({

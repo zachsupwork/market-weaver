@@ -334,14 +334,32 @@ export async function fetchDepositStatus(address: string): Promise<{
   return data;
 }
 
-/** Fetch open orders for authenticated user */
-export async function fetchOpenOrders(): Promise<{
+/** Fetch orders for authenticated user, optionally filtered by status */
+export async function fetchOpenOrders(status?: string): Promise<{
   ok: boolean;
   orders?: any[];
+  rawCount?: number;
   error?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke("polymarket-orders");
-  if (error) return { ok: false, error: error.message };
+  const body = status ? { status } : undefined;
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  
+  // Use direct fetch with query params since supabase.functions.invoke doesn't support query strings
+  const session = (await supabase.auth.getSession()).data.session;
+  if (!session) return { ok: false, error: "Not authenticated" };
+  
+  const res = await fetch(
+    `${fnUrl("polymarket-orders")}${qs}`,
+    {
+      headers: {
+        "apikey": ANON_KEY,
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+    }
+  );
+  const data = await res.json();
+  console.log("[fetchOpenOrders] raw response:", { status: res.status, data, filter: status || "ALL" });
+  if (!res.ok) return { ok: false, error: data?.error || `HTTP ${res.status}` };
   return data;
 }
 

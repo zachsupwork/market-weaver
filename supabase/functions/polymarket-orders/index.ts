@@ -83,14 +83,30 @@ serve(async (req) => {
     const credsJson = await decrypt(credRow.value_encrypted, credRow.iv, credRow.auth_tag, masterKey);
     const creds = JSON.parse(credsJson);
 
-    // ── Fetch open orders from CLOB ──
+    // ── Parse query params ──
+    const url = new URL(req.url);
+    const statusFilter = url.searchParams.get("status"); // e.g. "ALL", "LIVE", "MATCHED", "CANCELLED"
+
+    // ── Fetch orders from CLOB ──
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
+    
+    // Build request path with query params
+    const clobParams = new URLSearchParams();
+    if (statusFilter && statusFilter !== "ALL") {
+      clobParams.set("state", statusFilter);
+    }
+    // Don't filter by state when "ALL" to get everything
+    
+    const queryString = clobParams.toString();
+    const requestPath = "/data/orders" + (queryString ? `?${queryString}` : "");
+    
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const requestPath = "/data/orders";
-    const signMessage = timestamp + "GET" + requestPath;
+    // HMAC signs only the path without query string
+    const signPath = "/data/orders";
+    const signMessage = timestamp + "GET" + signPath;
     const signature = toUrlSafeBase64(await hmacSign(creds.secret, signMessage));
 
-    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${credRow.address}`);
+    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${credRow.address} statusFilter=${statusFilter || "ALL"}`);
 
     const res = await fetch(`${clobHost}${requestPath}`, {
       method: "GET",
@@ -105,7 +121,7 @@ serve(async (req) => {
     });
 
     const resBody = await res.text();
-    console.log(`[orders] user=${user.id} CLOB: ${res.status}`);
+    console.log(`[orders] user=${user.id} CLOB status=${res.status} bodyLen=${resBody.length} body=${resBody.substring(0, 500)}`);
 
     if (!res.ok) {
       return jsonResp({
@@ -117,7 +133,10 @@ serve(async (req) => {
     let parsed;
     try { parsed = JSON.parse(resBody); } catch { parsed = []; }
 
-    return jsonResp({ ok: true, orders: Array.isArray(parsed) ? parsed : [] });
+    const orders = Array.isArray(parsed) ? parsed : [];
+    console.log(`[orders] user=${user.id} returning ${orders.length} orders`);
+
+    return jsonResp({ ok: true, orders, rawCount: orders.length });
   } catch (err) {
     console.error("[orders] Error:", err);
     return jsonResp({ ok: false, error: err.message }, 500);

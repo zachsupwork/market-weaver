@@ -45,14 +45,11 @@ export function OrdersPanel() {
   }, []);
 
   const enabled = isConnected && hasSession;
-  const { orders, isLoading, error, refetch, cancelOrder, isCancelling, cancellingId } = useOrders(enabled);
+  // Pass filter to hook so backend filters server-side
+  const { orders, isLoading, error, refetch, cancelOrder, isCancelling, cancellingId } = useOrders(enabled, filter);
 
+  // Client-side search only (status filtering is done server-side now)
   const filtered = orders.filter((o) => {
-    if (filter === "live") return o.status === "LIVE";
-    if (filter === "matched") return o.status === "MATCHED";
-    if (filter === "cancelled") return o.status === "CANCELLED";
-    return true;
-  }).filter((o) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
