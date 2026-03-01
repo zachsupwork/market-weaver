@@ -10,6 +10,7 @@ import { TradingEnablement } from "@/components/trading/TradingEnablement";
 import { supabase } from "@/integrations/supabase/client";
 import { ClobClient, Side as ClobSide, SignatureType } from "@polymarket/clob-client";
 import { ethers } from "ethers";
+import { useProxyWallet } from "@/hooks/useProxyWallet";
 
 interface OrderTicketProps {
   tokenId: string;
@@ -29,6 +30,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
   const { isConnected, address } = useAccount();
+  const { proxyAddress } = useProxyWallet();
 
   const readiness = useTradingReadiness(side === "BUY" ? amount : 0);
 
@@ -75,19 +77,26 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         return;
       }
 
+      if (!proxyAddress) {
+        toast.error("Proxy wallet not found. Deploy it in Setup below.");
+        return;
+      }
+
       if (!(window as any).ethereum) {
         throw new Error("Wallet provider not found");
       }
 
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
       const signer = provider.getSigner();
+
+      // funderAddress must be the proxy/Safe address (maker), not the EOA
       const clobClient = new ClobClient(
         "https://clob.polymarket.com",
         137,
         signer,
         undefined,
         SignatureType.POLY_PROXY,
-        credsStatus.address
+        proxyAddress
       );
 
       const signedOrder = await clobClient.createOrder({
