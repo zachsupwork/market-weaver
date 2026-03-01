@@ -124,7 +124,6 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         price,
         size: Number(shares.toFixed(6)),
         feeRateBps: 0,
-        nonce: Math.floor(Math.random() * 1e15),
         expiration: 0,
       });
 
@@ -165,7 +164,8 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         } else if (errLower.includes("invalid signature")) {
           toast.error("Order signature invalid. This usually means the signing wallet doesn't match the API credentials. Please re-derive credentials in Settings.", { duration: 8000 });
           await readiness.refreshCreds();
-        } else {
+        } else if (errLower.includes("invalid nonce") || errLower.includes("nonce")) {
+          toast.error("Order failed due to a nonce error. Please try again.", { duration: 5000 });
           toast.error(errMsg);
         }
       }
