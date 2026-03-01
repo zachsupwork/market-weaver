@@ -33,7 +33,10 @@ export function useOrders(enabled = true) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return [];
       const result = await fetchOpenOrders();
-      if (!result.ok) throw new Error(result.error || "Failed to fetch orders");
+      if (!result.ok) {
+        console.error("[useOrders] fetch error:", result);
+        throw new Error(result.error || "Failed to fetch orders");
+      }
       return (result.orders || []).map(normalizeOrder);
     },
     enabled,
