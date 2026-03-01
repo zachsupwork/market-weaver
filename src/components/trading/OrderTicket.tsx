@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus } from "lucide-react";
-import { useAccount } from "wagmi";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft } from "lucide-react";
+import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
 import { TradingEnablement } from "@/components/trading/TradingEnablement";
@@ -29,8 +29,10 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chainId } = useAccount();
   const { proxyAddress } = useProxyWallet();
+  const { switchChain } = useSwitchChain();
+  const isPolygon = chainId === 137;
 
   const readiness = useTradingReadiness(side === "BUY" ? amount : 0);
 
@@ -41,7 +43,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     ? (shares * (1 - price)).toFixed(2)
     : (shares * price).toFixed(2);
 
-  const hasInsufficientBalance = side === "BUY" && amount > readiness.usdc.usdcBalance && readiness.usdc.usdcBalance > 0;
+  const hasInsufficientBalance = side === "BUY" && amount > readiness.usdc.usdcBalance;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
   const quickAmounts = [1, 5, 10, 100];
@@ -58,7 +60,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
     if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
     if (amount <= 0) { toast.error("Enter an amount"); return; }
-    if (hasInsufficientBalance) { toast.error("Insufficient USDC.e balance"); return; }
+    if (hasInsufficientBalance) { toast.error(`Not enough USDC.e. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e on Polygon.`); return; }
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -178,10 +180,62 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         </div>
       )}
 
-      {isConnected && ageConfirmed && readiness.allReady && (
+      {isConnected && ageConfirmed && readiness.allReady && !hasInsufficientBalance && (
         <div className="mb-3 rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
           <Check className="h-3.5 w-3.5 text-yes shrink-0" />
           <span className="text-[10px] text-yes font-medium">Trading enabled — all steps complete</span>
+        </div>
+      )}
+
+      {/* Fund + Approve helper panel */}
+      {isConnected && ageConfirmed && (readiness.usdc.usdcBalance === 0 || readiness.usdc.needsApproval || (!isPolygon)) && (
+        <div className="mb-3 rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+          <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <ArrowRightLeft className="h-3.5 w-3.5 text-primary" /> Fund & Approve
+          </p>
+
+          {!isPolygon && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Switch to Polygon network</span>
+              <button type="button" onClick={() => switchChain?.({ chainId: 137 })}
+                className="rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all">
+                Switch to Polygon
+              </button>
+            </div>
+          )}
+
+          {readiness.usdc.usdcBalance === 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">
+                Send <span className="font-semibold text-foreground">USDC.e</span> on Polygon to your wallet:
+              </p>
+              <div className="flex items-center gap-1.5">
+                <code className="text-[9px] font-mono bg-muted rounded px-1.5 py-0.5 text-foreground break-all flex-1">
+                  {address}
+                </code>
+                <button type="button" onClick={() => {
+                  navigator.clipboard.writeText(address || "");
+                  toast.success("Address copied!");
+                }} className="shrink-0 rounded-md bg-muted hover:bg-accent p-1 transition-all">
+                  <Copy className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </div>
+              <p className="text-[9px] text-muted-foreground">
+                USDC.e contract: <code className="font-mono">0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code>
+              </p>
+            </div>
+          )}
+
+          {readiness.usdc.needsApproval && isPolygon && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Approve USDC.e for trading</span>
+              <button type="button" onClick={() => readiness.usdc.approve()}
+                disabled={readiness.usdc.isApproving}
+                className="rounded-md bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold hover:bg-primary/90 transition-all disabled:opacity-50">
+                {readiness.usdc.isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Approve USDC.e"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
