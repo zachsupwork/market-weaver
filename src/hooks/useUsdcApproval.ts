@@ -120,6 +120,7 @@ export function useUsdcApproval(traderAddress: string | null) {
   }, [traderAddress, publicClient]);
 
   useEffect(() => {
+    setAllApproved(false);
     if (traderAddress) checkApprovals();
   }, [traderAddress, checkApprovals]);
 
