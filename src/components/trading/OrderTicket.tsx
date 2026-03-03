@@ -154,16 +154,22 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         } else if (isBalanceError) {
           if (side === "SELL") {
             toast.error(
-              "Insufficient share balance or token approvals for selling. Try re-approving tokens: go to Setup below and click 'Approve Tokens' again.",
-              { duration: 8000 }
+              "Token approvals may be stale. Re-approving now…",
+              { duration: 6000 }
             );
+            // Auto force-reapprove and retry
+            try {
+              await readiness.usdc.approve(true);
+              toast.success("Tokens re-approved! Please try your sell order again.");
+            } catch (approveErr) {
+              toast.error("Re-approval failed. Try manually in Setup below.", { duration: 8000 });
+            }
           } else {
             toast.error(
               `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
               { duration: 8000 }
             );
           }
-          // Re-check approvals in case they lapsed
           readiness.usdc.recheckBalances();
         } else if (isAuthError) {
           toast.error("Order failed: Please check your Polymarket credentials in Settings and re-derive if needed.", { duration: 6000 });
