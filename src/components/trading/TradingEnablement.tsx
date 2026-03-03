@@ -84,10 +84,10 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
     }
   }
 
-  async function handleApproveUsdc() {
+  async function handleApproveUsdc(force = false) {
     try {
-      await readiness.usdc.approve();
-      toast.success("Tokens approved!");
+      await readiness.usdc.approve(force);
+      toast.success(force ? "Tokens re-approved!" : "Tokens approved!");
     } catch (err: any) {
       const msg = err.message || "Approval failed";
       if (msg.includes("rejected") || msg.includes("denied")) {
@@ -100,13 +100,23 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
 
   if (readiness.allReady) {
     return (
-      <div className="rounded-md border border-yes/20 bg-yes/5 p-2 flex items-center gap-2">
-        <Check className="h-3.5 w-3.5 text-yes shrink-0" />
-        <div className="text-[10px]">
-          <span className="text-yes font-medium">Wallet ready</span>
-          {readiness.usdc.usdcBalance === 0 && (
-            <span className="text-muted-foreground ml-1">— Fund your wallet with USDC.e to trade</span>
-          )}
+      <div className="rounded-md border border-yes/20 bg-yes/5 p-2 space-y-2">
+        <div className="flex items-center gap-2">
+          <Check className="h-3.5 w-3.5 text-yes shrink-0" />
+          <div className="text-[10px] flex-1">
+            <span className="text-yes font-medium">Wallet ready</span>
+            {readiness.usdc.usdcBalance === 0 && (
+              <span className="text-muted-foreground ml-1">— Fund your wallet with USDC.e to trade</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => handleApproveUsdc(true)}
+            disabled={readiness.usdc.isApproving}
+            className="shrink-0 rounded-md border border-border bg-muted text-muted-foreground px-2 py-0.5 text-[9px] font-medium hover:bg-accent transition-all disabled:opacity-50"
+          >
+            {readiness.usdc.isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-approve"}
+          </button>
         </div>
       </div>
     );
@@ -127,7 +137,7 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
       label: "Approve Tokens",
       description: "Approve token contracts for trading (single signature).",
       done: readiness.usdcReady,
-      action: handleApproveUsdc,
+      action: () => handleApproveUsdc(),
       loading: readiness.usdc.isApproving,
       buttonLabel: "Sign",
     },
