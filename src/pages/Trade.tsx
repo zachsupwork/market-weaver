@@ -464,11 +464,12 @@ const Trade = () => {
           )}
         </div>
 
-        {/* Outcome selector */}
+        {/* Outcome cards */}
         <div className="flex gap-2 mb-6">
           {outcomes.map((outcome: string, i: number) => {
             const p = prices[i] ?? 0;
             const isYes = outcome === "Yes" || i === 0;
+            const posSize = isYes ? yesPositionSize : noPositionSize;
             return (
               <button
                 key={i}
@@ -483,9 +484,16 @@ const Trade = () => {
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className={cn("text-sm font-semibold", isYes ? "text-yes" : "text-no")}>
-                    {outcome}
-                  </span>
+                  <div className="text-left">
+                    <span className={cn("text-sm font-semibold block", isYes ? "text-yes" : "text-no")}>
+                      {outcome}
+                    </span>
+                    {posSize > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {posSize.toFixed(1)} shares held
+                      </span>
+                    )}
+                  </div>
                   <div className="text-right">
                     <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
                     <span className="block text-[10px] text-muted-foreground">
