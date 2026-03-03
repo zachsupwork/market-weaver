@@ -259,7 +259,21 @@ const Trade = () => {
     return { change24h, spread, mid, totalVol };
   }, [trades]);
 
-  // Invalid ID
+  // Compute user's position sizes for YES and NO (must be before early returns)
+  const yesPositionSize = useMemo(() => {
+    if (!userPositions || !tokenIds[0]) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === tokenIds[0] || p.outcome === "Yes")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, tokenIds]);
+
+  const noPositionSize = useMemo(() => {
+    if (!userPositions || !tokenIds[1]) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === tokenIds[1] || p.outcome === "No")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, tokenIds]);
+
   if (!conditionId || conditionId === "undefined" || !isValidId) {
     return (
       <div className="container py-16 text-center">
@@ -654,10 +668,14 @@ const Trade = () => {
 
               <div className="lg:col-span-4">
                 <OrderTicket
-                  tokenId={currentTokenId}
-                  outcome={currentOutcome}
-                  currentPrice={currentPrice}
+                  yesTokenId={yesTokenId}
+                  noTokenId={noTokenId}
+                  yesPrice={yesPrice}
+                  noPrice={noPrice}
+                  conditionId={conditionId}
                   isTradable={market.accepting_orders !== false && !market.closed && !hasMissingTokenIds}
+                  yesPositionSize={yesPositionSize}
+                  noPositionSize={noPositionSize}
                 />
 
                 {userPositions && userPositions.length > 0 && (
