@@ -148,7 +148,7 @@ const Trade = () => {
   const isLive = market?.statusLabel === "LIVE";
 
   const { data: trades, isLoading: tradesLoading } = useQuery({
-    queryKey: ["trades", yesTokenId, noTokenId],
+    queryKey: ["trades", yesTokenIdRaw, noTokenIdRaw],
     queryFn: async () => {
       const results: TradeRecord[] = [];
       const fetches = [yesTokenIdRaw, noTokenIdRaw].filter(Boolean).map(async (tid, idx) => {
