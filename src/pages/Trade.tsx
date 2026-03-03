@@ -316,8 +316,27 @@ const Trade = () => {
 
   const outcomes = market.outcomes;
   const prices = market.outcomePrices;
+  const yesPrice = prices[0] ?? 0.5;
+  const noPrice = prices[1] ?? 0.5;
   const currentPrice = prices[selectedOutcome] ?? 0.5;
   const currentOutcome = outcomes[selectedOutcome] || (selectedOutcome === 0 ? "Yes" : "No");
+  const yesTokenId = tokenIds[0] || "";
+  const noTokenId = tokenIds[1] || "";
+
+  // Compute user's position sizes for YES and NO
+  const yesPositionSize = useMemo(() => {
+    if (!userPositions) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === yesTokenId || p.outcome === "Yes")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, yesTokenId]);
+
+  const noPositionSize = useMemo(() => {
+    if (!userPositions) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === noTokenId || p.outcome === "No")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, noTokenId]);
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
