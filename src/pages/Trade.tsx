@@ -143,15 +143,15 @@ const Trade = () => {
   });
 
   // Fetch trades for both YES and NO tokens, merge and sort
-  const yesTokenId = tokenIds[0] || "";
-  const noTokenId = tokenIds[1] || "";
+  const yesTokenIdRaw = tokenIds[0] || "";
+  const noTokenIdRaw = tokenIds[1] || "";
   const isLive = market?.statusLabel === "LIVE";
 
   const { data: trades, isLoading: tradesLoading } = useQuery({
-    queryKey: ["trades", yesTokenId, noTokenId],
+    queryKey: ["trades", yesTokenIdRaw, noTokenIdRaw],
     queryFn: async () => {
       const results: TradeRecord[] = [];
-      const fetches = [yesTokenId, noTokenId].filter(Boolean).map(async (tid, idx) => {
+      const fetches = [yesTokenIdRaw, noTokenIdRaw].filter(Boolean).map(async (tid, idx) => {
         const items = await fetchTrades(tid, 30);
         return items.map((t) => ({
           ...t,
@@ -168,7 +168,7 @@ const Trade = () => {
       });
       return results;
     },
-    enabled: !!yesTokenId,
+    enabled: !!yesTokenIdRaw,
     staleTime: 3_000,
     refetchInterval: isLive && isTabVisible ? 4_000 : false,
   });
@@ -259,7 +259,21 @@ const Trade = () => {
     return { change24h, spread, mid, totalVol };
   }, [trades]);
 
-  // Invalid ID
+  // Compute user's position sizes for YES and NO (must be before early returns)
+  const yesPositionSize = useMemo(() => {
+    if (!userPositions || !tokenIds[0]) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === tokenIds[0] || p.outcome === "Yes")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, tokenIds]);
+
+  const noPositionSize = useMemo(() => {
+    if (!userPositions || !tokenIds[1]) return 0;
+    return userPositions
+      .filter((p: any) => p.asset === tokenIds[1] || p.outcome === "No")
+      .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+  }, [userPositions, tokenIds]);
+
   if (!conditionId || conditionId === "undefined" || !isValidId) {
     return (
       <div className="container py-16 text-center">
@@ -314,10 +328,14 @@ const Trade = () => {
     );
   }
 
-  const outcomes = market.outcomes;
-  const prices = market.outcomePrices;
+  const outcomes = market?.outcomes ?? [];
+  const prices = market?.outcomePrices ?? [];
+  const yesPrice = prices[0] ?? 0.5;
+  const noPrice = prices[1] ?? 0.5;
   const currentPrice = prices[selectedOutcome] ?? 0.5;
   const currentOutcome = outcomes[selectedOutcome] || (selectedOutcome === 0 ? "Yes" : "No");
+  const yesTokenId = tokenIds[0] || "";
+  const noTokenId = tokenIds[1] || "";
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -446,11 +464,12 @@ const Trade = () => {
           )}
         </div>
 
-        {/* Outcome selector */}
+        {/* Outcome cards */}
         <div className="flex gap-2 mb-6">
           {outcomes.map((outcome: string, i: number) => {
             const p = prices[i] ?? 0;
             const isYes = outcome === "Yes" || i === 0;
+            const posSize = isYes ? yesPositionSize : noPositionSize;
             return (
               <button
                 key={i}
@@ -465,9 +484,16 @@ const Trade = () => {
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className={cn("text-sm font-semibold", isYes ? "text-yes" : "text-no")}>
-                    {outcome}
-                  </span>
+                  <div className="text-left">
+                    <span className={cn("text-sm font-semibold block", isYes ? "text-yes" : "text-no")}>
+                      {outcome}
+                    </span>
+                    {posSize > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {posSize.toFixed(1)} shares held
+                      </span>
+                    )}
+                  </div>
                   <div className="text-right">
                     <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
                     <span className="block text-[10px] text-muted-foreground">
@@ -650,10 +676,14 @@ const Trade = () => {
 
               <div className="lg:col-span-4">
                 <OrderTicket
-                  tokenId={currentTokenId}
-                  outcome={currentOutcome}
-                  currentPrice={currentPrice}
+                  yesTokenId={yesTokenId}
+                  noTokenId={noTokenId}
+                  yesPrice={yesPrice}
+                  noPrice={noPrice}
+                  conditionId={conditionId}
                   isTradable={market.accepting_orders !== false && !market.closed && !hasMissingTokenIds}
+                  yesPositionSize={yesPositionSize}
+                  noPositionSize={noPositionSize}
                 />
 
                 {userPositions && userPositions.length > 0 && (
