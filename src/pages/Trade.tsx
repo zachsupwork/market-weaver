@@ -143,15 +143,15 @@ const Trade = () => {
   });
 
   // Fetch trades for both YES and NO tokens, merge and sort
-  const yesTokenId = tokenIds[0] || "";
-  const noTokenId = tokenIds[1] || "";
+  const yesTokenIdRaw = tokenIds[0] || "";
+  const noTokenIdRaw = tokenIds[1] || "";
   const isLive = market?.statusLabel === "LIVE";
 
   const { data: trades, isLoading: tradesLoading } = useQuery({
     queryKey: ["trades", yesTokenId, noTokenId],
     queryFn: async () => {
       const results: TradeRecord[] = [];
-      const fetches = [yesTokenId, noTokenId].filter(Boolean).map(async (tid, idx) => {
+      const fetches = [yesTokenIdRaw, noTokenIdRaw].filter(Boolean).map(async (tid, idx) => {
         const items = await fetchTrades(tid, 30);
         return items.map((t) => ({
           ...t,
@@ -168,7 +168,7 @@ const Trade = () => {
       });
       return results;
     },
-    enabled: !!yesTokenId,
+    enabled: !!yesTokenIdRaw,
     staleTime: 3_000,
     refetchInterval: isLive && isTabVisible ? 4_000 : false,
   });
