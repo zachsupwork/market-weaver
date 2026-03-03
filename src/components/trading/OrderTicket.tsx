@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
+import { checkUserCredsStatus, postSignedOrder, fetchPositionsByAddress } from "@/lib/polymarket-api";
 import { toast } from "sonner";
 import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft, ExternalLink } from "lucide-react";
 import { useAccount, useSwitchChain } from "wagmi";
@@ -12,6 +12,7 @@ import { ClobClient, Side as ClobSide } from "@polymarket/clob-client";
 import { ethers } from "ethers";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
 import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
+import { usePositions } from "@/hooks/usePositions";
 
 interface OrderTicketProps {
   tokenId: string;
@@ -34,6 +35,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
   const { proxyAddress } = useProxyWallet();
   const { switchChain } = useSwitchChain();
   const isPolygon = chainId === 137;
+  const { data: positions } = usePositions();
 
   const readiness = useTradingReadiness(side === "BUY" ? amount : 0);
 
@@ -44,7 +46,15 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     ? (shares * (1 - price)).toFixed(2)
     : (shares * price).toFixed(2);
 
+  // For SELL: find how many shares of this token the user owns
+  const ownedShares = useMemo(() => {
+    if (!positions || !tokenId) return 0;
+    const pos = positions.find((p: any) => p.asset === tokenId || p.token_id === tokenId || p.tokenId === tokenId);
+    return pos ? Number(pos.size || pos.shares || 0) : 0;
+  }, [positions, tokenId]);
+
   const hasInsufficientBalance = side === "BUY" && amount > readiness.usdc.usdcBalance;
+  const hasInsufficientShares = side === "SELL" && shares > ownedShares;
   const hasNativeUsdcButNoE = readiness.usdc.usdcNativeBalance > 0 && readiness.usdc.usdcBalance < amount;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
@@ -62,12 +72,16 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
     if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
     if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
     if (amount <= 0) { toast.error("Enter an amount"); return; }
-    if (hasInsufficientBalance) {
+    if (side === "BUY" && hasInsufficientBalance) {
       if (hasNativeUsdcButNoE) {
         toast.error(`You have $${readiness.usdc.usdcNativeBalance.toFixed(2)} USDC but trading requires USDC.e. Convert USDC → USDC.e first.`);
       } else {
         toast.error(`Not enough USDC.e. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e on Polygon.`);
       }
+      return;
+    }
+    if (side === "SELL" && hasInsufficientShares) {
+      toast.error(`You only have ${ownedShares.toFixed(2)} shares of this outcome. Cannot sell ${shares.toFixed(2)} shares.`, { duration: 6000 });
       return;
     }
 
@@ -152,11 +166,14 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         if (result.code === "GEOBLOCKED") {
           toast.error("Trading is not available in your jurisdiction.");
         } else if (isBalanceError) {
-          toast.error(
-            `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
-            { duration: 8000 }
-          );
-          // Re-check approvals in case they lapsed
+          if (side === "SELL") {
+            toast.error(`Insufficient shares to sell. You own ${ownedShares.toFixed(2)} shares of this outcome.`, { duration: 8000 });
+          } else {
+            toast.error(
+              `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
+              { duration: 8000 }
+            );
+          }
           readiness.usdc.recheckBalances();
         } else if (isAuthError) {
           toast.error("Order failed: Please check your Polymarket credentials in Settings and re-derive if needed.", { duration: 6000 });
@@ -225,14 +242,25 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       {/* Balance breakdown */}
       {isConnected && (
         <div className="mb-3 space-y-1 px-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">USDC.e <span className="text-[9px] opacity-60">(tradeable)</span></span>
-            <span className="font-mono text-foreground">${readiness.usdc.usdcBalance.toFixed(2)}</span>
-          </div>
-          {readiness.usdc.usdcNativeBalance > 0 && (
+          {side === "BUY" ? (
+            <>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">USDC.e <span className="text-[9px] opacity-60">(tradeable)</span></span>
+                <span className="font-mono text-foreground">${readiness.usdc.usdcBalance.toFixed(2)}</span>
+              </div>
+              {readiness.usdc.usdcNativeBalance > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">USDC <span className="text-[9px] opacity-60">(not tradeable)</span></span>
+                  <span className="font-mono text-muted-foreground">${readiness.usdc.usdcNativeBalance.toFixed(2)}</span>
+                </div>
+              )}
+            </>
+          ) : (
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">USDC <span className="text-[9px] opacity-60">(not tradeable)</span></span>
-              <span className="font-mono text-muted-foreground">${readiness.usdc.usdcNativeBalance.toFixed(2)}</span>
+              <span className="text-muted-foreground">Shares owned</span>
+              <span className={cn("font-mono", ownedShares > 0 ? "text-foreground" : "text-muted-foreground")}>
+                {ownedShares.toFixed(2)}
+              </span>
             </div>
           )}
         </div>
@@ -452,7 +480,7 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
       {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || amount <= 0 || !isConnected || !isTradable || hasInsufficientBalance || !readiness.allReady || !ageConfirmed}
+        disabled={submitting || amount <= 0 || !isConnected || !isTradable || hasInsufficientBalance || hasInsufficientShares || !readiness.allReady || !ageConfirmed}
         className={cn(
           "w-full rounded-lg py-3 text-sm font-bold transition-all disabled:opacity-50",
           side === "BUY" ? "bg-yes text-yes-foreground hover:bg-yes/90" : "bg-no text-no-foreground hover:bg-no/90"
