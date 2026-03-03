@@ -155,12 +155,13 @@ export function useUsdcApproval(traderAddress: string | null) {
     return txs;
   }, []);
 
-  const approve = useCallback(async () => {
-    if (!address || allApproved) return;
+  const approve = useCallback(async (force = false) => {
+    if (!address || (allApproved && !force)) return;
     setIsApproving(true);
     try {
       const client = await getClient();
       const txs = createApprovalTxs();
+      console.log("[useUsdcApproval] Sending approval txs:", txs.length, force ? "(forced)" : "");
       const response = await client.execute(txs, "Set all token approvals for trading");
       await response.wait();
       setAllApproved(true);

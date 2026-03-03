@@ -152,10 +152,17 @@ export function OrderTicket({ tokenId, outcome, currentPrice, conditionId, isTra
         if (result.code === "GEOBLOCKED") {
           toast.error("Trading is not available in your jurisdiction.");
         } else if (isBalanceError) {
-          toast.error(
-            `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
-            { duration: 8000 }
-          );
+          if (side === "SELL") {
+            toast.error(
+              "Insufficient share balance or token approvals for selling. Try re-approving tokens: go to Setup below and click 'Approve Tokens' again.",
+              { duration: 8000 }
+            );
+          } else {
+            toast.error(
+              `Insufficient balance or allowance in your Trading Wallet. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e. Ensure your Trading Wallet is funded and approvals are set.`,
+              { duration: 8000 }
+            );
+          }
           // Re-check approvals in case they lapsed
           readiness.usdc.recheckBalances();
         } else if (isAuthError) {
