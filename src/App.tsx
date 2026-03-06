@@ -24,6 +24,7 @@ import EventDetail from "./pages/EventDetail";
 import Admin from "./pages/Admin";
 import PolymarketSettings from "./pages/PolymarketSettings";
 import BuilderKeys from "./pages/BuilderKeys";
+import BuilderDashboard from "./pages/BuilderDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => (
                   <Route path="/events" element={<ExploreEvents />} />
                   <Route path="/events/:eventId" element={<EventDetail />} />
                   <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin/builder" element={<BuilderDashboard />} />
                   <Route path="/settings/polymarket" element={<PolymarketSettings />} />
                   <Route path="/settings/api-keys" element={<BuilderKeys />} />
                   <Route path="*" element={<NotFound />} />
