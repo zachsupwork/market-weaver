@@ -536,6 +536,19 @@ export function OrderTicket({
             <span className="text-muted-foreground">{isBuy ? "Potential Return" : "Est. Proceeds"}</span>
             <span className="font-mono text-yes">+${potentialReturn}</span>
           </div>
+          {feeEnabled && platformFee > 0 && isBuy && (
+            <>
+              <div className="border-t border-border my-1" />
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Platform Fee ({(PLATFORM_FEE_BPS / 100).toFixed(1)}%)</span>
+                <span className="font-mono text-warning">${platformFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Total Deducted</span>
+                <span className="font-mono text-foreground">${amount.toFixed(2)}</span>
+              </div>
+            </>
+          )}
           {isBuy && hasInsufficientBalance && (
             <p className="text-[10px] text-destructive font-medium">
               {hasNativeUsdcButNoE ? "You have USDC but need USDC.e — convert above" : "Insufficient USDC.e balance"}
