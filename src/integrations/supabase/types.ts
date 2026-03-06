@@ -41,6 +41,39 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_fees: {
+        Row: {
+          created_at: string | null
+          fee_amount: number
+          fee_bps: number
+          id: string
+          order_condition_id: string | null
+          token_address: string
+          tx_hash: string | null
+          user_address: string
+        }
+        Insert: {
+          created_at?: string | null
+          fee_amount: number
+          fee_bps?: number
+          id?: string
+          order_condition_id?: string | null
+          token_address?: string
+          tx_hash?: string | null
+          user_address: string
+        }
+        Update: {
+          created_at?: string | null
+          fee_amount?: number
+          fee_bps?: number
+          id?: string
+          order_condition_id?: string | null
+          token_address?: string
+          tx_hash?: string | null
+          user_address?: string
+        }
+        Relationships: []
+      }
       polymarket_secrets: {
         Row: {
           auth_tag: string
