@@ -174,6 +174,29 @@ serve(async (req) => {
     console.log(`[post-order] user=${user.id}, apiKey=…${creds.apiKey.slice(-6)}, addr=${polyAddress}, bodyLen=${orderBody.length}`);
     console.log(`[post-order] order.maker=${orderParsed?.order?.maker}, order.signer=${orderParsed?.order?.signer}, signatureType=${orderParsed?.order?.signatureType}`);
 
+    // ── Build builder attribution headers ──────────────────────
+    const builderHeaders: Record<string, string> = {};
+    const builderKey = Deno.env.get("POLY_BUILDER_API_KEY");
+    const builderSecret = Deno.env.get("POLY_BUILDER_SECRET");
+    const builderPassphrase = Deno.env.get("POLY_BUILDER_PASSPHRASE");
+
+    if (builderKey && builderSecret && builderPassphrase) {
+      try {
+        const builderTimestamp = Math.floor(Date.now() / 1000).toString();
+        const builderMessage = builderTimestamp + method + requestPath + orderBody;
+        const builderSig = await buildL2Signature(builderSecret, builderMessage);
+        builderHeaders["POLY_BUILDER_API_KEY"] = builderKey;
+        builderHeaders["POLY_BUILDER_PASSPHRASE"] = builderPassphrase;
+        builderHeaders["POLY_BUILDER_TIMESTAMP"] = builderTimestamp;
+        builderHeaders["POLY_BUILDER_SIGNATURE"] = builderSig;
+        console.log(`[post-order] Builder headers attached (key=…${builderKey.slice(-6)})`);
+      } catch (builderErr) {
+        console.warn("[post-order] Builder header signing failed, proceeding without:", builderErr.message);
+      }
+    } else {
+      console.log("[post-order] Builder credentials not configured, skipping attribution headers");
+    }
+
     const res = await fetch(`${clobHost}${requestPath}`, {
       method,
       headers: {
@@ -182,6 +205,7 @@ serve(async (req) => {
         "POLY_PASSPHRASE": creds.passphrase,
         "POLY_TIMESTAMP": timestamp,
         "POLY_SIGNATURE": signature,
+        ...builderHeaders,
         "Content-Type": "application/json",
       },
       body: orderBody,
