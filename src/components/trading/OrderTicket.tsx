@@ -139,7 +139,7 @@ export function OrderTicket({
     try {
       // ── Client-side platform fee transfer ──
       let feeTxHash: string | null = null;
-      if (feeEnabled && platformFee > 0 && isBuy) {
+      if (feeEnabled && platformFee > 0) {
         try {
           toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
           const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
