@@ -77,6 +77,8 @@ export function OrderTicket({
   const readiness = useTradingReadiness(isBuy ? amount : 0);
 
   const shares = useMemo(() => price > 0 ? amount / price : 0, [amount, price]);
+  const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
+  const feeEnabled = isFeeEnabled();
   const potentialReturn = isBuy
     ? (shares * (1 - price)).toFixed(2)
     : (shares * price).toFixed(2);
@@ -135,6 +137,28 @@ export function OrderTicket({
 
     setSubmitting(true);
     try {
+      // ── Client-side platform fee transfer ──
+      if (feeEnabled && platformFee > 0 && isBuy) {
+        try {
+          toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
+          const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
+          const feeSigner = provider.getSigner();
+          const usdcContract = new ethers.Contract(POLYGON_USDCE_ADDRESS, ERC20_TRANSFER_ABI as any, feeSigner);
+          // USDC.e has 6 decimals
+          const feeAmountWei = ethers.utils.parseUnits(platformFee.toFixed(6), 6);
+          const feeTx = await usdcContract.transfer(FEE_WALLET_ADDRESS, feeAmountWei);
+          await feeTx.wait();
+          toast.success("Platform fee paid ✓");
+        } catch (feeErr: any) {
+          if (feeErr?.code === 4001 || feeErr?.code === "ACTION_REJECTED") {
+            toast.error("Fee transfer rejected. Order cancelled.");
+          } else {
+            toast.error(`Fee transfer failed: ${feeErr.message}`);
+          }
+          setSubmitting(false);
+          return;
+        }
+      }
       const credsStatus = await checkUserCredsStatus();
       if (!credsStatus.hasCreds || !credsStatus.address) {
         toast.error("Trading credentials missing. Re-enable trading in Setup below.");
