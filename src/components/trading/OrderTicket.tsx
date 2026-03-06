@@ -138,17 +138,31 @@ export function OrderTicket({
     setSubmitting(true);
     try {
       // ── Client-side platform fee transfer ──
+      let feeTxHash: string | null = null;
       if (feeEnabled && platformFee > 0 && isBuy) {
         try {
           toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
           const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
           const feeSigner = provider.getSigner();
           const usdcContract = new ethers.Contract(POLYGON_USDCE_ADDRESS, ERC20_TRANSFER_ABI as any, feeSigner);
-          // USDC.e has 6 decimals
           const feeAmountWei = ethers.utils.parseUnits(platformFee.toFixed(6), 6);
           const feeTx = await usdcContract.transfer(FEE_WALLET_ADDRESS, feeAmountWei);
           await feeTx.wait();
+          feeTxHash = feeTx.hash;
           toast.success("Platform fee paid ✓");
+
+          // Record fee to database
+          try {
+            await supabase.from("platform_fees").insert({
+              user_address: address?.toLowerCase() ?? "",
+              order_condition_id: conditionId ?? null,
+              fee_amount: platformFee,
+              fee_bps: PLATFORM_FEE_BPS,
+              tx_hash: feeTxHash,
+            } as any);
+          } catch (dbErr) {
+            console.warn("[OrderTicket] Failed to record fee:", dbErr);
+          }
         } catch (feeErr: any) {
           if (feeErr?.code === 4001 || feeErr?.code === "ACTION_REJECTED") {
             toast.error("Fee transfer rejected. Order cancelled.");

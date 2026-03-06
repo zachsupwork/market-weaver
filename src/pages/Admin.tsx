@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { feeManager } from '@/lib/fees';
 import type { FeeMode } from '@/types/market';
-import { Settings, DollarSign, Percent, CreditCard, TrendingUp, BarChart3 } from 'lucide-react';
+import { Settings, DollarSign, Percent, CreditCard, TrendingUp, BarChart3, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const feeModes: { mode: FeeMode; label: string; description: string; icon: typeof DollarSign }[] = [
@@ -11,6 +12,7 @@ const feeModes: { mode: FeeMode; label: string; description: string; icon: typeo
 ];
 
 const Admin = () => {
+  const navigate = useNavigate();
   const [config, setConfig] = useState(feeManager.getConfig());
 
   const updateField = (field: string, value: number | boolean | FeeMode) => {
@@ -33,6 +35,18 @@ const Admin = () => {
           <Settings className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">Admin Panel</h1>
         </div>
+
+        {/* Builder Dashboard Link */}
+        <button
+          onClick={() => navigate('/admin/builder')}
+          className="w-full mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4 flex items-center gap-3 hover:bg-primary/10 transition-all text-left"
+        >
+          <Trophy className="h-5 w-5 text-primary shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Builder Dashboard</p>
+            <p className="text-xs text-muted-foreground">Monitor builder program attribution, rewards & profile</p>
+          </div>
+        </button>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
