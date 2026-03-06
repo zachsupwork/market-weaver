@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.polymarket-test-creds]
 verify_jwt = false
+
+[functions.polymarket-builder-stats]
+verify_jwt = false

@@ -12,6 +12,8 @@ import { ClobClient, Side as ClobSide } from "@polymarket/clob-client";
 import { ethers } from "ethers";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
 import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
+import { calculatePlatformFee, isFeeEnabled, FEE_WALLET_ADDRESS, ERC20_TRANSFER_ABI, PLATFORM_FEE_BPS } from "@/lib/platform-fee";
+import { POLYGON_USDCE_ADDRESS } from "@/lib/constants/tokens";
 
 export type TradeAction = "BUY_YES" | "BUY_NO" | "SELL_YES" | "SELL_NO";
 
@@ -75,6 +77,8 @@ export function OrderTicket({
   const readiness = useTradingReadiness(isBuy ? amount : 0);
 
   const shares = useMemo(() => price > 0 ? amount / price : 0, [amount, price]);
+  const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
+  const feeEnabled = isFeeEnabled();
   const potentialReturn = isBuy
     ? (shares * (1 - price)).toFixed(2)
     : (shares * price).toFixed(2);
@@ -133,6 +137,28 @@ export function OrderTicket({
 
     setSubmitting(true);
     try {
+      // ── Client-side platform fee transfer ──
+      if (feeEnabled && platformFee > 0 && isBuy) {
+        try {
+          toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
+          const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
+          const feeSigner = provider.getSigner();
+          const usdcContract = new ethers.Contract(POLYGON_USDCE_ADDRESS, ERC20_TRANSFER_ABI as any, feeSigner);
+          // USDC.e has 6 decimals
+          const feeAmountWei = ethers.utils.parseUnits(platformFee.toFixed(6), 6);
+          const feeTx = await usdcContract.transfer(FEE_WALLET_ADDRESS, feeAmountWei);
+          await feeTx.wait();
+          toast.success("Platform fee paid ✓");
+        } catch (feeErr: any) {
+          if (feeErr?.code === 4001 || feeErr?.code === "ACTION_REJECTED") {
+            toast.error("Fee transfer rejected. Order cancelled.");
+          } else {
+            toast.error(`Fee transfer failed: ${feeErr.message}`);
+          }
+          setSubmitting(false);
+          return;
+        }
+      }
       const credsStatus = await checkUserCredsStatus();
       if (!credsStatus.hasCreds || !credsStatus.address) {
         toast.error("Trading credentials missing. Re-enable trading in Setup below.");
@@ -510,6 +536,19 @@ export function OrderTicket({
             <span className="text-muted-foreground">{isBuy ? "Potential Return" : "Est. Proceeds"}</span>
             <span className="font-mono text-yes">+${potentialReturn}</span>
           </div>
+          {feeEnabled && platformFee > 0 && isBuy && (
+            <>
+              <div className="border-t border-border my-1" />
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Platform Fee ({(PLATFORM_FEE_BPS / 100).toFixed(1)}%)</span>
+                <span className="font-mono text-warning">${platformFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Total Deducted</span>
+                <span className="font-mono text-foreground">${amount.toFixed(2)}</span>
+              </div>
+            </>
+          )}
           {isBuy && hasInsufficientBalance && (
             <p className="text-[10px] text-destructive font-medium">
               {hasNativeUsdcButNoE ? "You have USDC but need USDC.e — convert above" : "Insufficient USDC.e balance"}
