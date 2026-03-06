@@ -12,6 +12,8 @@ import { ClobClient, Side as ClobSide } from "@polymarket/clob-client";
 import { ethers } from "ethers";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
 import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
+import { calculatePlatformFee, isFeeEnabled, FEE_WALLET_ADDRESS, ERC20_TRANSFER_ABI, PLATFORM_FEE_BPS } from "@/lib/platform-fee";
+import { POLYGON_USDCE_ADDRESS } from "@/lib/constants/tokens";
 
 export type TradeAction = "BUY_YES" | "BUY_NO" | "SELL_YES" | "SELL_NO";
 
