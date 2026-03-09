@@ -1,6 +1,6 @@
 // Platform fee configuration for client-side USDC.e transfers
 export const PLATFORM_FEE_BPS = 50; // 0.5%
-export const FEE_WALLET_ADDRESS = "0x37258576A4b2552f4Bec685003f96A314b97C011" as `0x${string}`;
+export const FEE_WALLET_ADDRESS = "0xE73F5ECEB9c7f239897bE55c5361eA8f9d2D89d1" as `0x${string}`;
 
 // ERC-20 minimal ABI for transfer
 export const ERC20_TRANSFER_ABI = [
