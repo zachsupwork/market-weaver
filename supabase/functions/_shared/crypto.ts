@@ -40,9 +40,9 @@ export async function encrypt(
   const encoded = new TextEncoder().encode(plaintext);
 
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, tagLength: 128 },
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer, tagLength: 128 },
     key,
-    encoded
+    encoded.buffer as ArrayBuffer
   );
 
   const ciphertextBytes = new Uint8Array(ciphertext);
