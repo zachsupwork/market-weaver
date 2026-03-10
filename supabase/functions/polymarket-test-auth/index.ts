@@ -106,7 +106,7 @@ serve(async (req) => {
       signature = await hmacSign(creds.secret, signMessage);
     } catch (e) {
       return new Response(
-        JSON.stringify({ ok: false, error: `Failed to compute HMAC signature. Credentials may be malformed: ${e.message}` }),
+        JSON.stringify({ ok: false, error: `Failed to compute HMAC signature. Credentials may be malformed: ${(e as any).message}` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
