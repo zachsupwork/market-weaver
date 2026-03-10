@@ -191,7 +191,7 @@ serve(async (req) => {
         builderHeaders["POLY_BUILDER_SIGNATURE"] = builderSig;
         console.log(`[post-order] Builder headers attached (key=…${builderKey.slice(-6)})`);
       } catch (builderErr) {
-        console.warn("[post-order] Builder header signing failed, proceeding without:", builderErr.message);
+        console.warn("[post-order] Builder header signing failed, proceeding without:", (builderErr as any).message);
       }
     } else {
       console.log("[post-order] Builder credentials not configured, skipping attribution headers");
