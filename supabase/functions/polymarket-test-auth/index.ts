@@ -18,7 +18,7 @@ function base64ToBytes(b64: string): Uint8Array {
 async function hmacSign(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(secret).buffer,
+    base64ToBytes(secret).buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
