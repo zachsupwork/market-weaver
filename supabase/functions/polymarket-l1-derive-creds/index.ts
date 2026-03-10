@@ -154,6 +154,6 @@ serve(async (req) => {
     return jsonResp({ ok: true });
   } catch (err) {
     console.error("[l1-derive] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

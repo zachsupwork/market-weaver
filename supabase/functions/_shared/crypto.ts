@@ -74,7 +74,7 @@ export async function decrypt(
   combined.set(authTagBytes, encryptedBytes.length);
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: ivBytes, tagLength: 128 },
+    { name: "AES-GCM", iv: ivBytes.buffer.slice(ivBytes.byteOffset, ivBytes.byteOffset + ivBytes.byteLength), tagLength: 128 },
     key,
     combined
   );

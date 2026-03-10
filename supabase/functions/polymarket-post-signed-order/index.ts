@@ -242,6 +242,6 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("[post-order] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

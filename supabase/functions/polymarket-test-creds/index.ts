@@ -111,6 +111,6 @@ serve(async (req) => {
     return jsonResp({ valid: false, hasCreds: true, status: res.status, reason: body.substring(0, 200) });
   } catch (err) {
     console.error("[test-creds] error:", err);
-    return jsonResp({ valid: false, error: err.message }, 500);
+    return jsonResp({ valid: false, error: (err as any).message }, 500);
   }
 });

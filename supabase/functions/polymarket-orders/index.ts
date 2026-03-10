@@ -146,6 +146,6 @@ serve(async (req) => {
     return jsonResp({ ok: true, orders, rawCount: orders.length });
   } catch (err) {
     console.error("[orders] Error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });
