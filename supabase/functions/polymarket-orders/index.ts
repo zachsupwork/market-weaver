@@ -27,7 +27,7 @@ function toUrlSafeBase64(base64: string): string {
 async function hmacSign(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(secret.trim()),
+    base64ToBytes(secret.trim()).buffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
