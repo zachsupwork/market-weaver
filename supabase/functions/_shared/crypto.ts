@@ -25,7 +25,7 @@ async function getKey(masterKey: string): Promise<CryptoKey> {
   // Use first 32 bytes of SHA-256 of master key as AES key
   const encoded = new TextEncoder().encode(masterKey);
   const hash = await crypto.subtle.digest("SHA-256", encoded);
-  return crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, [
+  return crypto.subtle.importKey("raw", new Uint8Array(hash), { name: "AES-GCM" }, false, [
     "encrypt",
     "decrypt",
   ]);
