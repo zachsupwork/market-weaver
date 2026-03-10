@@ -90,7 +90,7 @@ serve(async (req) => {
       }
     } catch (e) {
       return new Response(
-        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${e.message}` }),
+        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${(e as any).message}` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
