@@ -14,8 +14,8 @@ async function buildL2Signature(secret: string, message: string): Promise<string
   const secretBytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) secretBytes[i] = binary.charCodeAt(i);
 
-  const key = await crypto.subtle.importKey("raw", secretBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  const key = await crypto.subtle.importKey("raw", secretBytes.buffer as ArrayBuffer, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return b64.replace(/\+/g, "-").replace(/\//g, "_");
 }
