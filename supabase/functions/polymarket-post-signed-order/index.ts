@@ -25,12 +25,12 @@ async function buildL2Signature(secret: string, message: string): Promise<string
 
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    secretBytes.buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return b64.replace(/\+/g, "-").replace(/\//g, "_"); // URL-safe with padding
 }
@@ -98,7 +98,7 @@ serve(async (req) => {
       const credsJson = await decrypt(credRow.value_encrypted, credRow.iv, credRow.auth_tag, masterKey);
       creds = JSON.parse(credsJson);
     } catch (e) {
-      return jsonResp({ ok: false, error: `Failed to decrypt credentials: ${e.message}` }, 500);
+      return jsonResp({ ok: false, error: `Failed to decrypt credentials: ${(e as any).message}` }, 500);
     }
 
     if (!creds.apiKey || !creds.secret || !creds.passphrase) {
@@ -191,7 +191,7 @@ serve(async (req) => {
         builderHeaders["POLY_BUILDER_SIGNATURE"] = builderSig;
         console.log(`[post-order] Builder headers attached (key=…${builderKey.slice(-6)})`);
       } catch (builderErr) {
-        console.warn("[post-order] Builder header signing failed, proceeding without:", builderErr.message);
+        console.warn("[post-order] Builder header signing failed, proceeding without:", (builderErr as any).message);
       }
     } else {
       console.log("[post-order] Builder credentials not configured, skipping attribution headers");
@@ -242,6 +242,6 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("[post-order] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

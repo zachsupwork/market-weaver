@@ -113,6 +113,6 @@ serve(async (req) => {
     return jsonResp({ ok: true, withdrawal: parsed });
   } catch (err) {
     console.error("[withdraw] Error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

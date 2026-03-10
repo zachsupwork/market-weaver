@@ -18,12 +18,12 @@ function base64ToBytes(b64: string): Uint8Array {
 async function hmacSign(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(secret),
+    base64ToBytes(secret).buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
@@ -90,7 +90,7 @@ serve(async (req) => {
       }
     } catch (e) {
       return new Response(
-        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${e.message}` }),
+        JSON.stringify({ ok: false, error: `CLOB API unreachable: ${(e as any).message}` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -106,7 +106,7 @@ serve(async (req) => {
       signature = await hmacSign(creds.secret, signMessage);
     } catch (e) {
       return new Response(
-        JSON.stringify({ ok: false, error: `Failed to compute HMAC signature. Credentials may be malformed: ${e.message}` }),
+        JSON.stringify({ ok: false, error: `Failed to compute HMAC signature. Credentials may be malformed: ${(e as any).message}` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -137,7 +137,7 @@ serve(async (req) => {
     }
   } catch (err) {
     return new Response(
-      JSON.stringify({ ok: false, error: err.message }),
+      JSON.stringify({ ok: false, error: (err as any).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

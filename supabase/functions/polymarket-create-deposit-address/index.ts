@@ -89,6 +89,6 @@ serve(async (req) => {
     return jsonResp({ ok: true, deposit: parsed });
   } catch (err) {
     console.error("[deposit-addr] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

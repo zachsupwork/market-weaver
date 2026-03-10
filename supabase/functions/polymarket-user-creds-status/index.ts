@@ -54,6 +54,6 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("[user-creds-status] error:", err);
-    return jsonResp({ hasCreds: false, error: err.message });
+    return jsonResp({ hasCreds: false, error: (err as any).message });
   }
 });

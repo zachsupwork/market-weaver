@@ -28,12 +28,12 @@ async function hmacSign(secret: string, message: string): Promise<string> {
 
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    secretBytes.buffer.slice(secretBytes.byteOffset, secretBytes.byteOffset + secretBytes.byteLength) as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
@@ -147,6 +147,6 @@ serve(async (req) => {
     }
   } catch (err) {
     console.error("[cancel-order] error:", err);
-    return jsonResp({ ok: false, error: err.message }, 500);
+    return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });

@@ -81,12 +81,12 @@ Deno.serve(async (req) => {
     }
     const key = await crypto.subtle.importKey(
       "raw",
-      secretBytes,
+      secretBytes.buffer.slice(secretBytes.byteOffset, secretBytes.byteOffset + secretBytes.byteLength) as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"]
     );
-    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
     // IMPORTANT: Output must be URL-safe base64 (+ → -, / → _) to match Polymarket SDK
     const signature = btoa(String.fromCharCode(...new Uint8Array(sig)))
       .replace(/\+/g, '-')
