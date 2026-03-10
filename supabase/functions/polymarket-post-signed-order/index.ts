@@ -98,7 +98,7 @@ serve(async (req) => {
       const credsJson = await decrypt(credRow.value_encrypted, credRow.iv, credRow.auth_tag, masterKey);
       creds = JSON.parse(credsJson);
     } catch (e) {
-      return jsonResp({ ok: false, error: `Failed to decrypt credentials: ${e.message}` }, 500);
+      return jsonResp({ ok: false, error: `Failed to decrypt credentials: ${(e as any).message}` }, 500);
     }
 
     if (!creds.apiKey || !creds.secret || !creds.passphrase) {
