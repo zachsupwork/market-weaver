@@ -28,7 +28,7 @@ async function hmacSign(secret: string, message: string): Promise<string> {
 
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    secretBytes.buffer.slice(secretBytes.byteOffset, secretBytes.byteOffset + secretBytes.byteLength),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
