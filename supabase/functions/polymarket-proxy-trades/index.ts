@@ -87,7 +87,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (e) {
-        lastError = e.message;
+        lastError = (e as any).message;
         continue;
       }
     }
