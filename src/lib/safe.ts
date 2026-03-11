@@ -84,8 +84,8 @@ export async function signSafeTransaction(
   const rawSig = await (signer as any)._signTypedData(domain, SAFE_TX_TYPES, safeTx);
   // Adjust v value for Safe contract (add 4 to indicate eth_sign style)
   const { r, s, v } = ethers.utils.splitSignature(rawSig);
-  const adjustedV = v + 4;
-  return ethers.utils.solidityPack(["bytes32", "bytes32", "uint8"], [r, s, adjustedV]);
+  // For EIP-712 _signTypedData, pass v as-is (27 or 28). Do NOT add 4 (that's for eth_sign).
+  return ethers.utils.solidityPack(["bytes32", "bytes32", "uint8"], [r, s, v]);
 }
 
 /** Execute a signed Safe transaction on-chain */
