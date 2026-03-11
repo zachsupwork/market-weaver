@@ -411,48 +411,16 @@ export default function Account() {
               </Card>
             </div>
 
-            {/* Transfer EOA → Proxy */}
-            {address && proxyAddress && eoaUsdcE > 0 && (
-              <Card className="border-primary/20">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowRightLeft className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-semibold">Transfer USDC.e → Trading Wallet</p>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Move USDC.e from your connected wallet to your Trading Wallet so you can place orders.
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
-                    {[5, 10].map((v) => (
-                      <Button key={v} type="button" variant="outline" size="sm" className="text-xs font-mono"
-                        disabled={eoaUsdcE < v}
-                        onClick={() => setTransferAmount(String(v))}>
-                        ${v}
-                      </Button>
-                    ))}
-                    <Button type="button" variant="outline" size="sm" className="text-xs font-mono"
-                      onClick={() => setTransferAmount(String(Math.floor(eoaUsdcE * 100) / 100))}>
-                      Max (${(Math.floor(eoaUsdcE * 100) / 100).toFixed(2)})
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      className="font-mono text-xs flex-1"
-                      step="0.01"
-                    />
-                    <Button onClick={handleTransfer}
-                      disabled={isSending || isConfirming || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > eoaUsdcE}
-                      className="gap-1.5">
-                      {(isSending || isConfirming) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
-                      Transfer
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Two-way transfer: Deposit / Withdraw */}
+            {address && proxyAddress && (
+              <WalletTransfer
+                eoaAddress={address}
+                safeAddress={proxyAddress}
+                eoaBalance={eoaUsdcE}
+                safeBalance={proxyUsdcE}
+                polBalance={maticFormatted}
+                onTransferComplete={refreshBalances}
+              />
             )}
 
             {/* Convert USDC → USDC.e */}
