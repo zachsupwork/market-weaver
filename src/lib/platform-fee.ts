@@ -16,11 +16,15 @@ export const ERC20_TRANSFER_ABI = [
   },
 ] as const;
 
+export const MINIMUM_FEE_USD = 0.01; // minimum fee: 1 cent
+
 export function calculatePlatformFee(amountUsd: number): { fee: number; netAmount: number } {
   if (PLATFORM_FEE_BPS <= 0 || FEE_WALLET_ADDRESS === "0x0000000000000000000000000000000000000000") {
     return { fee: 0, netAmount: amountUsd };
   }
-  const fee = Math.floor((amountUsd * PLATFORM_FEE_BPS) / 10000 * 100) / 100; // round to 2 decimals
+  const rawFee = (amountUsd * PLATFORM_FEE_BPS) / 10000;
+  // Round up to 2 decimals, enforce minimum fee of 1 cent
+  const fee = Math.max(MINIMUM_FEE_USD, Math.ceil(rawFee * 100) / 100);
   return { fee, netAmount: Math.round((amountUsd - fee) * 100) / 100 };
 }
 
