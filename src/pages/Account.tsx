@@ -100,32 +100,7 @@ export default function Account() {
   const eoaUsdc = eoaUsdcRaw ? parseFloat(formatUnits(eoaUsdcRaw as bigint, 6)) : 0;
   const maticFormatted = maticBalance ? parseFloat(formatUnits(maticBalance.value, maticBalance.decimals)).toFixed(4) : "0";
 
-  // ── Transfer EOA → Proxy ─────────────────────────────────
-  const [transferAmount, setTransferAmount] = useState("");
-  const { writeContract, data: txHash, isPending: isSending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  useEffect(() => {
-    if (isConfirmed && txHash) {
-      toast({ title: "Transfer confirmed!" });
-      setTransferAmount("");
-      refreshBalances();
-    }
-  }, [isConfirmed]);
-
-  function handleTransfer() {
-    if (!address || !proxyAddress || !transferAmount) return;
-    const parsedAmt = parseFloat(transferAmount);
-    if (isNaN(parsedAmt) || parsedAmt <= 0 || parsedAmt > eoaUsdcE) return;
-    writeContract({
-      account: address,
-      chain: polygon,
-      address: POLYGON_USDCE_ADDRESS,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [proxyAddress as `0x${string}`, parseUnits(transferAmount, 6)],
-    });
-  }
 
   // ── Deposit address (copied) ─────────────────────────────
   const [copied, setCopied] = useState(false);
