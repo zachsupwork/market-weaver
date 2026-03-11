@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { usePositions } from "@/hooks/usePositions";
+import { WalletTransfer } from "@/components/wallet/WalletTransfer";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
