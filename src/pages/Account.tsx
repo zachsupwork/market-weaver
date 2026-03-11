@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { polygon } from "wagmi/chains";
+import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSearchParams, Link } from "react-router-dom";
-import { formatUnits, parseUnits, erc20Abi } from "viem";
+import { formatUnits } from "viem";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { usePositions } from "@/hooks/usePositions";
+import { WalletTransfer } from "@/components/wallet/WalletTransfer";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
@@ -100,32 +100,7 @@ export default function Account() {
   const eoaUsdc = eoaUsdcRaw ? parseFloat(formatUnits(eoaUsdcRaw as bigint, 6)) : 0;
   const maticFormatted = maticBalance ? parseFloat(formatUnits(maticBalance.value, maticBalance.decimals)).toFixed(4) : "0";
 
-  // ── Transfer EOA → Proxy ─────────────────────────────────
-  const [transferAmount, setTransferAmount] = useState("");
-  const { writeContract, data: txHash, isPending: isSending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  useEffect(() => {
-    if (isConfirmed && txHash) {
-      toast({ title: "Transfer confirmed!" });
-      setTransferAmount("");
-      refreshBalances();
-    }
-  }, [isConfirmed]);
-
-  function handleTransfer() {
-    if (!address || !proxyAddress || !transferAmount) return;
-    const parsedAmt = parseFloat(transferAmount);
-    if (isNaN(parsedAmt) || parsedAmt <= 0 || parsedAmt > eoaUsdcE) return;
-    writeContract({
-      account: address,
-      chain: polygon,
-      address: POLYGON_USDCE_ADDRESS,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [proxyAddress as `0x${string}`, parseUnits(transferAmount, 6)],
-    });
-  }
 
   // ── Deposit address (copied) ─────────────────────────────
   const [copied, setCopied] = useState(false);
@@ -410,48 +385,16 @@ export default function Account() {
               </Card>
             </div>
 
-            {/* Transfer EOA → Proxy */}
-            {address && proxyAddress && eoaUsdcE > 0 && (
-              <Card className="border-primary/20">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowRightLeft className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-semibold">Transfer USDC.e → Trading Wallet</p>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Move USDC.e from your connected wallet to your Trading Wallet so you can place orders.
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
-                    {[5, 10].map((v) => (
-                      <Button key={v} type="button" variant="outline" size="sm" className="text-xs font-mono"
-                        disabled={eoaUsdcE < v}
-                        onClick={() => setTransferAmount(String(v))}>
-                        ${v}
-                      </Button>
-                    ))}
-                    <Button type="button" variant="outline" size="sm" className="text-xs font-mono"
-                      onClick={() => setTransferAmount(String(Math.floor(eoaUsdcE * 100) / 100))}>
-                      Max (${(Math.floor(eoaUsdcE * 100) / 100).toFixed(2)})
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      className="font-mono text-xs flex-1"
-                      step="0.01"
-                    />
-                    <Button onClick={handleTransfer}
-                      disabled={isSending || isConfirming || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > eoaUsdcE}
-                      className="gap-1.5">
-                      {(isSending || isConfirming) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
-                      Transfer
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Two-way transfer: Deposit / Withdraw */}
+            {address && proxyAddress && (
+              <WalletTransfer
+                eoaAddress={address}
+                safeAddress={proxyAddress}
+                eoaBalance={eoaUsdcE}
+                safeBalance={proxyUsdcE}
+                polBalance={maticFormatted}
+                onTransferComplete={refreshBalances}
+              />
             )}
 
             {/* Convert USDC → USDC.e */}
@@ -536,43 +479,16 @@ export default function Account() {
               </Card>
             )}
 
-            {/* Transfer from EOA */}
-            {address && proxyAddress && eoaUsdcE > 0 && (
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowRightLeft className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-semibold">Or transfer from your wallet</p>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    You have ${eoaUsdcE.toFixed(2)} USDC.e in your connected wallet.
-                  </p>
-                  <div className="flex gap-2">
-                    {[5, 10].map((v) => (
-                      <Button key={v} type="button" variant="outline" size="sm" className="text-xs font-mono"
-                        disabled={eoaUsdcE < v}
-                        onClick={() => setTransferAmount(String(v))}>
-                        ${v}
-                      </Button>
-                    ))}
-                    <Button type="button" variant="outline" size="sm" className="text-xs font-mono"
-                      onClick={() => setTransferAmount(String(Math.floor(eoaUsdcE * 100) / 100))}>
-                      Max
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input type="number" placeholder="0.00" value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      className="font-mono text-xs flex-1" step="0.01" />
-                    <Button onClick={handleTransfer}
-                      disabled={isSending || isConfirming || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > eoaUsdcE}
-                      className="gap-1.5">
-                      {(isSending || isConfirming) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
-                      Transfer
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Two-way transfer */}
+            {address && proxyAddress && (
+              <WalletTransfer
+                eoaAddress={address}
+                safeAddress={proxyAddress}
+                eoaBalance={eoaUsdcE}
+                safeBalance={proxyUsdcE}
+                polBalance={maticFormatted}
+                onTransferComplete={refreshBalances}
+              />
             )}
 
             <Separator />
