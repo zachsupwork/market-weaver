@@ -63,20 +63,21 @@ const LiveMarkets = () => {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const limit = 100;
+  const prevDataRef = useRef<string>("");
 
-  // Debounce search for server-side query
-  useState(() => {
+  // Debounced search
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(timer);
-  });
+  }, [search]);
 
-  // Use effect for debounce
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(setTimeout(() => setDebouncedSearch(value), 400));
-  };
+  // Reset accumulated markets when search changes
+  useEffect(() => {
+    setAllMarkets([]);
+    setOffset(0);
+    setHasMore(true);
+    prevDataRef.current = "";
+  }, [debouncedSearch]);
 
   const { data: markets, isLoading, error, isFetching } = useMarkets({
     limit,
@@ -84,26 +85,13 @@ const LiveMarkets = () => {
     textQuery: debouncedSearch || undefined,
   });
 
-  // Accumulate markets across pages, reset on search change
-  useState(() => {
-    setAllMarkets([]);
-    setOffset(0);
-    setHasMore(true);
-  });
+  // Append new data when markets change
+  useEffect(() => {
+    if (!markets || markets.length === 0) return;
+    const dataKey = `${offset}-${markets.length}`;
+    if (dataKey === prevDataRef.current) return;
+    prevDataRef.current = dataKey;
 
-  // Reset when search changes
-  const [prevSearch, setPrevSearch] = useState("");
-  if (prevSearch !== debouncedSearch) {
-    setPrevSearch(debouncedSearch);
-    setAllMarkets([]);
-    setOffset(0);
-    setHasMore(true);
-  }
-
-  // Append new data
-  const [prevOffset, setPrevOffset] = useState(-1);
-  if (markets && offset !== prevOffset) {
-    setPrevOffset(offset);
     if (offset === 0) {
       setAllMarkets(markets as NormalizedMarket[]);
     } else {
@@ -114,18 +102,19 @@ const LiveMarkets = () => {
       });
     }
     setHasMore((markets as NormalizedMarket[]).length >= limit);
-  }
+  }, [markets, offset, limit]);
 
-  const loadMore = () => {
+  const loadMore = useCallback(() => {
     if (!isFetching && hasMore) {
       setOffset(prev => prev + limit);
     }
-  };
+  }, [isFetching, hasMore, limit]);
+
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
   const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
-    if (!markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
+    if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
 
     let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
