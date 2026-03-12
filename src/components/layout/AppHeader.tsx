@@ -6,6 +6,7 @@ import { AccountDropdown } from './AccountDropdown';
 const navItems = [
   { to: "/", icon: BarChart3, label: "Markets" },
   { to: "/live", icon: Radio, label: "Live" },
+  { to: "/events", icon: Activity, label: "Events" },
   { to: "/leaderboard", icon: Trophy, label: "Leaders" },
   { to: "/account", icon: User, label: "Account" },
 ];

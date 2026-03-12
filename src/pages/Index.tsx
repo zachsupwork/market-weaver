@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp, ExternalLink, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
+import { Progress } from "@/components/ui/progress";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -27,6 +28,12 @@ function formatVol(n: number): string {
 function formatPrice(p: number | undefined): string {
   if (p === undefined || p === null || isNaN(p)) return "—";
   return `${Math.round(p * 100)}¢`;
+}
+
+function polymarketUrl(market: NormalizedMarket): string {
+  const slug = market.event_slug || market.market_slug || market.slug;
+  if (slug) return `https://polymarket.com/event/${slug}`;
+  return `https://polymarket.com/event/${market.condition_id}`;
 }
 
 const Index = () => {
@@ -41,13 +48,11 @@ const Index = () => {
   const limit = 100;
   const prevDataRef = useRef<string>("");
 
-  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Reset on search change
   useEffect(() => {
     setAllMarkets([]);
     setOffset(0);
@@ -64,7 +69,6 @@ const Index = () => {
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
-  // Accumulate paginated results
   useEffect(() => {
     if (!markets || markets.length === 0) return;
     const dataKey = `${offset}-${markets.length}`;
@@ -95,119 +99,102 @@ const Index = () => {
     let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
     list = list.map((m) => ({
       ...m,
-      _inferredCategory: inferCategory({
-        category: m.category,
-        tags: m.tags,
-        question: m.question,
-      }),
-      _sportsSubcat: inferSportsSubcategory({
-        tags: m.tags,
-        question: m.question,
-      }),
+      _inferredCategory: inferCategory({ category: m.category, tags: m.tags, question: m.question }),
+      _sportsSubcat: inferSportsSubcategory({ tags: m.tags, question: m.question }),
     }));
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(
-        (m) =>
-          m.question?.toLowerCase().includes(q) ||
-          m.description?.toLowerCase().includes(q)
-      );
+      list = list.filter(m => m.question?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q));
     }
 
     if (category === "new") {
-      list = [...list].sort(
-        (a, b) =>
-          new Date(b.accepting_order_timestamp || b.end_date_iso || 0).getTime() -
-          new Date(a.accepting_order_timestamp || a.end_date_iso || 0).getTime()
+      list = [...list].sort((a, b) =>
+        new Date(b.accepting_order_timestamp || b.end_date_iso || 0).getTime() -
+        new Date(a.accepting_order_timestamp || a.end_date_iso || 0).getTime()
       );
     } else if (category !== "trending") {
-      list = list.filter((m) => m._inferredCategory === category);
+      list = list.filter(m => m._inferredCategory === category);
     }
 
     if (category === "sports" && sportsSubcat !== "all-sports") {
-      list = list.filter((m) => m._sportsSubcat === sportsSubcat);
+      list = list.filter(m => m._sportsSubcat === sportsSubcat);
     }
 
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
 
-    const live = list.filter((m) => m.statusLabel === "LIVE");
-    const ended = list.filter((m) => m.statusLabel !== "LIVE");
-
-    return { liveMarkets: live, endedMarkets: ended };
+    return {
+      liveMarkets: list.filter(m => m.statusLabel === "LIVE"),
+      endedMarkets: list.filter(m => m.statusLabel !== "LIVE"),
+    };
   }, [allMarkets, category, sportsSubcat, search]);
 
   return (
     <div className="min-h-screen">
-      <div className="container py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Activity className="h-7 w-7 text-primary" />
-            <h1 className="text-3xl font-bold">
+      <div className="container py-6">
+        {/* Hero section */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-1">
               Poly<span className="text-primary">View</span>
             </h1>
+            <p className="text-sm text-muted-foreground">
+              Browse & trade prediction markets. Powered by Polymarket.
+            </p>
           </div>
-          <p className="text-muted-foreground max-w-lg">
-            Browse, trade, and track prediction markets. Non-custodial. Powered by Polymarket.
-          </p>
-
-          {allMarkets.length > 0 && (
-            <div className="flex flex-wrap gap-4 mt-4">
-              <div className="rounded-lg border border-border bg-card px-4 py-2">
-                <span className="text-xs text-muted-foreground block">Active Markets</span>
-                <span className="font-mono text-lg font-bold text-foreground">{allMarkets.length}</span>
-              </div>
-              <div className="rounded-lg border border-border bg-card px-4 py-2">
-                <span className="text-xs text-muted-foreground block">24h Volume</span>
-                <span className="font-mono text-lg font-bold text-foreground">
-                  {formatVol(allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0))}
-                </span>
-              </div>
-              <div className="rounded-lg border border-border bg-card px-4 py-2">
-                <span className="text-xs text-muted-foreground block">Total Liquidity</span>
-                <span className="font-mono text-lg font-bold text-foreground">
-                  {formatVol(allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0))}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-4 mb-8">
-          <Link to="/live" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
-            <Activity className="h-5 w-5 text-primary mb-2" />
-            <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Live Markets</h3>
-            <p className="text-xs text-muted-foreground mt-1">Browse all active prediction markets</p>
-          </Link>
-          <Link to="/events" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
-            <Search className="h-5 w-5 text-primary mb-2" />
-            <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Explore Events</h3>
-            <p className="text-xs text-muted-foreground mt-1">Browse events with nested markets</p>
-          </Link>
-          <Link to="/leaderboard" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
-            <Trophy className="h-5 w-5 text-warning mb-2" />
-            <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Leaderboard</h3>
-            <p className="text-xs text-muted-foreground mt-1">Top traders by profit & volume</p>
-          </Link>
-          <Link to="/portfolio" className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all group">
-            <Wallet className="h-5 w-5 text-yes mb-2" />
-            <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">Portfolio</h3>
-            <p className="text-xs text-muted-foreground mt-1">Your positions, trades & balances</p>
-          </Link>
-        </div>
-
-        {!isConnected && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-8 flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Connect your wallet to start trading</p>
-              <p className="text-xs text-muted-foreground mt-1">Non-custodial. You control your funds.</p>
-            </div>
+          <div className="hidden sm:block">
             <ConnectButton />
+          </div>
+        </div>
+
+        {/* Stats row */}
+        {allMarkets.length > 0 && (
+          <div className="flex flex-wrap gap-3 mb-6">
+            <div className="rounded-lg border border-border bg-card px-3 py-2 flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs text-muted-foreground">Markets</span>
+              <span className="font-mono text-sm font-bold">{allMarkets.length}</span>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-3 py-2 flex items-center gap-2">
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs text-muted-foreground">24h Vol</span>
+              <span className="font-mono text-sm font-bold">
+                {formatVol(allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0))}
+              </span>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-3 py-2 flex items-center gap-2">
+              <TrendingUp className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs text-muted-foreground">Liquidity</span>
+              <span className="font-mono text-sm font-bold">
+                {formatVol(allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0))}
+              </span>
+            </div>
           </div>
         )}
 
+        {/* Quick links */}
+        <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-6">
+          <Link to="/live" className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-all group flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold group-hover:text-primary transition-colors">Live Markets</span>
+          </Link>
+          <Link to="/events" className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-all group flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold group-hover:text-primary transition-colors">Events</span>
+          </Link>
+          <Link to="/leaderboard" className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-all group flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-warning" />
+            <span className="text-xs font-semibold group-hover:text-primary transition-colors">Leaderboard</span>
+          </Link>
+          <Link to="/portfolio" className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-all group flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-yes" />
+            <span className="text-xs font-semibold group-hover:text-primary transition-colors">Portfolio</span>
+          </Link>
+        </div>
+
+        {/* Search */}
         <div className="relative mb-4 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -215,17 +202,18 @@ const Index = () => {
             placeholder="Search markets..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+            className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-3">
+        {/* Category tabs */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
-                "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
+                "rounded-full px-3 py-1 text-xs font-medium transition-all",
                 category === cat.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-secondary-foreground hover:bg-accent"
@@ -237,16 +225,16 @@ const Index = () => {
         </div>
 
         {category === "sports" && (
-          <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
+          <div className="flex flex-wrap gap-1 mb-4">
             {SPORTS_SUBCATEGORIES.map((sub) => (
               <button
                 key={sub.id}
                 onClick={() => setSportsSubcat(sub.id)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all border",
                   sportsSubcat === sub.id
                     ? "bg-primary/20 border-primary/40 text-primary"
-                    : "bg-card border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30"
                 )}
               >
                 {sub.label}
@@ -267,23 +255,22 @@ const Index = () => {
           </div>
         )}
 
+        {/* Market cards grid */}
         {liveMarkets.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {liveMarkets.map((market) => {
-              if (!market.condition_id) return null;
-              const hasValidId = isBytes32Hex(market.condition_id);
-              if (!hasValidId) return null;
-
+              if (!market.condition_id || !isBytes32Hex(market.condition_id)) return null;
               const yesPrice = market.outcomePrices?.[0];
               const noPrice = market.outcomePrices?.[1];
+              const yesPct = yesPrice !== undefined ? Math.round(yesPrice * 100) : 50;
 
               return (
                 <div
                   key={market.condition_id}
-                  className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary"
+                  className="group rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/30 hover:glow-primary"
                 >
                   <Link to={`/trade/${encodeURIComponent(market.condition_id)}`} className="block">
-                    <div className="flex items-start gap-3 mb-3">
+                    <div className="flex items-start gap-2.5 mb-3">
                       {market.icon && (
                         <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
                       )}
@@ -293,32 +280,41 @@ const Index = () => {
                     </div>
                   </Link>
 
+                  {/* Progress bar */}
+                  <div className="mb-3">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-yes font-mono font-semibold">Yes {formatPrice(yesPrice)}</span>
+                      <span className="text-no font-mono font-semibold">No {formatPrice(noPrice)}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-no/20 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-yes transition-all"
+                        style={{ width: `${yesPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Trade buttons */}
                   <div className="flex gap-2 mb-3">
                     <button
                       onClick={(e) => { e.preventDefault(); setTradeModal({ market, outcome: 0 }); }}
-                      className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
+                      className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-1.5 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
                     >
-                      Buy Yes {yesPrice !== undefined ? formatPrice(yesPrice) : ""}
+                      Buy Yes
                     </button>
                     <button
                       onClick={(e) => { e.preventDefault(); setTradeModal({ market, outcome: 1 }); }}
-                      className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
+                      className="flex-1 rounded-lg bg-no/10 border border-no/20 py-1.5 text-xs font-semibold text-no hover:bg-no/20 transition-all"
                     >
-                      Buy No {noPrice !== undefined ? formatPrice(noPrice) : ""}
+                      Buy No
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <BarChart3 className="h-3 w-3" />
-                      <span>{formatVol(market.volume24h)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="h-3 w-3" />
-                      <span>{formatVol(market.liquidity)} liq</span>
-                    </div>
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <span>{formatVol(market.volume24h)} vol</span>
+                    <span>{formatVol(market.liquidity)} liq</span>
                     <a
-                      href={`https://polymarket.com/event/${market.event_slug || market.market_slug || market.slug}`}
+                      href={polymarketUrl(market)}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -327,7 +323,7 @@ const Index = () => {
                     >
                       <ExternalLink className="h-3 w-3" />
                     </a>
-                    <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                    <span className="rounded-full bg-yes/10 border border-yes/20 px-1.5 py-0.5 text-[9px] font-mono text-yes">
                       LIVE
                     </span>
                   </div>
@@ -338,40 +334,27 @@ const Index = () => {
         )}
 
         {endedMarkets.length > 0 && (
-          <div className="mt-8">
+          <div className="mt-6">
             <button
               onClick={() => setShowEnded(!showEnded)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
             >
               {showEnded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               Ended / Other ({endedMarkets.length})
             </button>
             {showEnded && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {endedMarkets.map((market) => {
                   if (!market.condition_id) return null;
                   const yesPrice = market.outcomePrices?.[0];
                   const noPrice = market.outcomePrices?.[1];
                   return (
-                    <div key={market.condition_id} className="group rounded-xl border border-border bg-card p-5 opacity-60 cursor-not-allowed">
-                      <div className="flex items-start gap-3 mb-3">
-                        {market.icon && (
-                          <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
-                        )}
-                        <h3 className="text-sm font-semibold leading-snug text-foreground line-clamp-2 flex-1">
-                          {market.question}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-4 mb-3">
-                        <span className="text-xs text-muted-foreground">Yes</span>
-                        <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
-                        <div className="h-6 w-px bg-border" />
-                        <span className="text-xs text-muted-foreground">No</span>
-                        <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>{formatVol(market.volume24h)}</span>
-                        <span className="ml-auto rounded-full bg-muted border border-border px-2 py-0.5 text-[10px] font-mono">
+                    <div key={market.condition_id} className="rounded-xl border border-border bg-card p-4 opacity-50">
+                      <h3 className="text-sm font-semibold leading-snug line-clamp-2 mb-2">{market.question}</h3>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono">Yes {formatPrice(yesPrice)}</span>
+                        <span className="font-mono">No {formatPrice(noPrice)}</span>
+                        <span className="ml-auto rounded-full bg-muted border border-border px-1.5 py-0.5 text-[9px] font-mono">
                           {market.statusLabel}
                         </span>
                       </div>
@@ -390,20 +373,19 @@ const Index = () => {
         )}
 
         {hasMore && liveMarkets.length > 0 && (
-          <div className="flex justify-center mt-8">
+          <div className="flex justify-center mt-6">
             <button
               onClick={loadMore}
               disabled={isFetching}
-              className="rounded-md border border-border px-6 py-2.5 text-sm font-medium hover:bg-accent transition-all disabled:opacity-50 flex items-center gap-2"
+              className="rounded-md border border-border px-6 py-2 text-sm font-medium hover:bg-accent transition-all disabled:opacity-50 flex items-center gap-2"
             >
               {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Load More Markets
+              Load More
             </button>
           </div>
         )}
 
-        {/* Recent Trades */}
-        <div className="mt-10">
+        <div className="mt-8">
           <RecentTradesPanel limit={20} />
         </div>
       </div>
