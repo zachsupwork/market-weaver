@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
   type CategoryId,
@@ -28,13 +29,66 @@ function formatPrice(p: number | undefined): string {
 const Index = () => {
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
-  const { data: markets, isLoading, error } = useMarkets({ limit: 100, offset: 0 });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [showEnded, setShowEnded] = useState(false);
+  const limit = 100;
+  const prevDataRef = useRef<string>("");
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset on search change
+  useEffect(() => {
+    setAllMarkets([]);
+    setOffset(0);
+    setHasMore(true);
+    prevDataRef.current = "";
+  }, [debouncedSearch]);
+
+  const { data: markets, isLoading, error, isFetching } = useMarkets({
+    limit,
+    offset,
+    textQuery: debouncedSearch || undefined,
+  });
+
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
-  const filtered = useMemo(() => {
-    if (!markets) return [];
-    let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+  // Accumulate paginated results
+  useEffect(() => {
+    if (!markets || markets.length === 0) return;
+    const dataKey = `${offset}-${markets.length}`;
+    if (dataKey === prevDataRef.current) return;
+    prevDataRef.current = dataKey;
+
+    if (offset === 0) {
+      setAllMarkets(markets as NormalizedMarket[]);
+    } else {
+      setAllMarkets(prev => {
+        const existingIds = new Set(prev.map(m => m.condition_id));
+        const newOnes = (markets as NormalizedMarket[]).filter(m => !existingIds.has(m.condition_id));
+        return [...prev, ...newOnes];
+      });
+    }
+    setHasMore((markets as NormalizedMarket[]).length >= limit);
+  }, [markets, offset, limit]);
+
+  const loadMore = useCallback(() => {
+    if (!isFetching && hasMore) {
+      setOffset(prev => prev + limit);
+    }
+  }, [isFetching, hasMore, limit]);
+
+  const { liveMarkets, endedMarkets } = useMemo(() => {
+    if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
+
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
@@ -43,6 +97,7 @@ const Index = () => {
         question: m.question,
       }),
     }));
+
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -51,6 +106,7 @@ const Index = () => {
           m.description?.toLowerCase().includes(q)
       );
     }
+
     if (category === "new") {
       list = [...list].sort(
         (a, b) =>
@@ -60,11 +116,16 @@ const Index = () => {
     } else if (category !== "trending") {
       list = list.filter((m) => m._inferredCategory === category);
     }
+
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
-    return list;
-  }, [markets, category, search]);
+
+    const live = list.filter((m) => m.statusLabel === "LIVE");
+    const ended = list.filter((m) => m.statusLabel !== "LIVE");
+
+    return { liveMarkets: live, endedMarkets: ended };
+  }, [allMarkets, category, search]);
 
   return (
     <div className="min-h-screen">
@@ -80,22 +141,22 @@ const Index = () => {
             Browse, trade, and track prediction markets. Non-custodial. Powered by Polymarket.
           </p>
 
-          {markets && markets.length > 0 && (
+          {allMarkets.length > 0 && (
             <div className="flex flex-wrap gap-4 mt-4">
               <div className="rounded-lg border border-border bg-card px-4 py-2">
                 <span className="text-xs text-muted-foreground block">Active Markets</span>
-                <span className="font-mono text-lg font-bold text-foreground">{markets.length}</span>
+                <span className="font-mono text-lg font-bold text-foreground">{allMarkets.length}</span>
               </div>
               <div className="rounded-lg border border-border bg-card px-4 py-2">
                 <span className="text-xs text-muted-foreground block">24h Volume</span>
                 <span className="font-mono text-lg font-bold text-foreground">
-                  {formatVol(markets.reduce((s, m) => s + (m.volume24h || 0), 0))}
+                  {formatVol(allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0))}
                 </span>
               </div>
               <div className="rounded-lg border border-border bg-card px-4 py-2">
                 <span className="text-xs text-muted-foreground block">Total Liquidity</span>
                 <span className="font-mono text-lg font-bold text-foreground">
-                  {formatVol(markets.reduce((s, m) => s + (m.liquidity || 0), 0))}
+                  {formatVol(allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0))}
                 </span>
               </div>
             </div>
@@ -150,7 +211,7 @@ const Index = () => {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setCategory(cat.id)}
+              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
@@ -175,12 +236,12 @@ const Index = () => {
           </div>
         )}
 
-        {filtered.length > 0 && (
+        {liveMarkets.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.slice(0, 30).map((market) => {
+            {liveMarkets.map((market) => {
               if (!market.condition_id) return null;
               const hasValidId = isBytes32Hex(market.condition_id);
-              if (!hasValidId || market.statusLabel !== "LIVE" || market.ended) return null;
+              if (!hasValidId) return null;
 
               const yesPrice = market.outcomePrices?.[0];
               const noPrice = market.outcomePrices?.[1];
@@ -190,10 +251,7 @@ const Index = () => {
                   key={market.condition_id}
                   className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:glow-primary"
                 >
-                  <Link
-                    to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                    className="block"
-                  >
+                  <Link to={`/trade/${encodeURIComponent(market.condition_id)}`} className="block">
                     <div className="flex items-start gap-3 mb-3">
                       {market.icon && (
                         <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
@@ -204,7 +262,6 @@ const Index = () => {
                     </div>
                   </Link>
 
-                  {/* Quick trade buttons - Polymarket style */}
                   <div className="flex gap-2 mb-3">
                     <button
                       onClick={(e) => { e.preventDefault(); setTradeModal({ market, outcome: 0 }); }}
@@ -229,11 +286,9 @@ const Index = () => {
                       <TrendingUp className="h-3 w-3" />
                       <span>{formatVol(market.liquidity)} liq</span>
                     </div>
-                    {market.statusLabel === "LIVE" && (
-                      <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-                        LIVE
-                      </span>
-                    )}
+                    <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                      LIVE
+                    </span>
                   </div>
                 </div>
               );
@@ -241,14 +296,77 @@ const Index = () => {
           </div>
         )}
 
-        {!isLoading && filtered.length === 0 && !error && (
+        {endedMarkets.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowEnded(!showEnded)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+            >
+              {showEnded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Ended / Other ({endedMarkets.length})
+            </button>
+            {showEnded && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {endedMarkets.map((market) => {
+                  if (!market.condition_id) return null;
+                  const yesPrice = market.outcomePrices?.[0];
+                  const noPrice = market.outcomePrices?.[1];
+                  return (
+                    <div key={market.condition_id} className="group rounded-xl border border-border bg-card p-5 opacity-60 cursor-not-allowed">
+                      <div className="flex items-start gap-3 mb-3">
+                        {market.icon && (
+                          <img src={market.icon} alt="" className="h-8 w-8 rounded-full bg-muted shrink-0" loading="lazy" />
+                        )}
+                        <h3 className="text-sm font-semibold leading-snug text-foreground line-clamp-2 flex-1">
+                          {market.question}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-4 mb-3">
+                        <span className="text-xs text-muted-foreground">Yes</span>
+                        <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+                        <div className="h-6 w-px bg-border" />
+                        <span className="text-xs text-muted-foreground">No</span>
+                        <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{formatVol(market.volume24h)}</span>
+                        <span className="ml-auto rounded-full bg-muted border border-border px-2 py-0.5 text-[10px] font-mono">
+                          {market.statusLabel}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isLoading && liveMarkets.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-sm">No active markets found.</p>
           </div>
         )}
+
+        {hasMore && liveMarkets.length > 0 && (
+          <div className="flex justify-center mt-8">
+            <button
+              onClick={loadMore}
+              disabled={isFetching}
+              className="rounded-md border border-border px-6 py-2.5 text-sm font-medium hover:bg-accent transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Load More Markets
+            </button>
+          </div>
+        )}
+
+        {/* Recent Trades */}
+        <div className="mt-10">
+          <RecentTradesPanel limit={20} />
+        </div>
       </div>
 
-      {/* Quick trade modal */}
       {tradeModal && (
         <QuickTradeModal
           market={tradeModal.market}
