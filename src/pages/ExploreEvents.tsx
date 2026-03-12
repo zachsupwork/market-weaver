@@ -128,7 +128,7 @@ const ExploreEvents = () => {
                               className="flex items-center gap-2 text-xs hover:bg-accent/50 rounded px-1.5 py-1 -mx-1.5 transition-colors"
                             >
                               <span className="truncate text-foreground flex-1 text-[11px]">
-                                {m.groupItemTitle || m.question}
+                                {(m as any).groupItemTitle || m.question}
                               </span>
                               <div className="w-16 h-1.5 rounded-full bg-no/20 overflow-hidden shrink-0">
                                 <div className="h-full rounded-full bg-yes" style={{ width: `${yesPct}%` }} />
