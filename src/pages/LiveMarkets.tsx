@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
   type CategoryId,
