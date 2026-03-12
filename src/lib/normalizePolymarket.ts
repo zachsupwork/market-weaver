@@ -179,10 +179,14 @@ export function normalizeMarket(raw: any): NormalizedMarket {
       .filter(Boolean);
   }
 
-  // Tags
+  // Tags — always coerce to string[] (Gamma API may return objects with {label, slug, ...})
   let tags: string[] = [];
   if (Array.isArray(raw.tags)) {
-    tags = raw.tags;
+    tags = raw.tags.map((t: any) => {
+      if (typeof t === "string") return t;
+      if (t && typeof t === "object") return t.label ?? t.slug ?? "";
+      return "";
+    }).filter(Boolean);
   } else if (typeof raw.tags === "string") {
     tags = safeParseJson(raw.tags, []);
   }
