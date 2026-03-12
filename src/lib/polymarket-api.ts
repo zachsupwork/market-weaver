@@ -183,12 +183,14 @@ export async function fetchPositionsByAddress(address: string): Promise<any[]> {
 
 export async function fetchEvents(params?: {
   active?: boolean;
+  closed?: boolean;
   keyword?: string;
   limit?: number;
   offset?: number;
 }): Promise<any[]> {
   const qs = new URLSearchParams();
   if (params?.active !== undefined) qs.set("active", String(params.active));
+  qs.set("closed", String(params?.closed ?? false));
   if (params?.keyword) qs.set("_q", params.keyword);
   qs.set("limit", String(params?.limit ?? 50));
   qs.set("offset", String(params?.offset ?? 0));
