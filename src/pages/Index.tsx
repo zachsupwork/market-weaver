@@ -1,15 +1,18 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
+  SPORTS_SUBCATEGORIES,
   type CategoryId,
+  type SportsSubId,
   inferCategory,
+  inferSportsSubcategory,
   sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
