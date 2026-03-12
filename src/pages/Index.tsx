@@ -92,11 +92,15 @@ const Index = () => {
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
 
-    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
         category: m.category,
+        tags: m.tags,
+        question: m.question,
+      }),
+      _sportsSubcat: inferSportsSubcategory({
         tags: m.tags,
         question: m.question,
       }),
@@ -121,6 +125,10 @@ const Index = () => {
       list = list.filter((m) => m._inferredCategory === category);
     }
 
+    if (category === "sports" && sportsSubcat !== "all-sports") {
+      list = list.filter((m) => m._sportsSubcat === sportsSubcat);
+    }
+
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
@@ -129,7 +137,7 @@ const Index = () => {
     const ended = list.filter((m) => m.statusLabel !== "LIVE");
 
     return { liveMarkets: live, endedMarkets: ended };
-  }, [allMarkets, category, search]);
+  }, [allMarkets, category, sportsSubcat, search]);
 
   return (
     <div className="min-h-screen">
