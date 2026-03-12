@@ -274,7 +274,7 @@ const LiveMarkets = () => {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setPage(0); }}
+              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); setPrevOffset(-1); }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
