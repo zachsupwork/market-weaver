@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchEventById, isBytes32Hex } from "@/lib/polymarket-api";
+import { fetchEventById, isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
-import { ArrowLeft, Loader2, BarChart3, TrendingUp, Droplets } from "lucide-react";
+import { ArrowLeft, Loader2, BarChart3, TrendingUp, Droplets, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -18,6 +20,7 @@ function formatPrice(p: number | undefined): string {
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
+  const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["polymarket-event", eventId],
@@ -48,6 +51,8 @@ const EventDetail = () => {
   const title = event.title || event.question || "Untitled Event";
   const rawMarkets = event.markets || [];
   const markets = normalizeMarkets(rawMarkets);
+  const pmSlug = event.slug || eventId;
+  const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : null;
 
   return (
     <div className="min-h-screen">
@@ -64,12 +69,23 @@ const EventDetail = () => {
             {event.image && (
               <img src={event.image} alt="" className="h-14 w-14 rounded-xl bg-muted shrink-0" />
             )}
-            <div>
+            <div className="flex-1">
               <h1 className="text-2xl font-bold">{title}</h1>
               {event.description && (
                 <p className="text-sm text-muted-foreground mt-1">{event.description}</p>
               )}
             </div>
+            {pmUrl && (
+              <a
+                href={pmUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors shrink-0"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Polymarket
+              </a>
+            )}
           </div>
 
           {event.tags && event.tags.length > 0 && (
@@ -92,27 +108,55 @@ const EventDetail = () => {
             const hasValidId = isBytes32Hex(market.condition_id);
             const yesPrice = market.outcomePrices?.[0];
             const noPrice = market.outcomePrices?.[1];
+            const isLive = hasValidId && market.statusLabel === "LIVE";
 
-            const card = (
-              <div className={cn(
-                "rounded-xl border border-border bg-card p-5 transition-all",
-                hasValidId && "hover:border-primary/30 cursor-pointer"
-              )}>
-                <h3 className="text-sm font-semibold leading-snug mb-3 line-clamp-2">
-                  {market.question}
-                </h3>
+            return (
+              <div
+                key={market.condition_id || market.id || market.question}
+                className={cn(
+                  "rounded-xl border border-border bg-card p-5 transition-all",
+                  isLive ? "hover:border-primary/30" : "opacity-60"
+                )}
+              >
+                <Link
+                  to={isLive ? `/trade/${encodeURIComponent(market.condition_id)}` : "#"}
+                  onClick={(e) => { if (!isLive) e.preventDefault(); }}
+                  className="block"
+                >
+                  <h3 className="text-sm font-semibold leading-snug mb-3 line-clamp-2 hover:text-primary transition-colors">
+                    {market.question}
+                  </h3>
+                </Link>
 
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Yes</span>
-                    <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+                {/* Trade buttons for live markets */}
+                {isLive ? (
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => setTradeModal({ market, outcome: 0 })}
+                      className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
+                    >
+                      Buy Yes {formatPrice(yesPrice)}
+                    </button>
+                    <button
+                      onClick={() => setTradeModal({ market, outcome: 1 })}
+                      className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
+                    >
+                      Buy No {formatPrice(noPrice)}
+                    </button>
                   </div>
-                  <div className="h-5 w-px bg-border" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">No</span>
-                    <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+                ) : (
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Yes</span>
+                      <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
+                    </div>
+                    <div className="h-5 w-px bg-border" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">No</span>
+                      <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
@@ -127,31 +171,13 @@ const EventDetail = () => {
                     <Droplets className="h-3 w-3" />
                     <span>{formatVol(market.liquidity)}</span>
                   </div>
-                  {market.accepting_orders && (
+                  {isLive && (
                     <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                       LIVE
                     </span>
                   )}
                 </div>
-
-                <div className="mt-2 text-[10px] font-mono text-muted-foreground truncate">
-                  {market.condition_id || "No condition ID"}
-                </div>
               </div>
-            );
-
-            if (!hasValidId) {
-              return <div key={market.id || market.question} className="opacity-60">{card}</div>;
-            }
-
-            return (
-              <Link
-                key={market.condition_id}
-                to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                className="block"
-              >
-                {card}
-              </Link>
             );
           })}
         </div>
@@ -160,6 +186,14 @@ const EventDetail = () => {
           <p className="text-sm text-muted-foreground text-center py-8">No markets in this event.</p>
         )}
       </div>
+
+      {tradeModal && (
+        <QuickTradeModal
+          market={tradeModal.market}
+          initialOutcome={tradeModal.outcome}
+          onClose={() => setTradeModal(null)}
+        />
+      )}
     </div>
   );
 };

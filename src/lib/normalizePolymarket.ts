@@ -206,8 +206,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   const archived = (raw.archived ?? raw.isArchived) === true;
 
   // Event slug for correct Polymarket external links
+  // Try multiple sources: direct field, nested event object, market slug as last resort
   const event_slug = String(
-    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
+    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? raw.slug ?? ""
   ).trim();
 
   // Detect ended by extreme prices (resolved market)
