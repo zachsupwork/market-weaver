@@ -109,6 +109,7 @@ const LiveMarkets = () => {
     queryKey: ["polymarket-events-live", eventsPage, debouncedSearch],
     queryFn: () => fetchEvents({
       active: true,
+      closed: false,
       limit: 50,
       offset: eventsPage * 50,
       keyword: debouncedSearch || undefined,
