@@ -166,7 +166,7 @@ const LiveMarkets = () => {
     const other = list.filter((m) => m.statusLabel !== "LIVE" && m.statusLabel !== "ENDED");
 
     return { liveMarkets: live, endedMarkets: ended, otherMarkets: other };
-  }, [markets, category, search]);
+  }, [allMarkets, category, search]);
 
   const renderMarketCard = (market: NormalizedMarket & { _inferredCategory?: CategoryId }, dimmed = false) => {
     const hasValidId = isBytes32Hex(market.condition_id);
