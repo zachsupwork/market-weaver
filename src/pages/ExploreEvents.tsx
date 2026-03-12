@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
 import { isBytes32Hex } from "@/lib/polymarket-api";
-import { Search, Loader2, Activity, Calendar, BarChart3, ExternalLink, Droplets } from "lucide-react";
+import { Search, Loader2, Activity, BarChart3, ExternalLink, Droplets, Layers } from "lucide-react";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -19,8 +19,15 @@ function formatPrice(p: number | undefined): string {
 
 const ExploreEvents = () => {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const limit = 50;
+
+  // Debounce search
+  useState(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  });
 
   const { data: events, isLoading, error } = useQuery({
     queryKey: ["polymarket-events", page, search],
@@ -32,34 +39,30 @@ const ExploreEvents = () => {
       keyword: search.trim() || undefined,
     }),
     staleTime: 30_000,
+    refetchInterval: 60_000,
   });
-
-  const filtered = useMemo(() => {
-    if (!events) return [];
-    return events;
-  }, [events]);
 
   return (
     <div className="min-h-screen">
-      <div className="container py-8 max-w-6xl">
+      <div className="container py-6 max-w-6xl">
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Activity className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Explore Events</h1>
+          <div className="flex items-center gap-2.5 mb-1">
+            <Layers className="h-5 w-5 text-primary" />
+            <h1 className="text-xl font-bold">Events</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Browse live Polymarket events, each containing one or more tradable markets.
+            Multi-outcome events with grouped markets from Polymarket.
           </p>
         </div>
 
-        <div className="relative mb-6 max-w-md">
+        <div className="relative mb-5 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search events (e.g. 'election', 'Bitcoin')..."
+            placeholder="Search events..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+            className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
           />
         </div>
 
@@ -75,10 +78,10 @@ const ExploreEvents = () => {
           </div>
         )}
 
-        {filtered.length > 0 && (
+        {events && events.length > 0 && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((event: any) => {
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {events.map((event: any) => {
                 const rawMarkets = event.markets || [];
                 const markets = normalizeMarkets(rawMarkets);
                 const liveMarkets = markets.filter(m => isBytes32Hex(m.condition_id) && m.statusLabel === "LIVE");
@@ -91,65 +94,73 @@ const ExploreEvents = () => {
                 return (
                   <div
                     key={event.id || slug}
-                    className="rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30"
+                    className="rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/30 group"
                   >
                     <Link
                       to={`/events/${encodeURIComponent(event.id || slug)}`}
                       className="block"
                     >
-                      <div className="flex items-start gap-3 mb-3">
+                      <div className="flex items-start gap-3 mb-2">
                         {event.image && (
                           <img src={event.image} alt="" className="h-10 w-10 rounded-lg bg-muted shrink-0 object-cover" loading="lazy" />
                         )}
-                        <h3 className="text-sm font-semibold leading-snug text-foreground hover:text-primary transition-colors line-clamp-2 flex-1">
-                          {title}
-                        </h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                            {title}
+                          </h3>
+                          {event.description && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{event.description}</p>
+                          )}
+                        </div>
                       </div>
                     </Link>
 
-                    {event.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{event.description}</p>
-                    )}
-
-                    {/* Top 3 live markets with prices */}
+                    {/* Top live markets with prices + progress */}
                     {liveMarkets.length > 0 && (
-                      <div className="space-y-1.5 mb-3">
-                        {liveMarkets.slice(0, 3).map((m) => (
-                          <Link
-                            key={m.condition_id}
-                            to={`/trade/${encodeURIComponent(m.condition_id)}`}
-                            className="flex items-center justify-between gap-2 text-xs hover:bg-accent/50 rounded px-1.5 py-1 -mx-1.5 transition-colors"
-                          >
-                            <span className="truncate text-foreground flex-1">
-                              {m.question}
-                            </span>
-                            <span className="font-mono text-yes shrink-0">
-                              {formatPrice(m.outcomePrices?.[0])}
-                            </span>
-                          </Link>
-                        ))}
-                        {liveMarkets.length > 3 && (
+                      <div className="space-y-1 mb-3">
+                        {liveMarkets.slice(0, 4).map((m) => {
+                          const yesPrice = m.outcomePrices?.[0];
+                          const yesPct = yesPrice !== undefined ? Math.round(yesPrice * 100) : 50;
+                          return (
+                            <Link
+                              key={m.condition_id}
+                              to={`/trade/${encodeURIComponent(m.condition_id)}`}
+                              className="flex items-center gap-2 text-xs hover:bg-accent/50 rounded px-1.5 py-1 -mx-1.5 transition-colors"
+                            >
+                              <span className="truncate text-foreground flex-1 text-[11px]">
+                                {m.groupItemTitle || m.question}
+                              </span>
+                              <div className="w-16 h-1.5 rounded-full bg-no/20 overflow-hidden shrink-0">
+                                <div className="h-full rounded-full bg-yes" style={{ width: `${yesPct}%` }} />
+                              </div>
+                              <span className="font-mono text-yes shrink-0 text-[11px] w-8 text-right">
+                                {formatPrice(yesPrice)}
+                              </span>
+                            </Link>
+                          );
+                        })}
+                        {liveMarkets.length > 4 && (
                           <Link
                             to={`/events/${encodeURIComponent(event.id || slug)}`}
                             className="text-[10px] text-primary hover:underline pl-1.5"
                           >
-                            +{liveMarkets.length - 3} more →
+                            +{liveMarkets.length - 4} more →
                           </Link>
                         )}
                       </div>
                     )}
 
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span>{markets.length} market{markets.length !== 1 ? "s" : ""}</span>
                       {liveMarkets.length > 0 && (
-                        <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                        <span className="rounded-full bg-yes/10 border border-yes/20 px-1.5 py-0.5 text-[9px] font-mono text-yes">
                           {liveMarkets.length} LIVE
                         </span>
                       )}
-                      <div className="flex items-center gap-1 ml-auto">
+                      <span className="ml-auto flex items-center gap-1">
                         <BarChart3 className="h-3 w-3" />
-                        <span>{formatVol(totalVol)}</span>
-                      </div>
+                        {formatVol(totalVol)}
+                      </span>
                       {pmUrl && (
                         <a
                           href={pmUrl}
@@ -168,19 +179,19 @@ const ExploreEvents = () => {
               })}
             </div>
 
-            <div className="flex justify-center gap-3 mt-8">
+            <div className="flex justify-center gap-3 mt-6">
               <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+                className="rounded-md border border-border px-4 py-1.5 text-sm disabled:opacity-30 hover:bg-accent transition-all"
               >
                 Previous
               </button>
               <span className="flex items-center text-sm text-muted-foreground">Page {page + 1}</span>
               <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={filtered.length < limit}
-                className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+                onClick={() => setPage(p => p + 1)}
+                disabled={events.length < limit}
+                className="rounded-md border border-border px-4 py-1.5 text-sm disabled:opacity-30 hover:bg-accent transition-all"
               >
                 Next
               </button>
@@ -188,7 +199,7 @@ const ExploreEvents = () => {
           </>
         )}
 
-        {!isLoading && filtered.length === 0 && !error && (
+        {!isLoading && events && events.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-sm">No events found.</p>
           </div>
