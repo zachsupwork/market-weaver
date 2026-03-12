@@ -118,11 +118,15 @@ const EventDetail = () => {
 
           {event.tags && event.tags.length > 0 && (
             <div className="flex gap-1.5 mt-3">
-              {event.tags.slice(0, 5).map((tag: string) => (
-                <span key={tag} className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                  {tag}
-                </span>
-              ))}
+              {event.tags.slice(0, 5).map((tag: any) => {
+                const label = typeof tag === "string" ? tag : tag?.label ?? tag?.slug ?? "";
+                if (!label) return null;
+                return (
+                  <span key={label} className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                    {label}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
