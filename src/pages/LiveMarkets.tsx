@@ -291,6 +291,11 @@ const LiveMarkets = () => {
           </div>
         )}
 
+        {/* Recent Trades via Bitquery */}
+        <div className="mt-10">
+          <RecentTradesPanel limit={30} />
+        </div>
+
         {liveMarkets.length > 0 && (
           <div className="flex justify-center gap-3 mt-8">
             <button
