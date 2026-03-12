@@ -127,7 +127,7 @@ const LiveMarkets = () => {
   const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
     if (!markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
 
-    let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
     list = list.map((m) => ({
       ...m,
