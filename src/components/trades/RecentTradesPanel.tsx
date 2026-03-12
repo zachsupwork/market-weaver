@@ -2,6 +2,7 @@ import { useRecentTrades, type BitqueryTrade } from "@/hooks/useRecentTrades";
 import { Loader2, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { useState, useEffect, useRef } from "react";
 
 function truncateAddress(addr: string): string {
   if (!addr || addr.length < 10) return addr || "—";
@@ -14,14 +15,19 @@ function formatSize(n: number): string {
   return n.toFixed(2);
 }
 
-function TradeRow({ trade }: { trade: BitqueryTrade }) {
+function TradeRow({ trade, isNew }: { trade: BitqueryTrade; isNew: boolean }) {
   const isBuy = trade.side === "BUY";
   const timeAgo = trade.timestamp
     ? formatDistanceToNow(new Date(trade.timestamp), { addSuffix: true })
     : "—";
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-accent/30 transition-colors text-xs">
+    <div
+      className={cn(
+        "flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-accent/30 transition-all text-xs",
+        isNew && "animate-trade-flash"
+      )}
+    >
       <div className="shrink-0">
         {isBuy ? (
           <ArrowUpRight className="h-3.5 w-3.5 text-yes" />
@@ -65,12 +71,51 @@ interface RecentTradesPanelProps {
 
 export function RecentTradesPanel({ conditionId, limit = 30, className }: RecentTradesPanelProps) {
   const { data: trades, isLoading, error } = useRecentTrades({ conditionId, limit });
+  const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set());
+  const prevTradeIdsRef = useRef<Set<string>>(new Set());
+  const isFirstLoad = useRef(true);
+
+  // Detect new trades and highlight them
+  useEffect(() => {
+    if (!trades || trades.length === 0) return;
+
+    const currentIds = new Set(trades.map((t) => t.id));
+
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      prevTradeIdsRef.current = currentIds;
+      return;
+    }
+
+    const freshIds = new Set<string>();
+    currentIds.forEach((id) => {
+      if (!prevTradeIdsRef.current.has(id)) {
+        freshIds.add(id);
+      }
+    });
+
+    if (freshIds.size > 0) {
+      setNewTradeIds(freshIds);
+      // Clear highlight after animation
+      const timer = setTimeout(() => setNewTradeIds(new Set()), 1200);
+      prevTradeIdsRef.current = currentIds;
+      return () => clearTimeout(timer);
+    }
+
+    prevTradeIdsRef.current = currentIds;
+  }, [trades]);
 
   return (
     <div className={cn("rounded-xl border border-border bg-card overflow-hidden", className)}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-        <h3 className="text-sm font-semibold text-foreground">Recent Trades</h3>
-        <span className="text-[10px] font-mono text-muted-foreground">via Bitquery</span>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Recent Trades</h3>
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-yes"></span>
+          </span>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground">LIVE via Bitquery</span>
       </div>
 
       {/* Header row */}
@@ -105,7 +150,7 @@ export function RecentTradesPanel({ conditionId, limit = 30, className }: Recent
       {trades && trades.length > 0 && (
         <div className="max-h-[400px] overflow-y-auto">
           {trades.map((trade) => (
-            <TradeRow key={trade.id} trade={trade} />
+            <TradeRow key={trade.id} trade={trade} isNew={newTradeIds.has(trade.id)} />
           ))}
         </div>
       )}
