@@ -237,20 +237,31 @@ const LiveMarkets = () => {
 
         {/* Quick trade buttons for live markets */}
         {isLive && !dimmed ? (
-          <div className="flex gap-2 mb-3">
-            <button
-              onClick={() => setTradeModal({ market, outcome: 0 })}
-              className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
-            >
-              Buy Yes {formatPrice(yesPrice)}
-            </button>
-            <button
-              onClick={() => setTradeModal({ market, outcome: 1 })}
-              className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
-            >
-              Buy No {formatPrice(noPrice)}
-            </button>
-          </div>
+          <>
+            <div className="mb-2">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-yes font-mono font-semibold">Yes {formatPrice(yesPrice)}</span>
+                <span className="text-no font-mono font-semibold">No {formatPrice(noPrice)}</span>
+              </div>
+              <div className="h-2 rounded-full bg-no/20 overflow-hidden">
+                <div className="h-full rounded-full bg-yes transition-all" style={{ width: `${yesPrice !== undefined ? Math.round(yesPrice * 100) : 50}%` }} />
+              </div>
+            </div>
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setTradeModal({ market, outcome: 0 })}
+                className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-1.5 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
+              >
+                Buy Yes
+              </button>
+              <button
+                onClick={() => setTradeModal({ market, outcome: 1 })}
+                className="flex-1 rounded-lg bg-no/10 border border-no/20 py-1.5 text-xs font-semibold text-no hover:bg-no/20 transition-all"
+              >
+                Buy No
+              </button>
+            </div>
+          </>
         ) : (
           <div className="flex items-center gap-4 mb-3">
             <div className="flex items-center gap-2">
