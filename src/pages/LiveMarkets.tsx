@@ -54,13 +54,73 @@ function StatusBadge({ status }: { status: MarketStatusLabel }) {
 }
 
 const LiveMarkets = () => {
-  const [page, setPage] = useState(0);
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
+  const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const limit = 100;
-  const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
+
+  // Debounce search for server-side query
+  useState(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  });
+
+  // Use effect for debounce
+  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (searchTimer) clearTimeout(searchTimer);
+    setSearchTimer(setTimeout(() => setDebouncedSearch(value), 400));
+  };
+
+  const { data: markets, isLoading, error, isFetching } = useMarkets({
+    limit,
+    offset,
+    textQuery: debouncedSearch || undefined,
+  });
+
+  // Accumulate markets across pages, reset on search change
+  useState(() => {
+    setAllMarkets([]);
+    setOffset(0);
+    setHasMore(true);
+  });
+
+  // Reset when search changes
+  const [prevSearch, setPrevSearch] = useState("");
+  if (prevSearch !== debouncedSearch) {
+    setPrevSearch(debouncedSearch);
+    setAllMarkets([]);
+    setOffset(0);
+    setHasMore(true);
+  }
+
+  // Append new data
+  const [prevOffset, setPrevOffset] = useState(-1);
+  if (markets && offset !== prevOffset) {
+    setPrevOffset(offset);
+    if (offset === 0) {
+      setAllMarkets(markets as NormalizedMarket[]);
+    } else {
+      setAllMarkets(prev => {
+        const existingIds = new Set(prev.map(m => m.condition_id));
+        const newOnes = (markets as NormalizedMarket[]).filter(m => !existingIds.has(m.condition_id));
+        return [...prev, ...newOnes];
+      });
+    }
+    setHasMore((markets as NormalizedMarket[]).length >= limit);
+  }
+
+  const loadMore = () => {
+    if (!isFetching && hasMore) {
+      setOffset(prev => prev + limit);
+    }
+  };
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
