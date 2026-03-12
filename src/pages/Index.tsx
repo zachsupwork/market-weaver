@@ -317,7 +317,17 @@ const Index = () => {
                       <TrendingUp className="h-3 w-3" />
                       <span>{formatVol(market.liquidity)} liq</span>
                     </div>
-                    <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                    <a
+                      href={`https://polymarket.com/event/${market.event_slug || market.market_slug || market.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="ml-auto text-muted-foreground hover:text-primary transition-colors"
+                      title="View on Polymarket"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                       LIVE
                     </span>
                   </div>
