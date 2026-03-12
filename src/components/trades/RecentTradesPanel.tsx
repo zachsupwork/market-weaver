@@ -149,8 +149,8 @@ export function RecentTradesPanel({ conditionId, limit = 30, className }: Recent
 
       {trades && trades.length > 0 && (
         <div className="max-h-[400px] overflow-y-auto">
-          {trades.map((trade) => (
-            <TradeRow key={trade.id} trade={trade} isNew={newTradeIds.has(trade.id)} />
+          {trades.map((trade, idx) => (
+            <TradeRow key={`${trade.id}-${idx}`} trade={trade} isNew={newTradeIds.has(trade.id)} />
           ))}
         </div>
       )}
