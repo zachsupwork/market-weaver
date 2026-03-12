@@ -89,4 +89,17 @@
     background: hsl(220 18% 10% / 0.8);
     backdrop-filter: blur(12px);
   }
+
+  @keyframes trade-flash {
+    0% {
+      background-color: hsl(142 71% 45% / 0.15);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .animate-trade-flash {
+    animation: trade-flash 1.2s ease-out;
+  }
 }

@@ -1,14 +1,17 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
+  SPORTS_SUBCATEGORIES,
   type CategoryId,
+  type SportsSubId,
   inferCategory,
+  inferSportsSubcategory,
   sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
@@ -53,8 +56,15 @@ function StatusBadge({ status }: { status: MarketStatusLabel }) {
   );
 }
 
+function polymarketUrl(market: NormalizedMarket): string {
+  const slug = market.event_slug || market.market_slug || market.slug;
+  if (slug) return `https://polymarket.com/event/${slug}`;
+  return `https://polymarket.com/event/${market.condition_id}`;
+}
+
 const LiveMarkets = () => {
   const [category, setCategory] = useState<CategoryId>("trending");
+  const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
@@ -113,15 +123,26 @@ const LiveMarkets = () => {
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
+  const resetFilters = () => {
+    setOffset(0);
+    setAllMarkets([]);
+    setHasMore(true);
+    prevDataRef.current = "";
+  };
+
   const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
 
-    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
 
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
         category: m.category,
+        tags: m.tags,
+        question: m.question,
+      }),
+      _sportsSubcat: inferSportsSubcategory({
         tags: m.tags,
         question: m.question,
       }),
@@ -146,6 +167,11 @@ const LiveMarkets = () => {
       list = list.filter((m) => m._inferredCategory === category);
     }
 
+    // Apply sports sub-filter
+    if (category === "sports" && sportsSubcat !== "all-sports") {
+      list = list.filter((m) => m._sportsSubcat === sportsSubcat);
+    }
+
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
@@ -155,7 +181,7 @@ const LiveMarkets = () => {
     const other = list.filter((m) => m.statusLabel !== "LIVE" && m.statusLabel !== "ENDED");
 
     return { liveMarkets: live, endedMarkets: ended, otherMarkets: other };
-  }, [allMarkets, category, search]);
+  }, [allMarkets, category, sportsSubcat, search]);
 
   const renderMarketCard = (market: NormalizedMarket & { _inferredCategory?: CategoryId }, dimmed = false) => {
     const hasValidId = isBytes32Hex(market.condition_id);
@@ -164,6 +190,7 @@ const LiveMarkets = () => {
     const yesPrice = market.outcomePrices?.[0];
     const noPrice = market.outcomePrices?.[1];
     const isLive = hasValidId && market.statusLabel === "LIVE";
+    const pmUrl = polymarketUrl(market);
 
     return (
       <div key={market.id || market.condition_id || market.question} className={cn(
@@ -224,9 +251,17 @@ const LiveMarkets = () => {
             <TrendingUp className="h-3 w-3" />
             <span>{formatVol(market.liquidity)} liq</span>
           </div>
-          <span className="ml-auto">
-            <StatusBadge status={market.statusLabel} />
-          </span>
+          <a
+            href={pmUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
+            title="View on Polymarket"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <StatusBadge status={market.statusLabel} />
         </div>
       </div>
     );
@@ -259,11 +294,12 @@ const LiveMarkets = () => {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
+        {/* Top-level category tabs */}
+        <div className="flex flex-wrap gap-2 mb-3">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
+              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); resetFilters(); }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
@@ -275,6 +311,26 @@ const LiveMarkets = () => {
             </button>
           ))}
         </div>
+
+        {/* Sports sub-category tabs */}
+        {category === "sports" && (
+          <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
+            {SPORTS_SUBCATEGORIES.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSportsSubcat(sub.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  sportsSubcat === sub.id
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                )}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!isConnected && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 mb-6 text-sm text-muted-foreground">
