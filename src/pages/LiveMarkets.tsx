@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
 import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
@@ -54,20 +54,69 @@ function StatusBadge({ status }: { status: MarketStatusLabel }) {
 }
 
 const LiveMarkets = () => {
-  const [page, setPage] = useState(0);
   const [category, setCategory] = useState<CategoryId>("trending");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
+  const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const limit = 100;
-  const { data: markets, isLoading, error } = useMarkets({ limit, offset: page * limit });
+  const prevDataRef = useRef<string>("");
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset accumulated markets when search changes
+  useEffect(() => {
+    setAllMarkets([]);
+    setOffset(0);
+    setHasMore(true);
+    prevDataRef.current = "";
+  }, [debouncedSearch]);
+
+  const { data: markets, isLoading, error, isFetching } = useMarkets({
+    limit,
+    offset,
+    textQuery: debouncedSearch || undefined,
+  });
+
+  // Append new data when markets change
+  useEffect(() => {
+    if (!markets || markets.length === 0) return;
+    const dataKey = `${offset}-${markets.length}`;
+    if (dataKey === prevDataRef.current) return;
+    prevDataRef.current = dataKey;
+
+    if (offset === 0) {
+      setAllMarkets(markets as NormalizedMarket[]);
+    } else {
+      setAllMarkets(prev => {
+        const existingIds = new Set(prev.map(m => m.condition_id));
+        const newOnes = (markets as NormalizedMarket[]).filter(m => !existingIds.has(m.condition_id));
+        return [...prev, ...newOnes];
+      });
+    }
+    setHasMore((markets as NormalizedMarket[]).length >= limit);
+  }, [markets, offset, limit]);
+
+  const loadMore = useCallback(() => {
+    if (!isFetching && hasMore) {
+      setOffset(prev => prev + limit);
+    }
+  }, [isFetching, hasMore, limit]);
+
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
   const { liveMarkets, endedMarkets, otherMarkets } = useMemo(() => {
-    if (!markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
+    if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [], otherMarkets: [] };
 
-    let list = markets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
 
     list = list.map((m) => ({
       ...m,
@@ -106,7 +155,7 @@ const LiveMarkets = () => {
     const other = list.filter((m) => m.statusLabel !== "LIVE" && m.statusLabel !== "ENDED");
 
     return { liveMarkets: live, endedMarkets: ended, otherMarkets: other };
-  }, [markets, category, search]);
+  }, [allMarkets, category, search]);
 
   const renderMarketCard = (market: NormalizedMarket & { _inferredCategory?: CategoryId }, dimmed = false) => {
     const hasValidId = isBytes32Hex(market.condition_id);
@@ -214,7 +263,7 @@ const LiveMarkets = () => {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setPage(0); }}
+              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
@@ -296,24 +345,15 @@ const LiveMarkets = () => {
           <RecentTradesPanel limit={30} />
         </div>
 
-        {liveMarkets.length > 0 && (
-          <div className="flex justify-center gap-3 mt-8">
+        {hasMore && liveMarkets.length > 0 && (
+          <div className="flex justify-center mt-8">
             <button
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+              onClick={loadMore}
+              disabled={isFetching}
+              className="rounded-md border border-border px-6 py-2.5 text-sm font-medium hover:bg-accent transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              Previous
-            </button>
-            <span className="flex items-center text-sm text-muted-foreground">
-              Page {page + 1}
-            </span>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={liveMarkets.length < 20}
-              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
-            >
-              Next
+              {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Load More Markets
             </button>
           </div>
         )}

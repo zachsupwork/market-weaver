@@ -27,6 +27,7 @@ serve(async (req) => {
     const conditionId = url.searchParams.get("condition_id");
 
     // Build the where clause - filter for Polymarket trades on Polygon
+    // Note: In Bitquery streaming API, SmartContract is a scalar String field
     let whereClause = `
       TransactionStatus: { Success: true }
       Trade: {
@@ -39,7 +40,6 @@ serve(async (req) => {
       }
     `;
 
-    // If conditionId provided, filter by market
     if (conditionId && conditionId !== "all") {
       whereClause = `
         TransactionStatus: { Success: true }
@@ -80,22 +80,14 @@ serve(async (req) => {
                 Currency {
                   Name
                   Symbol
-                  SmartContract {
-                    Address {
-                      Address
-                    }
-                  }
+                  SmartContract
                 }
                 Type
               }
               Currency {
                 Name
                 Symbol
-                SmartContract {
-                  Address {
-                    Address
-                  }
-                }
+                SmartContract
               }
               Buyer
               Seller
@@ -148,7 +140,7 @@ serve(async (req) => {
       seller: t.Trade?.Seller || "",
       tokenName: t.Trade?.Currency?.Name || "",
       tokenSymbol: t.Trade?.Currency?.Symbol || "",
-      tokenAddress: t.Trade?.Currency?.SmartContract?.Address?.Address || "",
+      tokenAddress: t.Trade?.Currency?.SmartContract || "",
       txHash: t.Transaction?.Hash || "",
     }));
 
