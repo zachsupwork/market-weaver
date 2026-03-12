@@ -219,11 +219,11 @@ const Index = () => {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-3">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
+              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
@@ -235,6 +235,25 @@ const Index = () => {
             </button>
           ))}
         </div>
+
+        {category === "sports" && (
+          <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
+            {SPORTS_SUBCATEGORIES.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSportsSubcat(sub.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  sportsSubcat === sub.id
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                )}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-16">
