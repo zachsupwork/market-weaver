@@ -356,24 +356,15 @@ const LiveMarkets = () => {
           <RecentTradesPanel limit={30} />
         </div>
 
-        {liveMarkets.length > 0 && (
-          <div className="flex justify-center gap-3 mt-8">
+        {hasMore && liveMarkets.length > 0 && (
+          <div className="flex justify-center mt-8">
             <button
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
+              onClick={loadMore}
+              disabled={isFetching}
+              className="rounded-md border border-border px-6 py-2.5 text-sm font-medium hover:bg-accent transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              Previous
-            </button>
-            <span className="flex items-center text-sm text-muted-foreground">
-              Page {page + 1}
-            </span>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={liveMarkets.length < 20}
-              className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-30 hover:bg-accent transition-all"
-            >
-              Next
+              {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Load More Markets
             </button>
           </div>
         )}
