@@ -1,15 +1,18 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Link } from "react-router-dom";
-import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
+  SPORTS_SUBCATEGORIES,
   type CategoryId,
+  type SportsSubId,
   inferCategory,
+  inferSportsSubcategory,
   sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
@@ -28,6 +31,7 @@ function formatPrice(p: number | undefined): string {
 
 const Index = () => {
   const [category, setCategory] = useState<CategoryId>("trending");
+  const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
@@ -88,11 +92,15 @@ const Index = () => {
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
 
-    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({
         category: m.category,
+        tags: m.tags,
+        question: m.question,
+      }),
+      _sportsSubcat: inferSportsSubcategory({
         tags: m.tags,
         question: m.question,
       }),
@@ -117,6 +125,10 @@ const Index = () => {
       list = list.filter((m) => m._inferredCategory === category);
     }
 
+    if (category === "sports" && sportsSubcat !== "all-sports") {
+      list = list.filter((m) => m._sportsSubcat === sportsSubcat);
+    }
+
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
     }
@@ -125,7 +137,7 @@ const Index = () => {
     const ended = list.filter((m) => m.statusLabel !== "LIVE");
 
     return { liveMarkets: live, endedMarkets: ended };
-  }, [allMarkets, category, search]);
+  }, [allMarkets, category, sportsSubcat, search]);
 
   return (
     <div className="min-h-screen">
@@ -207,11 +219,11 @@ const Index = () => {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-3">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
+              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition-all",
                 category === cat.id
@@ -223,6 +235,25 @@ const Index = () => {
             </button>
           ))}
         </div>
+
+        {category === "sports" && (
+          <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
+            {SPORTS_SUBCATEGORIES.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSportsSubcat(sub.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  sportsSubcat === sub.id
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                )}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-16">
@@ -286,7 +317,17 @@ const Index = () => {
                       <TrendingUp className="h-3 w-3" />
                       <span>{formatVol(market.liquidity)} liq</span>
                     </div>
-                    <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                    <a
+                      href={`https://polymarket.com/event/${market.event_slug || market.market_slug || market.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="ml-auto text-muted-foreground hover:text-primary transition-colors"
+                      title="View on Polymarket"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                       LIVE
                     </span>
                   </div>
