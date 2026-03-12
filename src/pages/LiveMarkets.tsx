@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Activity, Loader2, TrendingUp, BarChart3, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   CATEGORIES,
   type CategoryId,
@@ -289,6 +290,11 @@ const LiveMarkets = () => {
             )}
           </div>
         )}
+
+        {/* Recent Trades via Bitquery */}
+        <div className="mt-10">
+          <RecentTradesPanel limit={30} />
+        </div>
 
         {liveMarkets.length > 0 && (
           <div className="flex justify-center gap-3 mt-8">
