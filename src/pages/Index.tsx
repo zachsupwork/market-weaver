@@ -311,6 +311,12 @@ const Index = () => {
                     </button>
                   </div>
 
+                  {/* Mini live orderbook */}
+                  <MiniOrderbook
+                    tokenId={market.tokens?.[0]?.token_id}
+                    className="mb-2 rounded border border-border bg-background/50 p-1"
+                  />
+
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     <span>{formatVol(market.volume24h)} vol</span>
                     <span>{formatVol(market.liquidity)} liq</span>
