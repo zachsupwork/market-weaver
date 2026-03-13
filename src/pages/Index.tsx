@@ -18,6 +18,7 @@ import {
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 import { Progress } from "@/components/ui/progress";
+import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -309,6 +310,12 @@ const Index = () => {
                       Buy No
                     </button>
                   </div>
+
+                  {/* Mini live orderbook */}
+                  <MiniOrderbook
+                    tokenId={market.tokens?.[0]?.token_id}
+                    className="mb-2 rounded border border-border bg-background/50 p-1"
+                  />
 
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     <span>{formatVol(market.volume24h)} vol</span>
