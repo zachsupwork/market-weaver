@@ -160,8 +160,8 @@ const Trade = () => {
       return results;
     },
     enabled: !!yesTokenIdRaw,
-    staleTime: 3_000,
-    refetchInterval: isLive && isTabVisible ? 4_000 : false,
+    staleTime: 500,
+    refetchInterval: isLive && isTabVisible ? 1_000 : false,
   });
 
   const { data: userPositions } = useQuery({
