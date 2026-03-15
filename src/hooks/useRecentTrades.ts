@@ -47,7 +47,7 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
       const raw = await res.json();
       return (raw as any[]).map((t) => ({
         id: t.id || "",
-        timestamp: t.timestamp || "",
+        timestamp: parseTradeTimestamp(t.timestamp),
         price: t.price ?? 0,
         priceUsd: t.price ?? 0,
         size: t.size ?? 0,
