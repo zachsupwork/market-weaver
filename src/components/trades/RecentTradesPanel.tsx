@@ -68,11 +68,12 @@ interface RecentTradesPanelProps {
   conditionId?: string;
   tokenId?: string;
   limit?: number;
+  pollMs?: number;
   className?: string;
 }
 
-export function RecentTradesPanel({ conditionId, tokenId, limit = 30, className }: RecentTradesPanelProps) {
-  const { data: trades, isLoading, error } = useRecentTrades({ conditionId, tokenId, limit });
+export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1_000, className }: RecentTradesPanelProps) {
+  const { data: trades, isLoading, error } = useRecentTrades({ conditionId, tokenId, limit, pollMs });
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set());
   const prevTradeIdsRef = useRef<Set<string>>(new Set());
   const isFirstLoad = useRef(true);
