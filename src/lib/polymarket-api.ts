@@ -50,6 +50,34 @@ export interface Position {
   pnl: string;
 }
 
+/** Normalize trade timestamps from unix seconds/ms or ISO into ISO string */
+export function normalizeTradeTimestamp(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return new Date().toISOString();
+
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed) {
+      const asNumber = Number(trimmed);
+      if (!Number.isNaN(asNumber)) {
+        const ms = asNumber < 1e12 ? asNumber * 1000 : asNumber;
+        const d = new Date(ms);
+        if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+      }
+
+      const d = new Date(trimmed);
+      if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+}
+
 // ── Public market data (no auth required) ───────────────────────
 
 export async function fetchMarkets(params?: {
