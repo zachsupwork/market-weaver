@@ -126,9 +126,14 @@ const Index = () => {
       list = sortByTrending(list);
     }
 
+    // Show all tradable markets (LIVE + UNAVAILABLE with valid condition_id) as "live"
+    // Only truly ended/closed/archived go to the ended bucket
+    const tradable = list.filter(m => m.statusLabel === "LIVE" || (m.statusLabel === "UNAVAILABLE" && isBytes32Hex(m.condition_id)));
+    const ended = list.filter(m => m.statusLabel === "ENDED" || m.statusLabel === "CLOSED" || m.statusLabel === "ARCHIVED");
+
     return {
-      liveMarkets: list.filter(m => m.statusLabel === "LIVE"),
-      endedMarkets: list.filter(m => m.statusLabel !== "LIVE"),
+      liveMarkets: tradable,
+      endedMarkets: ended,
     };
   }, [allMarkets, category, sportsSubcat, search]);
 
@@ -373,9 +378,10 @@ const Index = () => {
           </div>
         )}
 
-        {!isLoading && liveMarkets.length === 0 && !error && (
+        {!isLoading && liveMarkets.length === 0 && endedMarkets.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
-            <p className="text-sm">No active markets found.</p>
+            <p className="text-sm">No markets found{category !== "trending" ? ` in "${CATEGORIES.find(c => c.id === category)?.label || category}"` : ""}.</p>
+            <p className="text-xs mt-1">Try a different category or search term.</p>
           </div>
         )}
 
