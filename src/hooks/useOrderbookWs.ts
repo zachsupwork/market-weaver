@@ -117,11 +117,11 @@ export function useOrderbookWs(tokenId: string | undefined) {
 
       ws.onclose = () => {
         setConnected(false);
-        pollRef.current = setInterval(fetchSnapshot, 10_000);
+        pollRef.current = setInterval(fetchSnapshot, 3_000);
       };
     } catch {
       setError("Failed to connect");
-      pollRef.current = setInterval(fetchSnapshot, 10_000);
+      pollRef.current = setInterval(fetchSnapshot, 3_000);
     }
 
     return () => {

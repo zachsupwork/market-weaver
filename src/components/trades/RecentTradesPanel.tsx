@@ -97,8 +97,8 @@ export function RecentTradesPanel({ conditionId, limit = 30, className }: Recent
 
     if (freshIds.size > 0) {
       setNewTradeIds(freshIds);
-      // Clear highlight after animation
-      const timer = setTimeout(() => setNewTradeIds(new Set()), 1200);
+      // Clear highlight after animation (shorter for faster polling)
+      const timer = setTimeout(() => setNewTradeIds(new Set()), 800);
       prevTradeIdsRef.current = currentIds;
       return () => clearTimeout(timer);
     }
