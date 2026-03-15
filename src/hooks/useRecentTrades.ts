@@ -60,7 +60,7 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
       const mapped = rows.slice(0, limit).map((t, index) => {
         const price = Number(t?.price ?? 0);
         const size = Number(t?.size ?? t?.sideAmount ?? 0);
-        const side = String(t?.side ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+        const side: "BUY" | "SELL" = String(t?.side ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
         const rawTimestamp = t?.timestamp ?? t?.created_at ?? t?.time;
         const tokenAddress = String(t?.asset_id ?? t?.token_id ?? "");
 
