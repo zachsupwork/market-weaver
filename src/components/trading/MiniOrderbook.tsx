@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useOrderbookWs } from "@/hooks/useOrderbookWs";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -5,19 +6,65 @@ import { cn } from "@/lib/utils";
 interface MiniOrderbookProps {
   tokenId: string | undefined;
   className?: string;
-  /** Set false on homepage to avoid opening dozens of WebSockets */
   wsEnabled?: boolean;
 }
 
+interface FlightTick {
+  id: string;
+  label: string;
+  direction: "left" | "right";
+  tone: "yes" | "no";
+}
+
+const FLIGHT_DURATION_MS = 1800;
+
 /**
  * Compact 3-row orderbook preview for market cards.
- * Shows top 3 bids and asks with animated size bars.
+ * Includes an animated micro-ticker for incremental line-by-line updates.
  */
-export function MiniOrderbook({ tokenId, className, wsEnabled = false }: MiniOrderbookProps) {
+export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrderbookProps) {
   const { book, connected, changedPrices } = useOrderbookWs(tokenId, {
     wsEnabled,
-    pollInterval: 5_000,
+    pollInterval: 1_000,
   });
+  const [flights, setFlights] = useState<FlightTick[]>([]);
+  const seenFlightIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!book || changedPrices.size === 0) return;
+
+    const nextFlights: FlightTick[] = [];
+    [...changedPrices].slice(0, 2).forEach((key, idx) => {
+      const [side, price] = key.split("-");
+      const level = side === "bid"
+        ? (book.bids || []).find((b) => b.price === price)
+        : (book.asks || []).find((a) => a.price === price);
+      if (!level) return;
+
+      const id = `${key}-${book.timestamp}-${idx}`;
+      if (seenFlightIds.current.has(id)) return;
+      seenFlightIds.current.add(id);
+
+      nextFlights.push({
+        id,
+        label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
+        direction: side === "bid" ? "left" : "right",
+        tone: side === "bid" ? "yes" : "no",
+      });
+    });
+
+    if (!nextFlights.length) return;
+
+    setFlights((prev) => [...nextFlights, ...prev].slice(0, 8));
+
+    const timers = nextFlights.map((flight) =>
+      setTimeout(() => {
+        setFlights((prev) => prev.filter((item) => item.id !== flight.id));
+      }, FLIGHT_DURATION_MS)
+    );
+
+    return () => timers.forEach(clearTimeout);
+  }, [book, changedPrices]);
 
   if (!book) {
     return (
@@ -32,8 +79,8 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = false }: MiniOrd
   const asks = (book.asks || []).slice(0, 3).reverse();
   const bids = (book.bids || []).slice(0, 3);
   const maxSize = Math.max(
-    ...asks.map(a => parseFloat(a.size)),
-    ...bids.map(b => parseFloat(b.size)),
+    ...asks.map((a) => parseFloat(a.size)),
+    ...bids.map((b) => parseFloat(b.size)),
     1
   );
 
@@ -43,7 +90,7 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = false }: MiniOrd
   return (
     <div className={cn("font-mono", className)}>
       {/* Asks (reversed so lowest ask is near spread) */}
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence initial={false}>
         {asks.map((level) => {
           const pct = (parseFloat(level.size) / maxSize) * 100;
           const flash = changedPrices.has(`ask-${level.price}`);
@@ -89,7 +136,7 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = false }: MiniOrd
       </div>
 
       {/* Bids */}
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence initial={false}>
         {bids.map((level) => {
           const pct = (parseFloat(level.size) / maxSize) * 100;
           const flash = changedPrices.has(`bid-${level.price}`);
@@ -127,6 +174,39 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = false }: MiniOrd
       <div className="flex items-center gap-1 mt-0.5 justify-end">
         <div className={cn("h-1 w-1 rounded-full", connected ? "bg-yes animate-pulse" : "bg-primary")} />
         <span className="text-[8px] text-muted-foreground">{connected ? "live" : "polling"}</span>
+      </div>
+
+      {/* Flying micro-ticker */}
+      <div className="relative mt-1 h-4 overflow-hidden rounded border border-border/70 bg-background/70">
+        <AnimatePresence initial={false}>
+          {flights.map((flight) => (
+            <motion.span
+              key={flight.id}
+              initial={{
+                opacity: 0,
+                x: flight.direction === "left" ? "110%" : "-110%",
+              }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                x: flight.direction === "left" ? "-120%" : "120%",
+              }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "linear" }}
+              className={cn(
+                "absolute top-0 text-[9px] font-semibold whitespace-nowrap",
+                flight.tone === "yes" ? "text-yes" : "text-no"
+              )}
+            >
+              {flight.label}
+            </motion.span>
+          ))}
+        </AnimatePresence>
+
+        {flights.length === 0 && (
+          <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground">
+            {connected ? "live flow" : "awaiting updates"}
+          </div>
+        )}
       </div>
     </div>
   );

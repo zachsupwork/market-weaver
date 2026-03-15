@@ -124,7 +124,7 @@ export function LiveOrderbook({ tokenId, outcome }: LiveOrderbookProps) {
 
       {/* Bids */}
       <div className="space-y-px">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence initial={false}>
           {bids.map((level) => {
             const pct = (parseFloat(level.size) / maxSize) * 100;
             const isChanged = changedPrices.has(`bid-${level.price}`);
