@@ -2,7 +2,7 @@ import { useRecentTrades, type BitqueryTrade } from "@/hooks/useRecentTrades";
 import { Loader2, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function truncateAddress(addr: string): string {
@@ -16,11 +16,16 @@ function formatSize(n: number): string {
   return n.toFixed(2);
 }
 
-function TradeRow({ trade, isNew }: { trade: BitqueryTrade; isNew: boolean }) {
+function formatRelativeTime(isoTimestamp: string, tick: number): string {
+  void tick;
+  const d = new Date(isoTimestamp);
+  if (Number.isNaN(d.getTime())) return "just now";
+  return formatDistanceToNow(d, { addSuffix: true, includeSeconds: true });
+}
+
+function TradeRow({ trade, isNew, nowTick }: { trade: BitqueryTrade; isNew: boolean; nowTick: number }) {
   const isBuy = trade.side === "BUY";
-  const timeAgo = trade.timestamp
-    ? formatDistanceToNow(new Date(trade.timestamp), { addSuffix: true })
-    : "—";
+  const timeAgo = trade.timestamp ? formatRelativeTime(trade.timestamp, nowTick) : "just now";
 
   return (
     <div
@@ -74,39 +79,89 @@ interface RecentTradesPanelProps {
 
 export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1_000, className }: RecentTradesPanelProps) {
   const { data: trades, isLoading, error } = useRecentTrades({ conditionId, tokenId, limit, pollMs });
+  const [displayedTrades, setDisplayedTrades] = useState<BitqueryTrade[]>([]);
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set());
-  const prevTradeIdsRef = useRef<Set<string>>(new Set());
-  const isFirstLoad = useRef(true);
+  const [nowTick, setNowTick] = useState(0);
 
-  // Detect new trades and highlight them
+  const isFirstLoad = useRef(true);
+  const displayedIdsRef = useRef<Set<string>>(new Set());
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick((t) => t + 1), 1_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
+    };
+  }, []);
+
+  const markAsNew = useCallback((id: string) => {
+    setNewTradeIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+
+    const timer = setTimeout(() => {
+      setNewTradeIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 700);
+
+    timersRef.current.push(timer);
+  }, []);
+
+  const insertTrade = useCallback((trade: BitqueryTrade) => {
+    setDisplayedTrades((prev) => {
+      const next = [trade, ...prev.filter((t) => t.id !== trade.id)].slice(0, limit);
+      displayedIdsRef.current = new Set(next.map((t) => t.id));
+      return next;
+    });
+    markAsNew(trade.id);
+  }, [limit, markAsNew]);
+
   useEffect(() => {
     if (!trades || trades.length === 0) return;
 
-    const currentIds = new Set(trades.map((t) => t.id));
-
     if (isFirstLoad.current) {
       isFirstLoad.current = false;
-      prevTradeIdsRef.current = currentIds;
+      const seeded = trades.slice(0, limit);
+      setDisplayedTrades(seeded);
+      displayedIdsRef.current = new Set(seeded.map((t) => t.id));
       return;
     }
 
-    const freshIds = new Set<string>();
-    currentIds.forEach((id) => {
-      if (!prevTradeIdsRef.current.has(id)) {
-        freshIds.add(id);
-      }
-    });
+    const unseen = trades.filter((trade) => !displayedIdsRef.current.has(trade.id));
+    if (unseen.length === 0) return;
 
-    if (freshIds.size > 0) {
-      setNewTradeIds(freshIds);
-      // Clear highlight after animation (shorter for faster polling)
-      const timer = setTimeout(() => setNewTradeIds(new Set()), 800);
-      prevTradeIdsRef.current = currentIds;
-      return () => clearTimeout(timer);
+    const staged = [...unseen].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    if (import.meta.env.DEV) {
+      console.debug("[TradesStream] new rows", {
+        count: staged.length,
+        scope: tokenId ?? conditionId ?? "global",
+      });
     }
 
-    prevTradeIdsRef.current = currentIds;
-  }, [trades]);
+    staged.forEach((trade, idx) => {
+      const timer = setTimeout(() => insertTrade(trade), idx * 110);
+      timersRef.current.push(timer);
+    });
+  }, [trades, limit, insertTrade, tokenId, conditionId]);
+
+  useEffect(() => {
+    setDisplayedTrades((prev) => prev.slice(0, limit));
+  }, [limit]);
+
+  const rows = displayedTrades;
 
   return (
     <div className={cn("rounded-xl border border-border bg-card overflow-hidden", className)}>
@@ -118,7 +173,7 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
             <span className="relative inline-flex rounded-full h-2 w-2 bg-yes"></span>
           </span>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground">LIVE trades</span>
+        <span className="text-[10px] font-mono text-muted-foreground">LIVE stream</span>
       </div>
 
       {/* Header row */}
@@ -132,36 +187,36 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
         <span className="w-3 shrink-0" />
       </div>
 
-      {isLoading && (
+      {isLoading && rows.length === 0 && (
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {error && (
+      {error && rows.length === 0 && (
         <div className="px-4 py-6 text-center text-xs text-destructive">
           Failed to load trades: {(error as Error).message}
         </div>
       )}
 
-      {!isLoading && !error && trades && trades.length === 0 && (
+      {!isLoading && !error && rows.length === 0 && (
         <div className="px-4 py-8 text-center text-xs text-muted-foreground">
           No recent trades found.
         </div>
       )}
 
-      {trades && trades.length > 0 && (
+      {rows.length > 0 && (
         <div className="max-h-[400px] overflow-y-auto">
           <AnimatePresence initial={false}>
-            {trades.map((trade, idx) => (
+            {rows.map((trade) => (
               <motion.div
                 key={trade.id}
                 initial={{ opacity: 0, y: -20, height: 0 }}
                 animate={{ opacity: 1, y: 0, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
-                <TradeRow trade={trade} isNew={newTradeIds.has(trade.id)} />
+                <TradeRow trade={trade} isNew={newTradeIds.has(trade.id)} nowTick={nowTick} />
               </motion.div>
             ))}
           </AnimatePresence>
