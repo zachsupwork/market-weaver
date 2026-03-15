@@ -3,6 +3,7 @@ import { Loader2, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-reac
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 function truncateAddress(addr: string): string {
   if (!addr || addr.length < 10) return addr || "—";
