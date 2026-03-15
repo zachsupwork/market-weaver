@@ -18,6 +18,7 @@ import {
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel, fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
+import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;

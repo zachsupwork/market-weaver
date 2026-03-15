@@ -17,6 +17,7 @@ import { OrderbookView } from "@/components/trading/OrderbookView";
 import { OrderTicket } from "@/components/trading/OrderTicket";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { LiveOrderbook } from "@/components/trading/LiveOrderbook";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   ArrowLeft,
   BarChart3,
