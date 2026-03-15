@@ -637,9 +637,9 @@ const LiveMarkets = () => {
           </>
         )}
 
-        {/* Recent Trades via Bitquery */}
+        {/* Global recent trades */}
         <div className="mt-10">
-          <RecentTradesPanel limit={30} />
+          <RecentTradesPanel limit={30} pollMs={1_000} />
         </div>
       </div>
 
