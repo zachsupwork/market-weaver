@@ -12,6 +12,7 @@ import { AgeGate } from "@/components/AgeGate";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useEffect } from "react";
 import { useAccount } from "wagmi";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
 import Index from "./pages/Index";
 import LiveMarkets from "./pages/LiveMarkets";
 import Trade from "./pages/Trade";
