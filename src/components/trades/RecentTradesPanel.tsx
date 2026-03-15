@@ -150,9 +150,19 @@ export function RecentTradesPanel({ conditionId, limit = 30, className }: Recent
 
       {trades && trades.length > 0 && (
         <div className="max-h-[400px] overflow-y-auto">
-          {trades.map((trade, idx) => (
-            <TradeRow key={`${trade.id}-${idx}`} trade={trade} isNew={newTradeIds.has(trade.id)} />
-          ))}
+          <AnimatePresence initial={false}>
+            {trades.map((trade, idx) => (
+              <motion.div
+                key={trade.id}
+                initial={{ opacity: 0, y: -20, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <TradeRow trade={trade} isNew={newTradeIds.has(trade.id)} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>

@@ -126,9 +126,14 @@ const Index = () => {
       list = sortByTrending(list);
     }
 
+    // Show all tradable markets (LIVE + UNAVAILABLE with valid condition_id) as "live"
+    // Only truly ended/closed/archived go to the ended bucket
+    const tradable = list.filter(m => m.statusLabel === "LIVE" || (m.statusLabel === "UNAVAILABLE" && isBytes32Hex(m.condition_id)));
+    const ended = list.filter(m => m.statusLabel === "ENDED" || m.statusLabel === "CLOSED" || m.statusLabel === "ARCHIVED");
+
     return {
-      liveMarkets: list.filter(m => m.statusLabel === "LIVE"),
-      endedMarkets: list.filter(m => m.statusLabel !== "LIVE"),
+      liveMarkets: tradable,
+      endedMarkets: ended,
     };
   }, [allMarkets, category, sportsSubcat, search]);
 

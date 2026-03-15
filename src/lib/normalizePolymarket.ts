@@ -198,14 +198,14 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   }
 
   // accepting_orders: handle both camelCase and snake_case
-  // IMPORTANT: default to FALSE when missing (unknown = not safe to label LIVE)
+  // Default to TRUE when missing — Gamma API often omits these for active markets
   const rawAccepting = raw.accepting_orders ?? raw.acceptingOrders;
-  const accepting_orders = rawAccepting === true;
+  const accepting_orders = rawAccepting !== false;
 
   // Status booleans — support both camelCase and snake_case
-  // IMPORTANT: default active to FALSE when missing (unknown = not safe to label LIVE)
+  // Default active to TRUE when missing — most markets returned by the API are active
   const rawActive = raw.active ?? raw.isActive;
-  const active = rawActive === true;
+  const active = rawActive !== false;
   const closed = (raw.closed ?? raw.isClosed) === true;
   const archived = (raw.archived ?? raw.isArchived) === true;
 
