@@ -66,12 +66,13 @@ function TradeRow({ trade, isNew }: { trade: BitqueryTrade; isNew: boolean }) {
 
 interface RecentTradesPanelProps {
   conditionId?: string;
+  tokenId?: string;
   limit?: number;
   className?: string;
 }
 
-export function RecentTradesPanel({ conditionId, limit = 30, className }: RecentTradesPanelProps) {
-  const { data: trades, isLoading, error } = useRecentTrades({ conditionId, limit });
+export function RecentTradesPanel({ conditionId, tokenId, limit = 30, className }: RecentTradesPanelProps) {
+  const { data: trades, isLoading, error } = useRecentTrades({ conditionId, tokenId, limit });
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set());
   const prevTradeIdsRef = useRef<Set<string>>(new Set());
   const isFirstLoad = useRef(true);
