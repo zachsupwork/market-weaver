@@ -24,8 +24,12 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
   const conditionId = opts?.conditionId;
   const tokenId = opts?.tokenId;
 
+  // Need at least one identifier to query trades
+  const hasIdentifier = !!(tokenId || conditionId);
+
   return useQuery<BitqueryTrade[]>({
     queryKey: ["recent-trades", conditionId, tokenId, limit],
+    enabled: hasIdentifier,
     queryFn: async () => {
       const qs = new URLSearchParams();
       qs.set("limit", String(limit));
@@ -41,7 +45,6 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
         throw new Error(err.error || `Trades fetch failed: ${res.status}`);
       }
       const raw = await res.json();
-      // Normalize to BitqueryTrade shape for compatibility
       return (raw as any[]).map((t) => ({
         id: t.id || "",
         timestamp: t.timestamp || "",
@@ -59,6 +62,6 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
       }));
     },
     staleTime: 1_500,
-    refetchInterval: 2_000,
+    refetchInterval: hasIdentifier ? 2_000 : false,
   });
 }

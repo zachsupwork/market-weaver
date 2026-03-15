@@ -3,7 +3,18 @@ import { fetchOrderbook, type Orderbook } from "@/lib/polymarket-api";
 
 const WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 
-export function useOrderbookWs(tokenId: string | undefined) {
+/**
+ * @param tokenId - CLOB token ID to subscribe to
+ * @param opts.wsEnabled - if false, only poll REST (default true). Set false on homepage to avoid WS storm.
+ * @param opts.pollInterval - REST polling interval in ms (default 5000)
+ */
+export function useOrderbookWs(
+  tokenId: string | undefined,
+  opts?: { wsEnabled?: boolean; pollInterval?: number }
+) {
+  const wsEnabled = opts?.wsEnabled ?? true;
+  const pollInterval = opts?.pollInterval ?? 5_000;
+
   const [book, setBook] = useState<Orderbook | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,9 +69,16 @@ export function useOrderbookWs(tokenId: string | undefined) {
     fetchSnapshot();
   }, [fetchSnapshot]);
 
-  // WebSocket
+  // REST-only polling mode (for homepage cards to avoid WS storm)
   useEffect(() => {
-    if (!tokenId) return;
+    if (!tokenId || wsEnabled) return;
+    const interval = setInterval(fetchSnapshot, pollInterval);
+    return () => clearInterval(interval);
+  }, [tokenId, wsEnabled, pollInterval, fetchSnapshot]);
+
+  // WebSocket mode
+  useEffect(() => {
+    if (!tokenId || !wsEnabled) return;
 
     let ws: WebSocket;
     try {
@@ -117,11 +135,12 @@ export function useOrderbookWs(tokenId: string | undefined) {
 
       ws.onclose = () => {
         setConnected(false);
-        pollRef.current = setInterval(fetchSnapshot, 3_000);
+        // Fallback to polling
+        pollRef.current = setInterval(fetchSnapshot, pollInterval);
       };
     } catch {
       setError("Failed to connect");
-      pollRef.current = setInterval(fetchSnapshot, 3_000);
+      pollRef.current = setInterval(fetchSnapshot, pollInterval);
     }
 
     return () => {
@@ -129,7 +148,7 @@ export function useOrderbookWs(tokenId: string | undefined) {
       if (pollRef.current) clearInterval(pollRef.current);
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
-  }, [tokenId, fetchSnapshot]);
+  }, [tokenId, wsEnabled, fetchSnapshot, pollInterval]);
 
   return { book, connected, error, changedPrices };
 }
