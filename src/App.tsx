@@ -12,6 +12,7 @@ import { AgeGate } from "@/components/AgeGate";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useEffect } from "react";
 import { useAccount } from "wagmi";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
 import Index from "./pages/Index";
 import LiveMarkets from "./pages/LiveMarkets";
 import Trade from "./pages/Trade";
@@ -45,6 +46,14 @@ function WalletConnectBanner() {
   return null;
 }
 
+function MarketStreamBootstrap() {
+  useEffect(() => {
+    orderbookWsService.preconnect();
+  }, []);
+
+  return null;
+}
+
 const App = () => (
   <WagmiProvider config={walletConfig}>
     <QueryClientProvider client={queryClient}>
@@ -62,6 +71,7 @@ const App = () => (
               <OnboardingFlow>
                 <WalletConnectBanner />
                 <WalletDebugLogger />
+                <MarketStreamBootstrap />
                 <AppHeader />
                 <Routes>
                   <Route path="/" element={<Index />} />

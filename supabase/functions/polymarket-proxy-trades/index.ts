@@ -6,6 +6,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const jsonHeaders = {
+  ...corsHeaders,
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
+function toTimestampValue(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+  const d = new Date(String(raw));
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,30 +28,20 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const tokenId = url.searchParams.get("token_id");
-    const conditionId = url.searchParams.get("condition_id");
-    const limit = url.searchParams.get("limit") || "50";
+    const tokenId = url.searchParams.get("token_id")?.trim() || "";
+    const conditionIdRaw = url.searchParams.get("condition_id")?.trim() || "";
+    const conditionId = conditionIdRaw.toLowerCase() === "all" ? "" : conditionIdRaw;
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") || "50")));
 
-    if (!tokenId && !conditionId) {
-      return new Response(
-        JSON.stringify({ error: "token_id or condition_id required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Try endpoints in order of reliability for trade data
     const endpoints: string[] = [];
 
     if (tokenId) {
-      // 1) Data API - most reliable for public trade history
       endpoints.push(
         `https://data-api.polymarket.com/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`
       );
-      // 2) CLOB trades endpoint (public GET, may need market param)
       endpoints.push(
         `https://clob.polymarket.com/trades?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}`
       );
-      // 3) Gamma activity endpoint as last resort
       endpoints.push(
         `https://gamma-api.polymarket.com/activity?asset_id=${encodeURIComponent(tokenId)}&limit=${limit}&type=TRADE`
       );
@@ -47,13 +52,23 @@ serve(async (req) => {
       endpoints.push(
         `https://gamma-api.polymarket.com/activity?market=${encodeURIComponent(conditionId)}&limit=${limit}&type=TRADE`
       );
+    } else {
+      // Global stream fallback used by front-page recent trades
+      endpoints.push(`https://data-api.polymarket.com/trades?limit=${limit}`);
+      endpoints.push(`https://gamma-api.polymarket.com/activity?limit=${limit}&type=TRADE`);
     }
 
     let lastError = "";
+
     for (const endpoint of endpoints) {
       try {
         const res = await fetch(endpoint, {
-          headers: { "Accept": "application/json" },
+          headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+          cache: "no-store",
         });
 
         if (!res.ok) {
@@ -69,37 +84,47 @@ serve(async (req) => {
           continue;
         }
 
-        // Normalize trades to a consistent shape
-        const trades = rawList.map((t: any) => ({
-          id: t.id || t.trade_id || t.transaction_hash || "",
-          timestamp: t.timestamp || t.created_at || t.match_time || t.time || t.event_time || "",
-          price: parseFloat(t.price || t.outcome_price || t.avg_price || "0"),
-          size: parseFloat(t.size || t.amount || t.quantity || t.shares || "0"),
-          side: (t.side || t.maker_side || t.type || t.action || "BUY").toUpperCase(),
-          asset_id: t.asset_id || t.token_id || tokenId || "",
-          outcome: t.outcome || "",
-        }));
+        const trades = rawList
+          .map((t: any, idx: number) => {
+            const timestamp = t.timestamp || t.created_at || t.match_time || t.time || t.event_time || "";
+            const price = Number(t.price || t.outcome_price || t.avg_price || 0);
+            const size = Number(t.size || t.amount || t.quantity || t.shares || 0);
+            const side = String(t.side || t.taker_side || t.maker_side || t.type || t.action || "BUY").toUpperCase();
+            const assetId = String(t.asset_id || t.token_id || t.asset || tokenId || "");
+            const outcome = String(t.outcome || "");
+            const txHash = String(t.tx_hash || t.transaction_hash || t.txHash || "");
+            const rawId = t.id || t.trade_id || t.match_id || txHash;
 
-        // Filter out trades with 0 price or 0 size
-        const validTrades = trades.filter((t: any) => t.price > 0 && t.size > 0);
+            const fallbackId = `${assetId}:${timestamp}:${price}:${size}:${side}:${outcome}:${idx}`;
 
-        return new Response(JSON.stringify(validTrades), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+            return {
+              id: String(rawId || fallbackId),
+              timestamp,
+              price: Number.isFinite(price) ? price : 0,
+              size: Number.isFinite(size) ? size : 0,
+              side,
+              asset_id: assetId,
+              outcome,
+              tx_hash: txHash,
+            };
+          })
+          .filter((t: any) => t.price > 0 && t.size > 0)
+          .sort((a: any, b: any) => toTimestampValue(b.timestamp) - toTimestampValue(a.timestamp))
+          .slice(0, limit);
+
+        return new Response(JSON.stringify(trades), { headers: jsonHeaders });
       } catch (e) {
         lastError = (e as any).message;
-        continue;
       }
     }
 
-    // All endpoints failed - return empty array
     return new Response(JSON.stringify([]), {
-      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Trades-Warning": lastError },
+      headers: { ...jsonHeaders, "X-Trades-Warning": lastError },
     });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: (err as any).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: (err as any).message }), {
+      status: 500,
+      headers: jsonHeaders,
+    });
   }
 });
