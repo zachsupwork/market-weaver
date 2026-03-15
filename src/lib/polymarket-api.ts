@@ -184,7 +184,7 @@ export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRec
       occurrenceBySignature.set(signature, occurrence);
 
       return {
-        id: String(row?.id || row?.tx_hash || `${signature}#${occurrence}#${index}`),
+        id: String(row?.id || row?.tx_hash || `${signature}#${occurrence}`),
         timestamp: normalizeTradeTimestamp(rawTs),
         price: Number.isFinite(price) ? price : 0,
         size: Number.isFinite(size) ? size : 0,

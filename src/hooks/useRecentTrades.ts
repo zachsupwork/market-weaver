@@ -58,7 +58,7 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
         const occurrence = (occurrenceBySignature.get(signature) ?? 0) + 1;
         occurrenceBySignature.set(signature, occurrence);
 
-        const fallbackId = `${signature}#${occurrence}#${index}`;
+        const fallbackId = `${signature}#${occurrence}`;
         const id = String(t?.id || t?.tx_hash || fallbackId);
 
         return {
