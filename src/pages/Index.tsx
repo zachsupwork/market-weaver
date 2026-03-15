@@ -318,7 +318,7 @@ const Index = () => {
 
                   {/* Mini live orderbook */}
                   <MiniOrderbook
-                    tokenId={market.tokens?.[0]?.token_id}
+                    tokenId={market.clobTokenIds?.[0] || market.tokens?.[0]?.token_id}
                     className="mb-2 rounded border border-border bg-background/50 p-1"
                   />
 
