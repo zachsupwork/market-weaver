@@ -373,9 +373,10 @@ const Index = () => {
           </div>
         )}
 
-        {!isLoading && liveMarkets.length === 0 && !error && (
+        {!isLoading && liveMarkets.length === 0 && endedMarkets.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
-            <p className="text-sm">No active markets found.</p>
+            <p className="text-sm">No markets found{category !== "trending" ? ` in "${CATEGORIES.find(c => c.id === category)?.label || category}"` : ""}.</p>
+            <p className="text-xs mt-1">Try a different category or search term.</p>
           </div>
         )}
 
