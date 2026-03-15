@@ -6,7 +6,8 @@ export function useOrderbook(tokenId: string | undefined) {
     queryKey: ["polymarket-orderbook", tokenId],
     queryFn: () => fetchOrderbook(tokenId!),
     enabled: !!tokenId,
-    staleTime: 5_000,
-    refetchInterval: 10_000,
+    staleTime: 500,
+    refetchInterval: tokenId ? 1_000 : false,
+    refetchIntervalInBackground: true,
   });
 }
