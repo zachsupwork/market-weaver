@@ -116,7 +116,7 @@ export function RecentTradesPanel({ conditionId, limit = 30, className }: Recent
             <span className="relative inline-flex rounded-full h-2 w-2 bg-yes"></span>
           </span>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground">LIVE via Bitquery</span>
+        <span className="text-[10px] font-mono text-muted-foreground">LIVE trades</span>
       </div>
 
       {/* Header row */}
