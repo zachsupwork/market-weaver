@@ -40,7 +40,7 @@ export function useRecentTrades(opts?: { conditionId?: string; limit?: number })
       }
       return res.json();
     },
-    staleTime: 8_000,
-    refetchInterval: 10_000,
+    staleTime: 1_500,
+    refetchInterval: 2_000,
   });
 }
