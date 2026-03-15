@@ -400,10 +400,7 @@ const Index = () => {
 
         {liveMarkets.length > 0 && (
           <div className="mt-8">
-            <RecentTradesPanel
-              tokenId={liveMarkets[0]?.clobTokenIds?.[0] || liveMarkets[0]?.tokens?.[0]?.token_id}
-              limit={20}
-            />
+            <RecentTradesPanel limit={30} pollMs={1_000} />
           </div>
         )}
       </div>

@@ -50,6 +50,34 @@ export interface Position {
   pnl: string;
 }
 
+/** Normalize trade timestamps from unix seconds/ms or ISO into ISO string */
+export function normalizeTradeTimestamp(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return new Date().toISOString();
+
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed) {
+      const asNumber = Number(trimmed);
+      if (!Number.isNaN(asNumber)) {
+        const ms = asNumber < 1e12 ? asNumber * 1000 : asNumber;
+        const d = new Date(ms);
+        if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+      }
+
+      const d = new Date(trimmed);
+      if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+}
+
 // ── Public market data (no auth required) ───────────────────────
 
 export async function fetchMarkets(params?: {
@@ -139,8 +167,32 @@ export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRec
     { headers: { "apikey": ANON_KEY } }
   );
   if (!res.ok) return [];
+
   const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  const rows = Array.isArray(data) ? data : [];
+  const occurrenceBySignature = new Map<string, number>();
+
+  return rows
+    .map((row: any) => {
+      const price = Number(row?.price ?? 0);
+      const size = Number(row?.size ?? row?.sideAmount ?? 0);
+      const side = String(row?.side ?? "BUY").toUpperCase();
+      const assetId = String(row?.asset_id ?? tokenId ?? "");
+      const rawTs = row?.timestamp;
+      const signature = [assetId, rawTs ?? "", price, size, side].join(":");
+      const occurrence = (occurrenceBySignature.get(signature) ?? 0) + 1;
+      occurrenceBySignature.set(signature, occurrence);
+
+      return {
+        id: String(row?.id || row?.tx_hash || `${signature}#${occurrence}`),
+        timestamp: normalizeTradeTimestamp(rawTs),
+        price: Number.isFinite(price) ? price : 0,
+        size: Number.isFinite(size) ? size : 0,
+        side,
+        asset_id: assetId,
+      } as TradeRecord;
+    })
+    .slice(0, limit);
 }
 
 export interface PriceHistoryPoint {

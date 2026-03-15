@@ -67,7 +67,7 @@ export function LiveOrderbook({ tokenId, outcome }: LiveOrderbookProps) {
 
       {/* Asks */}
       <div className="space-y-px mb-1">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence initial={false}>
           {asks.map((level) => {
             const pct = (parseFloat(level.size) / maxSize) * 100;
             const isChanged = changedPrices.has(`ask-${level.price}`);
@@ -124,7 +124,7 @@ export function LiveOrderbook({ tokenId, outcome }: LiveOrderbookProps) {
 
       {/* Bids */}
       <div className="space-y-px">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence initial={false}>
           {bids.map((level) => {
             const pct = (parseFloat(level.size) / maxSize) * 100;
             const isChanged = changedPrices.has(`bid-${level.price}`);

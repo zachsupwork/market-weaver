@@ -1,26 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchOrderbook, type Orderbook } from "@/lib/polymarket-api";
-
-const WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
 
 /**
  * @param tokenId - CLOB token ID to subscribe to
- * @param opts.wsEnabled - if false, only poll REST (default true). Set false on homepage to avoid WS storm.
- * @param opts.pollInterval - REST polling interval in ms (default 5000)
+ * @param opts.wsEnabled - if false, only poll REST (default true)
+ * @param opts.pollInterval - REST fallback polling interval in ms (default 1000)
  */
 export function useOrderbookWs(
   tokenId: string | undefined,
   opts?: { wsEnabled?: boolean; pollInterval?: number }
 ) {
   const wsEnabled = opts?.wsEnabled ?? true;
-  const pollInterval = opts?.pollInterval ?? 5_000;
+  const pollInterval = opts?.pollInterval ?? 1_000;
 
   const [book, setBook] = useState<Orderbook | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevBookRef = useRef<Orderbook | null>(null);
   const [changedPrices, setChangedPrices] = useState<Set<string>>(new Set());
 
@@ -28,11 +24,14 @@ export function useOrderbookWs(
     if (!tokenId) return;
     try {
       const data = await fetchOrderbook(tokenId);
-      if (data) setBook(data);
+      if (data) {
+        setBook(data);
+        if (!wsEnabled || connected) setError(null);
+      }
     } catch {
-      // silent
+      setError("Orderbook fetch failed");
     }
-  }, [tokenId]);
+  }, [tokenId, wsEnabled, connected]);
 
   // Detect changed prices for flash animation
   useEffect(() => {
@@ -43,14 +42,14 @@ export function useOrderbookWs(
     const prev = prevBookRef.current;
     const changed = new Set<string>();
 
-    const prevBidPrices = new Map(prev.bids?.map(b => [b.price, b.size]) || []);
-    const prevAskPrices = new Map(prev.asks?.map(a => [a.price, a.size]) || []);
+    const prevBidPrices = new Map(prev.bids?.map((b) => [b.price, b.size]) || []);
+    const prevAskPrices = new Map(prev.asks?.map((a) => [a.price, a.size]) || []);
 
-    book.bids?.forEach(b => {
+    book.bids?.forEach((b) => {
       const prevSize = prevBidPrices.get(b.price);
       if (prevSize !== b.size) changed.add(`bid-${b.price}`);
     });
-    book.asks?.forEach(a => {
+    book.asks?.forEach((a) => {
       const prevSize = prevAskPrices.get(a.price);
       if (prevSize !== a.size) changed.add(`ask-${a.price}`);
     });
@@ -69,86 +68,44 @@ export function useOrderbookWs(
     fetchSnapshot();
   }, [fetchSnapshot]);
 
-  // REST-only polling mode (for homepage cards to avoid WS storm)
+  // Shared WebSocket subscription
   useEffect(() => {
-    if (!tokenId || wsEnabled) return;
-    const interval = setInterval(fetchSnapshot, pollInterval);
-    return () => clearInterval(interval);
-  }, [tokenId, wsEnabled, pollInterval, fetchSnapshot]);
-
-  // WebSocket mode
-  useEffect(() => {
-    if (!tokenId || !wsEnabled) return;
-
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        setError(null);
-        ws.send(JSON.stringify({ type: "subscribe", channel: "book", assets_ids: [tokenId] }));
-        pingRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
-        }, 30_000);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === "pong") return;
-
-          if (msg.type === "book" || msg.type === "book_snapshot") {
-            if (msg.bids || msg.asks) {
-              setBook(prev => ({
-                bids: msg.bids || prev?.bids || [],
-                asks: msg.asks || prev?.asks || [],
-                asset_id: msg.asset_id || tokenId,
-                hash: msg.hash || "",
-                timestamp: msg.timestamp || new Date().toISOString(),
-                market: msg.market || "",
-              }));
-            }
-          }
-
-          if (msg.type === "book_update" || msg.type === "price_change") {
-            setBook(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                bids: msg.bids || prev.bids,
-                asks: msg.asks || prev.asks,
-                timestamp: msg.timestamp || new Date().toISOString(),
-              };
-            });
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-      ws.onerror = () => {
-        setError("WebSocket error");
-        setConnected(false);
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        // Fallback to polling
-        pollRef.current = setInterval(fetchSnapshot, pollInterval);
-      };
-    } catch {
-      setError("Failed to connect");
-      pollRef.current = setInterval(fetchSnapshot, pollInterval);
+    if (!tokenId || !wsEnabled) {
+      setConnected(false);
+      if (!wsEnabled) setError(null);
+      return;
     }
 
+    const unsubBook = orderbookWsService.subscribe(tokenId, (next) => {
+      setBook(next);
+      setError(null);
+    });
+
+    const unsubConn = orderbookWsService.onConnectionChange((isConnected) => {
+      setConnected(isConnected);
+      if (!isConnected) {
+        setError("WebSocket reconnecting — using 1s fallback");
+      } else {
+        setError(null);
+      }
+    });
+
+    setConnected(orderbookWsService.isConnected());
+
     return () => {
-      if (pingRef.current) clearInterval(pingRef.current);
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      unsubBook();
+      unsubConn();
     };
-  }, [tokenId, wsEnabled, fetchSnapshot, pollInterval]);
+  }, [tokenId, wsEnabled]);
+
+  // Fallback polling whenever WS is disabled or temporarily disconnected
+  useEffect(() => {
+    if (!tokenId) return;
+    if (wsEnabled && connected) return;
+
+    const interval = setInterval(fetchSnapshot, pollInterval);
+    return () => clearInterval(interval);
+  }, [tokenId, wsEnabled, connected, pollInterval, fetchSnapshot]);
 
   return { book, connected, error, changedPrices };
 }

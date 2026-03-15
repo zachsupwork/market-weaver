@@ -17,6 +17,7 @@ import { OrderbookView } from "@/components/trading/OrderbookView";
 import { OrderTicket } from "@/components/trading/OrderTicket";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { LiveOrderbook } from "@/components/trading/LiveOrderbook";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
   ArrowLeft,
   BarChart3,
@@ -159,8 +160,8 @@ const Trade = () => {
       return results;
     },
     enabled: !!yesTokenIdRaw,
-    staleTime: 3_000,
-    refetchInterval: isLive && isTabVisible ? 4_000 : false,
+    staleTime: 500,
+    refetchInterval: isLive && isTabVisible ? 1_000 : false,
   });
 
   const { data: userPositions } = useQuery({
@@ -604,40 +605,12 @@ const Trade = () => {
               </div>
 
               {/* Recent trades */}
-              <div className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold">Recent Trades</h3>
-                  {isLive && isTabVisible && (
-                    <span className="flex items-center gap-1 text-[10px] text-yes font-mono">
-                      <span className="h-1.5 w-1.5 rounded-full bg-yes animate-pulse" /> Live
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-5 text-[10px] text-muted-foreground font-mono mb-1 px-1">
-                  <span>Time</span><span>Outcome</span><span>Price</span><span>Size</span><span className="text-right">Side</span>
-                </div>
-                <div className="max-h-64 overflow-y-auto space-y-px">
-                  {tradesLoading ? (
-                    <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                  ) : trades && trades.length > 0 ? (
-                    trades.slice(0, 50).map((trade, i) => {
-                      const isLargeFill = trade.size >= 100;
-                      const outcomeLabel = (trade as any).outcome || "";
-                      return (
-                        <div key={i} className={cn("grid grid-cols-5 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors", isLargeFill && "bg-primary/5 border-l-2 border-primary")}>
-                          <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
-                          <span className={cn("font-semibold", outcomeLabel === "YES" ? "text-yes" : outcomeLabel === "NO" ? "text-no" : "text-foreground")}>{outcomeLabel || "—"}</span>
-                          <span>{Math.round(trade.price * 100)}¢</span>
-                          <span className={isLargeFill ? "font-bold text-foreground" : ""}>{trade.size.toFixed(1)}{isLargeFill && " 🔥"}</span>
-                          <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>{trade.side}</span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-4 text-center">No recent trades</p>
-                  )}
-                </div>
-              </div>
+              <RecentTradesPanel
+                conditionId={conditionId}
+                limit={50}
+                pollMs={1_000}
+                className="rounded-lg border border-border bg-card"
+              />
 
               {/* Rules */}
               {(eventDescription || resolutionSource) && (
@@ -735,38 +708,12 @@ const Trade = () => {
 
         {/* Activity tab */}
         {activeTab === "trades" && (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Activity className="h-4 w-4" /> Activity — {currentOutcome}
-              </h3>
-              <span className="text-[10px] text-muted-foreground">
-                {tradesLoading ? "Loading..." : `${trades?.length ?? 0} recent trades`}
-              </span>
-            </div>
-            <div className="grid grid-cols-4 text-[10px] text-muted-foreground font-mono mb-1 px-1">
-              <span>Time</span><span>Price</span><span>Size</span><span className="text-right">Side</span>
-            </div>
-            <div className="max-h-[500px] overflow-y-auto space-y-px">
-              {tradesLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-              ) : trades && trades.length > 0 ? (
-                trades.map((trade, i) => {
-                  const isLargeFill = trade.size >= 100;
-                  return (
-                    <div key={i} className={cn("grid grid-cols-4 px-1 py-0.5 text-xs font-mono hover:bg-muted/50 transition-colors", isLargeFill && "bg-primary/5 border-l-2 border-primary")}>
-                      <span className="text-muted-foreground">{formatTime(trade.timestamp)}</span>
-                      <span>{Math.round(trade.price * 100)}¢</span>
-                      <span className={isLargeFill ? "font-bold text-foreground" : ""}>{trade.size.toFixed(1)}{isLargeFill && " 🔥"}</span>
-                      <span className={cn("text-right font-semibold", trade.side === "BUY" ? "text-yes" : "text-no")}>{trade.side}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-xs text-muted-foreground py-4 text-center">No recent trades for this token.</p>
-              )}
-            </div>
-          </div>
+          <RecentTradesPanel
+            tokenId={currentTokenId}
+            limit={50}
+            pollMs={1_000}
+            className="rounded-lg border border-border bg-card"
+          />
         )}
 
         {/* Community tab */}

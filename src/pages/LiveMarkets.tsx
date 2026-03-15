@@ -18,6 +18,7 @@ import {
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel, fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
+import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -274,6 +275,14 @@ const LiveMarkets = () => {
               <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
             </div>
           </div>
+        )}
+
+        {isLive && !dimmed && (
+          <MiniOrderbook
+            tokenId={market.clobTokenIds?.[0] || market.tokens?.[0]?.token_id}
+            className="mb-3 rounded border border-border bg-background/60 p-1"
+            wsEnabled
+          />
         )}
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -628,9 +637,9 @@ const LiveMarkets = () => {
           </>
         )}
 
-        {/* Recent Trades via Bitquery */}
+        {/* Global recent trades */}
         <div className="mt-10">
-          <RecentTradesPanel limit={30} />
+          <RecentTradesPanel limit={30} pollMs={1_000} />
         </div>
       </div>
 
