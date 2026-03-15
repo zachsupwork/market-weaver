@@ -277,6 +277,14 @@ const LiveMarkets = () => {
           </div>
         )}
 
+        {isLive && !dimmed && (
+          <MiniOrderbook
+            tokenId={market.clobTokenIds?.[0] || market.tokens?.[0]?.token_id}
+            className="mb-3 rounded border border-border bg-background/60 p-1"
+            wsEnabled
+          />
+        )}
+
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <BarChart3 className="h-3 w-3" />
