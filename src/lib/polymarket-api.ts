@@ -173,7 +173,7 @@ export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRec
   const occurrenceBySignature = new Map<string, number>();
 
   return rows
-    .map((row: any, index: number) => {
+    .map((row: any) => {
       const price = Number(row?.price ?? 0);
       const size = Number(row?.size ?? row?.sideAmount ?? 0);
       const side = String(row?.side ?? "BUY").toUpperCase();

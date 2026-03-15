@@ -48,7 +48,7 @@ export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string;
       const rows = Array.isArray(raw) ? raw : [];
       const occurrenceBySignature = new Map<string, number>();
 
-      return rows.slice(0, limit).map((t, index) => {
+      return rows.slice(0, limit).map((t) => {
         const price = Number(t?.price ?? 0);
         const size = Number(t?.size ?? t?.sideAmount ?? 0);
         const side = String(t?.side ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
