@@ -71,6 +71,7 @@ const App = () => (
               <OnboardingFlow>
                 <WalletConnectBanner />
                 <WalletDebugLogger />
+                <MarketStreamBootstrap />
                 <AppHeader />
                 <Routes>
                   <Route path="/" element={<Index />} />
