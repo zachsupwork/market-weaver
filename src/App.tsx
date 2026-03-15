@@ -46,6 +46,14 @@ function WalletConnectBanner() {
   return null;
 }
 
+function MarketStreamBootstrap() {
+  useEffect(() => {
+    orderbookWsService.preconnect();
+  }, []);
+
+  return null;
+}
+
 const App = () => (
   <WagmiProvider config={walletConfig}>
     <QueryClientProvider client={queryClient}>
