@@ -19,12 +19,28 @@ export interface BitqueryTrade {
   txHash: string;
 }
 
+/** Parse trade timestamp - handles ISO strings, Unix seconds, Unix ms, or empty */
+function parseTradeTimestamp(raw: any): string {
+  if (!raw) return new Date().toISOString();
+  // Numeric (seconds or ms)
+  const num = typeof raw === "number" ? raw : Number(raw);
+  if (!isNaN(num) && /^\d+$/.test(String(raw))) {
+    const ms = num < 1e12 ? num * 1000 : num;
+    const d = new Date(ms);
+    if (d.getFullYear() > 2000) return d.toISOString();
+  }
+  // ISO / date string
+  const d = new Date(raw);
+  if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+  // Fallback to now
+  return new Date().toISOString();
+}
+
 export function useRecentTrades(opts?: { conditionId?: string; tokenId?: string; limit?: number }) {
   const limit = opts?.limit ?? 30;
   const conditionId = opts?.conditionId;
   const tokenId = opts?.tokenId;
 
-  // Need at least one identifier to query trades
   const hasIdentifier = !!(tokenId || conditionId);
 
   return useQuery<BitqueryTrade[]>({
