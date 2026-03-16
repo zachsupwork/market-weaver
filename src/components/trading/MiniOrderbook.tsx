@@ -91,7 +91,7 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         id,
         label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
         tone: side === "bid" ? "yes" : "no",
-        xOffset: Math.random() * 30 + 5,
+        xOffset: Math.random() * 15 + 3, // 3-18% tight to edge
       };
 
       if (tick.tone === "yes") {
