@@ -47,6 +47,7 @@ class OrderbookWsService {
   }
 
   preconnect() {
+    this.preconnected = true;
     this.ensureConnected();
   }
 
