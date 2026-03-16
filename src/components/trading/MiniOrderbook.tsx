@@ -12,11 +12,12 @@ interface MiniOrderbookProps {
 interface FlightTick {
   id: string;
   label: string;
-  direction: "left" | "right";
   tone: "yes" | "no";
+  xOffset: number; // random horizontal offset in %
 }
 
-const FLIGHT_DURATION_MS = 1800;
+const FLIGHT_DURATION_MS = 2200;
+const MAX_VISIBLE_PER_SIDE = 4;
 
 /**
  * Compact 3-row orderbook preview for market cards.
@@ -48,14 +49,20 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
       nextFlights.push({
         id,
         label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
-        direction: side === "bid" ? "left" : "right",
         tone: side === "bid" ? "yes" : "no",
+        xOffset: Math.random() * 40 + 5, // 5-45% offset from side edge
       });
     });
 
     if (!nextFlights.length) return;
 
-    setFlights((prev) => [...nextFlights, ...prev].slice(0, 8));
+    setFlights((prev) => {
+      const combined = [...nextFlights, ...prev];
+      // Enforce per-side limit
+      const yesTrades = combined.filter(f => f.tone === "yes").slice(0, MAX_VISIBLE_PER_SIDE);
+      const noTrades = combined.filter(f => f.tone === "no").slice(0, MAX_VISIBLE_PER_SIDE);
+      return [...yesTrades, ...noTrades];
+    });
 
     const timers = nextFlights.map((flight) =>
       setTimeout(() => {
@@ -176,26 +183,33 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         <span className="text-[8px] text-muted-foreground">{connected ? "live" : "polling"}</span>
       </div>
 
-      {/* Flying micro-ticker */}
-      <div className="relative mt-1 h-4 overflow-hidden rounded border border-border/70 bg-background/70">
+      {/* Vertical bubble-rising trade ticker */}
+      <div className="relative mt-1 h-16 overflow-hidden rounded border border-border/70 bg-background/70">
         <AnimatePresence initial={false}>
           {flights.map((flight) => (
             <motion.span
               key={flight.id}
               initial={{
-                opacity: 0,
-                x: flight.direction === "left" ? "110%" : "-110%",
+                opacity: 0.9,
+                y: 0,
+                scale: 0.85,
               }}
               animate={{
-                opacity: [0, 1, 1, 0],
-                x: flight.direction === "left" ? "-120%" : "120%",
+                opacity: [0.9, 1, 0.8, 0],
+                y: -60,
+                scale: [0.85, 1, 0.95],
               }}
               exit={{ opacity: 0 }}
-              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "linear" }}
+              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
               className={cn(
-                "absolute top-0 text-[9px] font-semibold whitespace-nowrap",
-                flight.tone === "yes" ? "text-yes" : "text-no"
+                "absolute bottom-1 text-[9px] font-semibold whitespace-nowrap px-1 py-0.5 rounded-sm",
+                flight.tone === "yes"
+                  ? "text-yes bg-yes/10 right-0"
+                  : "text-no bg-no/10 left-0"
               )}
+              style={{
+                [flight.tone === "yes" ? "right" : "left"]: `${flight.xOffset}%`,
+              }}
             >
               {flight.label}
             </motion.span>
