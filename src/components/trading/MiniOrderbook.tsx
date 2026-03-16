@@ -251,24 +251,7 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
           </div>
         )}
 
-        {/* NO side — one at a time, left-aligned */}
-        <AnimatePresence>
-          {currentNo && (
-            <motion.span
-              key={currentNo.id}
-              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
-              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
-              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-no bg-no/15 border border-no/20"
-              style={{ left: `${currentNo.xOffset}%` }}
-            >
-              {currentNo.label}
-            </motion.span>
-          )}
-        </AnimatePresence>
-
-        {/* YES side — one at a time, right-aligned */}
+        {/* YES side — one at a time, left-aligned */}
         <AnimatePresence>
           {currentYes && (
             <motion.span
@@ -278,9 +261,26 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
               exit={{ opacity: 0 }}
               transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
               className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-yes bg-yes/15 border border-yes/20"
-              style={{ right: `${currentYes.xOffset}%` }}
+              style={{ left: `${currentYes.xOffset}%` }}
             >
               {currentYes.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {/* NO side — one at a time, right-aligned */}
+        <AnimatePresence>
+          {currentNo && (
+            <motion.span
+              key={currentNo.id}
+              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
+              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
+              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-no bg-no/15 border border-no/20"
+              style={{ right: `${currentNo.xOffset}%` }}
+            >
+              {currentNo.label}
             </motion.span>
           )}
         </AnimatePresence>
