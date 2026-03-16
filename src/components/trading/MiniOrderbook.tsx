@@ -141,43 +141,87 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
 
   return (
     <div className={cn("font-mono", className)}>
-      {/* Asks (reversed so lowest ask is near spread) */}
-      <AnimatePresence initial={false}>
-        {asks.map((level) => {
-          const pct = (parseFloat(level.size) / maxSize) * 100;
-          const flash = changedPrices.has(`ask-${level.price}`);
-          return (
-            <motion.div
-              key={`a-${level.price}`}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className={cn(
-                "relative flex justify-between text-[9px] px-1 py-px rounded-sm",
-                flash && "bg-no/10"
-              )}
-            >
-              <motion.div
-                className="absolute inset-y-0 right-0 bg-no/8 rounded-sm"
-                animate={{ width: `${pct}%` }}
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              />
-              <span className="relative text-no">{parseFloat(level.price).toFixed(2)}</span>
-              <motion.span
-                className="relative text-muted-foreground"
-                animate={flash ? { scale: [1, 1.2, 1] } : {}}
-                transition={{ duration: 0.3 }}
-              >
-                {parseFloat(level.size).toFixed(0)}
-              </motion.span>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
+      {/* Horizontal split: NO (left) | YES (right) */}
+      <div className="grid grid-cols-2 gap-px">
+        {/* NO / Asks — left column */}
+        <div>
+          <div className="text-[8px] font-semibold text-no uppercase tracking-wider px-1 mb-0.5">No</div>
+          <AnimatePresence initial={false}>
+            {asks.map((level) => {
+              const pct = (parseFloat(level.size) / maxSize) * 100;
+              const flash = changedPrices.has(`ask-${level.price}`);
+              return (
+                <motion.div
+                  key={`a-${level.price}`}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className={cn(
+                    "relative flex justify-between text-[9px] px-1 py-px rounded-sm",
+                    flash && "bg-no/10"
+                  )}
+                >
+                  <motion.div
+                    className="absolute inset-y-0 left-0 bg-no/8 rounded-sm"
+                    animate={{ width: `${pct}%` }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                  <span className="relative text-no">{parseFloat(level.price).toFixed(2)}</span>
+                  <motion.span
+                    className="relative text-muted-foreground"
+                    animate={flash ? { scale: [1, 1.2, 1] } : {}}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {parseFloat(level.size).toFixed(0)}
+                  </motion.span>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+
+        {/* YES / Bids — right column */}
+        <div>
+          <div className="text-[8px] font-semibold text-yes uppercase tracking-wider px-1 mb-0.5 text-right">Yes</div>
+          <AnimatePresence initial={false}>
+            {bids.map((level) => {
+              const pct = (parseFloat(level.size) / maxSize) * 100;
+              const flash = changedPrices.has(`bid-${level.price}`);
+              return (
+                <motion.div
+                  key={`b-${level.price}`}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className={cn(
+                    "relative flex justify-between text-[9px] px-1 py-px rounded-sm",
+                    flash && "bg-yes/10"
+                  )}
+                >
+                  <motion.div
+                    className="absolute inset-y-0 right-0 bg-yes/8 rounded-sm"
+                    animate={{ width: `${pct}%` }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                  <span className="relative text-yes">{parseFloat(level.price).toFixed(2)}</span>
+                  <motion.span
+                    className="relative text-muted-foreground"
+                    animate={flash ? { scale: [1, 1.2, 1] } : {}}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {parseFloat(level.size).toFixed(0)}
+                  </motion.span>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      </div>
 
       {/* Spread line with last price */}
-      <div className="flex items-center gap-1 my-px">
+      <div className="flex items-center gap-1 my-0.5">
         <div className="flex-1 h-px bg-border" />
         {lastPrice && (
           <span className="text-[8px] text-primary font-semibold">
@@ -187,43 +231,8 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      {/* Bids */}
-      <AnimatePresence initial={false}>
-        {bids.map((level) => {
-          const pct = (parseFloat(level.size) / maxSize) * 100;
-          const flash = changedPrices.has(`bid-${level.price}`);
-          return (
-            <motion.div
-              key={`b-${level.price}`}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className={cn(
-                "relative flex justify-between text-[9px] px-1 py-px rounded-sm",
-                flash && "bg-yes/10"
-              )}
-            >
-              <motion.div
-                className="absolute inset-y-0 right-0 bg-yes/8 rounded-sm"
-                animate={{ width: `${pct}%` }}
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              />
-              <span className="relative text-yes">{parseFloat(level.price).toFixed(2)}</span>
-              <motion.span
-                className="relative text-muted-foreground"
-                animate={flash ? { scale: [1, 1.2, 1] } : {}}
-                transition={{ duration: 0.3 }}
-              >
-                {parseFloat(level.size).toFixed(0)}
-              </motion.span>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-
       {/* Sequential one-at-a-time trade ticker */}
-      <div className="relative mt-1 h-14 overflow-hidden rounded border border-border/50 bg-card/60">
+      <div className="relative h-14 overflow-hidden rounded border border-border/50 bg-card/60">
         {/* Live indicator */}
         <div className="absolute top-1 left-1 z-10 flex items-center gap-1">
           <span className={cn(
@@ -242,23 +251,6 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
           </div>
         )}
 
-        {/* YES side — one at a time, right-aligned */}
-        <AnimatePresence>
-          {currentYes && (
-            <motion.span
-              key={currentYes.id}
-              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
-              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
-              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-yes bg-yes/15 border border-yes/20"
-              style={{ right: `${currentYes.xOffset}%` }}
-            >
-              {currentYes.label}
-            </motion.span>
-          )}
-        </AnimatePresence>
-
         {/* NO side — one at a time, left-aligned */}
         <AnimatePresence>
           {currentNo && (
@@ -272,6 +264,23 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
               style={{ left: `${currentNo.xOffset}%` }}
             >
               {currentNo.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {/* YES side — one at a time, right-aligned */}
+        <AnimatePresence>
+          {currentYes && (
+            <motion.span
+              key={currentYes.id}
+              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
+              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
+              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-yes bg-yes/15 border border-yes/20"
+              style={{ right: `${currentYes.xOffset}%` }}
+            >
+              {currentYes.label}
             </motion.span>
           )}
         </AnimatePresence>
