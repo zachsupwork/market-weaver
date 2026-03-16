@@ -35,6 +35,7 @@ class OrderbookWsService {
   private reconnectAttempts = 0;
   private connected = false;
   private lastEventAt = 0;
+  private preconnected = false; // track if preconnect was called
 
   private books = new Map<string, Orderbook>();
   private listeners = new Map<string, Set<BookListener>>();
