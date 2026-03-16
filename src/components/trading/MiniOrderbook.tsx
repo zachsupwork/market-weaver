@@ -12,11 +12,12 @@ interface MiniOrderbookProps {
 interface FlightTick {
   id: string;
   label: string;
-  direction: "left" | "right";
   tone: "yes" | "no";
+  xOffset: number; // random horizontal offset in %
 }
 
-const FLIGHT_DURATION_MS = 1800;
+const FLIGHT_DURATION_MS = 2200;
+const MAX_VISIBLE_PER_SIDE = 4;
 
 /**
  * Compact 3-row orderbook preview for market cards.
