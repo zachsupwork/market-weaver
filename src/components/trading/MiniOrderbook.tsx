@@ -184,28 +184,39 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
       </div>
 
       {/* Vertical bubble-rising trade ticker */}
-      <div className="relative mt-1 h-16 overflow-hidden rounded border border-border/70 bg-background/70">
+      <div className="relative mt-1 h-14 overflow-hidden rounded border border-border/50 bg-card/60">
+        {/* Live indicator */}
+        <div className="absolute top-1 left-1 z-10 flex items-center gap-1">
+          <span className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            connected ? "bg-yes animate-pulse" : "bg-muted-foreground"
+          )} />
+          <span className="text-[7px] font-medium text-muted-foreground uppercase tracking-wider">
+            {connected ? "live" : "poll"}
+          </span>
+        </div>
+
         <AnimatePresence initial={false}>
           {flights.map((flight) => (
             <motion.span
               key={flight.id}
               initial={{
-                opacity: 0.9,
-                y: 0,
-                scale: 0.85,
+                opacity: 0.95,
+                y: 4,
+                scale: 0.9,
               }}
               animate={{
-                opacity: [0.9, 1, 0.8, 0],
-                y: -60,
-                scale: [0.85, 1, 0.95],
+                opacity: [0.95, 1, 0.6, 0],
+                y: -48,
+                scale: 1,
               }}
               exit={{ opacity: 0 }}
               transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
               className={cn(
-                "absolute bottom-1 text-[9px] font-semibold whitespace-nowrap px-1 py-0.5 rounded-sm",
+                "absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm",
                 flight.tone === "yes"
-                  ? "text-yes bg-yes/10 right-0"
-                  : "text-no bg-no/10 left-0"
+                  ? "text-yes bg-yes/15 border border-yes/20"
+                  : "text-no bg-no/15 border border-no/20"
               )}
               style={{
                 [flight.tone === "yes" ? "right" : "left"]: `${flight.xOffset}%`,
@@ -217,8 +228,8 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         </AnimatePresence>
 
         {flights.length === 0 && (
-          <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground">
-            {connected ? "live flow" : "awaiting updates"}
+          <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground/60">
+            {connected ? "waiting for trades…" : "connecting…"}
           </div>
         )}
       </div>
