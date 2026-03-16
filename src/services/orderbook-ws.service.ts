@@ -258,7 +258,7 @@ class OrderbookWsService {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer || this.listeners.size === 0) return;
+    if (this.reconnectTimer || (!this.preconnected && this.listeners.size === 0)) return;
 
     const delay = Math.min(8_000, 500 * 2 ** this.reconnectAttempts);
     this.reconnectAttempts += 1;
