@@ -35,6 +35,7 @@ class OrderbookWsService {
   private reconnectAttempts = 0;
   private connected = false;
   private lastEventAt = 0;
+  private preconnected = false; // track if preconnect was called
 
   private books = new Map<string, Orderbook>();
   private listeners = new Map<string, Set<BookListener>>();
@@ -46,6 +47,7 @@ class OrderbookWsService {
   }
 
   preconnect() {
+    this.preconnected = true;
     this.ensureConnected();
   }
 
@@ -256,7 +258,7 @@ class OrderbookWsService {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer || this.listeners.size === 0) return;
+    if (this.reconnectTimer || (!this.preconnected && this.listeners.size === 0)) return;
 
     const delay = Math.min(8_000, 500 * 2 ** this.reconnectAttempts);
     this.reconnectAttempts += 1;
