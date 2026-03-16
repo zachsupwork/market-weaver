@@ -16,8 +16,8 @@ interface FlightTick {
   xOffset: number; // random horizontal offset in %
 }
 
-const FLIGHT_DURATION_MS = 2200;
-const MAX_VISIBLE_PER_SIDE = 4;
+const FLIGHT_DURATION_MS = 1800;
+const MAX_VISIBLE_PER_SIDE = 3;
 
 /**
  * Compact 3-row orderbook preview for market cards.
