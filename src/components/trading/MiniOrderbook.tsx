@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useOrderbookWs } from "@/hooks/useOrderbookWs";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -13,29 +13,70 @@ interface FlightTick {
   id: string;
   label: string;
   tone: "yes" | "no";
-  xOffset: number; // random horizontal offset in %
+  xOffset: number;
 }
 
-const FLIGHT_DURATION_MS = 1800;
-const MAX_VISIBLE_PER_SIDE = 3;
+const FLIGHT_DURATION_MS = 1500;
 
 /**
  * Compact 3-row orderbook preview for market cards.
- * Includes an animated micro-ticker for incremental line-by-line updates.
+ * Trades are queued per-side and shown one at a time to avoid clutter.
  */
 export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrderbookProps) {
   const { book, connected, changedPrices } = useOrderbookWs(tokenId, {
     wsEnabled,
     pollInterval: 1_000,
   });
-  const [flights, setFlights] = useState<FlightTick[]>([]);
-  const seenFlightIds = useRef<Set<string>>(new Set());
 
+  // Queues for pending trades per side
+  const yesQueueRef = useRef<FlightTick[]>([]);
+  const noQueueRef = useRef<FlightTick[]>([]);
+  const [currentYes, setCurrentYes] = useState<FlightTick | null>(null);
+  const [currentNo, setCurrentNo] = useState<FlightTick | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
+  const seenFlightIds = useRef<Set<string>>(new Set());
+  const yesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pop next from YES queue
+  const popYes = useCallback(() => {
+    if (yesQueueRef.current.length > 0) {
+      const next = yesQueueRef.current.shift()!;
+      setCurrentYes(next);
+      setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
+      yesTimerRef.current = setTimeout(() => {
+        setCurrentYes(null);
+        // Small gap before next
+        yesTimerRef.current = setTimeout(popYes, 150);
+      }, FLIGHT_DURATION_MS);
+    } else {
+      setQueueCount(noQueueRef.current.length);
+    }
+  }, []);
+
+  // Pop next from NO queue
+  const popNo = useCallback(() => {
+    if (noQueueRef.current.length > 0) {
+      const next = noQueueRef.current.shift()!;
+      setCurrentNo(next);
+      setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
+      noTimerRef.current = setTimeout(() => {
+        setCurrentNo(null);
+        noTimerRef.current = setTimeout(popNo, 150);
+      }, FLIGHT_DURATION_MS);
+    } else {
+      setQueueCount(yesQueueRef.current.length);
+    }
+  }, []);
+
+  // Enqueue incoming trades
   useEffect(() => {
     if (!book || changedPrices.size === 0) return;
 
-    const nextFlights: FlightTick[] = [];
-    [...changedPrices].slice(0, 2).forEach((key, idx) => {
+    let addedYes = false;
+    let addedNo = false;
+
+    [...changedPrices].slice(0, 3).forEach((key, idx) => {
       const [side, price] = key.split("-");
       const level = side === "bid"
         ? (book.bids || []).find((b) => b.price === price)
@@ -46,32 +87,37 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
       if (seenFlightIds.current.has(id)) return;
       seenFlightIds.current.add(id);
 
-      nextFlights.push({
+      const tick: FlightTick = {
         id,
         label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
         tone: side === "bid" ? "yes" : "no",
-        xOffset: Math.random() * 40 + 5, // 5-45% offset from side edge
-      });
+        xOffset: Math.random() * 30 + 5,
+      };
+
+      if (tick.tone === "yes") {
+        // Cap queue to prevent unbounded growth
+        if (yesQueueRef.current.length < 8) yesQueueRef.current.push(tick);
+        addedYes = true;
+      } else {
+        if (noQueueRef.current.length < 8) noQueueRef.current.push(tick);
+        addedNo = true;
+      }
     });
 
-    if (!nextFlights.length) return;
+    setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
 
-    setFlights((prev) => {
-      const combined = [...nextFlights, ...prev];
-      // Enforce per-side limit
-      const yesTrades = combined.filter(f => f.tone === "yes").slice(0, MAX_VISIBLE_PER_SIDE);
-      const noTrades = combined.filter(f => f.tone === "no").slice(0, MAX_VISIBLE_PER_SIDE);
-      return [...yesTrades, ...noTrades];
-    });
+    // Kick off display if not already animating
+    if (addedYes && !currentYes && !yesTimerRef.current) popYes();
+    if (addedNo && !currentNo && !noTimerRef.current) popNo();
+  }, [book, changedPrices, currentYes, currentNo, popYes, popNo]);
 
-    const timers = nextFlights.map((flight) =>
-      setTimeout(() => {
-        setFlights((prev) => prev.filter((item) => item.id !== flight.id));
-      }, FLIGHT_DURATION_MS)
-    );
-
-    return () => timers.forEach(clearTimeout);
-  }, [book, changedPrices]);
+  // Cleanup timers
+  useEffect(() => {
+    return () => {
+      if (yesTimerRef.current) clearTimeout(yesTimerRef.current);
+      if (noTimerRef.current) clearTimeout(noTimerRef.current);
+    };
+  }, []);
 
   if (!book) {
     return (
@@ -91,7 +137,6 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
     1
   );
 
-  // Last trade price from orderbook data
   const lastPrice = (book as any).last_trade_price;
 
   return (
@@ -177,13 +222,7 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         })}
       </AnimatePresence>
 
-      {/* Status indicator */}
-      <div className="flex items-center gap-1 mt-0.5 justify-end">
-        <div className={cn("h-1 w-1 rounded-full", connected ? "bg-yes animate-pulse" : "bg-primary")} />
-        <span className="text-[8px] text-muted-foreground">{connected ? "live" : "polling"}</span>
-      </div>
-
-      {/* Vertical bubble-rising trade ticker */}
+      {/* Sequential one-at-a-time trade ticker */}
       <div className="relative mt-1 h-14 overflow-hidden rounded border border-border/50 bg-card/60">
         {/* Live indicator */}
         <div className="absolute top-1 left-1 z-10 flex items-center gap-1">
@@ -196,38 +235,48 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
           </span>
         </div>
 
-        <AnimatePresence initial={false}>
-          {flights.map((flight) => (
+        {/* Queue counter */}
+        {queueCount > 0 && (
+          <div className="absolute top-1 right-1 z-10 text-[7px] font-mono text-muted-foreground/70">
+            +{queueCount}
+          </div>
+        )}
+
+        {/* YES side — one at a time, right-aligned */}
+        <AnimatePresence>
+          {currentYes && (
             <motion.span
-              key={flight.id}
-              initial={{
-                opacity: 0.95,
-                y: 4,
-                scale: 0.9,
-              }}
-              animate={{
-                opacity: [0.95, 1, 0.6, 0],
-                y: -48,
-                scale: 1,
-              }}
+              key={currentYes.id}
+              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
+              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
-              className={cn(
-                "absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm",
-                flight.tone === "yes"
-                  ? "text-yes bg-yes/15 border border-yes/20"
-                  : "text-no bg-no/15 border border-no/20"
-              )}
-              style={{
-                [flight.tone === "yes" ? "right" : "left"]: `${flight.xOffset}%`,
-              }}
+              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-yes bg-yes/15 border border-yes/20"
+              style={{ right: `${currentYes.xOffset}%` }}
             >
-              {flight.label}
+              {currentYes.label}
             </motion.span>
-          ))}
+          )}
         </AnimatePresence>
 
-        {flights.length === 0 && (
+        {/* NO side — one at a time, left-aligned */}
+        <AnimatePresence>
+          {currentNo && (
+            <motion.span
+              key={currentNo.id}
+              initial={{ opacity: 0.95, y: 4, scale: 0.9 }}
+              animate={{ opacity: [0.95, 1, 0.7, 0], y: -44, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: FLIGHT_DURATION_MS / 1000, ease: "easeOut" }}
+              className="absolute bottom-1 text-[8px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded-sm backdrop-blur-sm text-no bg-no/15 border border-no/20"
+              style={{ left: `${currentNo.xOffset}%` }}
+            >
+              {currentNo.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {!currentYes && !currentNo && queueCount === 0 && (
           <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground/60">
             {connected ? "waiting for trades…" : "connecting…"}
           </div>
