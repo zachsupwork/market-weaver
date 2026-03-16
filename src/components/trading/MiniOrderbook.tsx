@@ -56,7 +56,13 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
 
     if (!nextFlights.length) return;
 
-    setFlights((prev) => [...nextFlights, ...prev].slice(0, 8));
+    setFlights((prev) => {
+      const combined = [...nextFlights, ...prev];
+      // Enforce per-side limit
+      const yesTrades = combined.filter(f => f.tone === "yes").slice(0, MAX_VISIBLE_PER_SIDE);
+      const noTrades = combined.filter(f => f.tone === "no").slice(0, MAX_VISIBLE_PER_SIDE);
+      return [...yesTrades, ...noTrades];
+    });
 
     const timers = nextFlights.map((flight) =>
       setTimeout(() => {
