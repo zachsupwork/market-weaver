@@ -49,8 +49,8 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
       nextFlights.push({
         id,
         label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
-        direction: side === "bid" ? "left" : "right",
         tone: side === "bid" ? "yes" : "no",
+        xOffset: Math.random() * 40 + 5, // 5-45% offset from side edge
       });
     });
 
