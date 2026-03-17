@@ -140,21 +140,44 @@ serve(async (req) => {
       const percentPnl = parseFloat(pos.percentPnl || pos.percent_pnl || "0") ||
         (initialValue > 0 ? ((currentValue - initialValue) / initialValue) * 100 : 0);
 
-      // Check if position is redeemable (market resolved)
-      const marketActive = market?.active !== false && market?.closed !== true;
-      const resolved = market?.resolved === true || market?.closed === true;
-      const redeemable = resolved && size > 0;
+      // ── Determine if market is resolved ──────────────────────
+      // Use multiple signals since the Gamma API is inconsistent:
+      const isExplicitlyResolved = market?.resolved === true;
+      const isClosed = market?.closed === true || market?.active === false;
+      const endDateStr = market?.end_date_iso || market?.endDate || market?.end_date || null;
+      const endDatePassed = endDateStr ? new Date(endDateStr).getTime() < Date.now() : false;
+      // A market is resolved if explicitly flagged OR closed AND end date has passed
+      const resolved = isExplicitlyResolved || (isClosed && endDatePassed) || (endDatePassed && currentPrice >= 0.95);
+      const marketActive = !resolved;
 
-      // Determine if this is a winning position
+      // ── Determine if this is a winning position ─────────────
       let isWinner = false;
-      if (resolved && market) {
+      if (market) {
         const resolutionPrices = market.outcomePrices || market.outcome_prices;
         if (resolutionPrices) {
           const priceList = typeof resolutionPrices === "string" ? JSON.parse(resolutionPrices) : resolutionPrices;
           if (tokenIndex >= 0 && tokenIndex < priceList.length) {
-            isWinner = parseFloat(priceList[tokenIndex]) >= 0.99;
+            const outcomePrice = parseFloat(priceList[tokenIndex]) || 0;
+            // Winner if outcome price >= 0.95 (resolved to ~1.0) OR
+            // if market is resolved and this outcome has the highest price
+            if (outcomePrice >= 0.95) {
+              isWinner = true;
+            } else if (resolved) {
+              // Check if this is the highest-priced outcome (winner in resolved market)
+              const maxPrice = Math.max(...priceList.map((p: any) => parseFloat(p) || 0));
+              isWinner = outcomePrice === maxPrice && maxPrice > 0.5;
+            }
           }
         }
+        // Fallback: if market resolved and P&L is very positive, likely a winner
+        if (!isWinner && resolved && cashPnl > 0 && currentPrice >= 0.9) {
+          isWinner = true;
+        }
+      }
+
+      // Debug log for winner detection
+      if (resolved || isWinner || redeemable) {
+        console.log(`[positions] RESOLVED position: market="${market?.question?.substring(0, 40)}" resolved=${resolved} isWinner=${isWinner} redeemable=${redeemable} currentPrice=${currentPrice} cashPnl=${cashPnl} outcome=${outcome}`);
       }
 
       return {
