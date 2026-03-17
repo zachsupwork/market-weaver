@@ -1,12 +1,13 @@
 import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
+import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
 import {
   Wallet, AlertCircle, Loader2, History, PieChart, ClipboardList,
   ArrowUpDown, Filter, RefreshCw, TrendingUp,
 } from "lucide-react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { DepositWithdraw } from "@/components/wallet/DepositWithdraw";
 import { OrdersPanel } from "@/components/orders/OrdersPanel";
@@ -53,6 +54,17 @@ const Portfolio = () => {
   const [sortKey, setSortKey] = useState<SortKey>("value");
   const [sortDesc, setSortDesc] = useState(true);
   const [posFilter, setPosFilter] = useState<PositionFilter>("all");
+  const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+
+  const handleSellClick = useCallback((pos: any) => {
+    setSellPosition(pos as SellPositionData);
+    setSellModalOpen(true);
+  }, []);
+
+  const handleSellComplete = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   const { data: maticBalance } = useBalance({ address });
   const { data: usdcRaw } = useReadContract({
@@ -292,7 +304,7 @@ const Portfolio = () => {
                 {processedPositions.length > 0 && (
                   <div className="grid gap-3">
                     {processedPositions.map((pos: any, i: number) => (
-                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} />
+                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} onSell={handleSellClick} />
                     ))}
                   </div>
                 )}
@@ -320,6 +332,13 @@ const Portfolio = () => {
           </>
         )}
       </div>
+
+      <SellPositionModal
+        open={sellModalOpen}
+        onOpenChange={setSellModalOpen}
+        position={sellPosition}
+        onSellComplete={handleSellComplete}
+      />
     </div>
   );
 };
