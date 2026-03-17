@@ -68,6 +68,9 @@ export function EventPreviewCard({ event }: Props) {
             ))}
           </div>
 
+          {/* Mini order book spread for top candidate */}
+          {tokenIds[0] && <MiniSpread tokenId={tokenIds[0]} />}
+
           {/* Live trade ticker */}
           <LiveTradeTicker tokenIds={tokenIds} maxItems={3} />
 

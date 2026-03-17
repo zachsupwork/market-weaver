@@ -49,8 +49,9 @@ export function useFeaturedEvents(limit = 10) {
               return bPrice - aPrice;
             })
             .slice(0, 10),
-        }))
-        .filter((e: FeaturedEvent) => e.title && e.slug)
+        };
+        })
+        .filter((e): e is FeaturedEvent => e !== null && !!e.title && !!e.slug)
         .slice(0, limit);
     },
     staleTime: 30_000,
