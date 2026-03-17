@@ -1,18 +1,12 @@
-import type { Orderbook } from "@/lib/polymarket-api";
+import type { Orderbook, OrderbookLevel } from "@/lib/polymarket-api";
+import { useMarketStore, type RealtimeTrade } from "@/stores/useMarketStore";
 
 const WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 
 type BookListener = (book: Orderbook) => void;
 type ConnectionListener = (connected: boolean) => void;
 
-const MARKET_EVENT_TYPES = new Set([
-  "book",
-  "book_snapshot",
-  "book_update",
-  "price_change",
-  "best_bid_ask",
-  "last_trade_price",
-]);
+let tradeIdCounter = 0;
 
 function toIsoTimestamp(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return new Date().toISOString();
@@ -35,7 +29,7 @@ class OrderbookWsService {
   private reconnectAttempts = 0;
   private connected = false;
   private lastEventAt = 0;
-  private preconnected = false; // track if preconnect was called
+  private preconnected = false;
 
   private books = new Map<string, Orderbook>();
   private listeners = new Map<string, Set<BookListener>>();
@@ -68,14 +62,12 @@ class OrderbookWsService {
     return () => {
       const set = this.listeners.get(assetId);
       if (!set) return;
-
       set.delete(listener);
       if (set.size === 0) {
         this.listeners.delete(assetId);
         this.subscribedAssets.delete(assetId);
         this.sendMarketSubscription();
       }
-
       if (this.listeners.size === 0) this.cleanupSocket();
     };
   }
@@ -113,10 +105,12 @@ class OrderbookWsService {
       this.socket.onmessage = (event) => {
         this.lastEventAt = Date.now();
 
+        // Handle raw PONG response
+        if (event.data === "PONG" || event.data === "pong") return;
+
         try {
           const payload = JSON.parse(event.data);
           if (Array.isArray(payload)) {
-            if (payload.length === 0) return;
             payload.forEach((msg) => this.handleMessage(msg));
             return;
           }
@@ -129,18 +123,14 @@ class OrderbookWsService {
       this.socket.onerror = () => {
         this.connected = false;
         this.emitConnection();
-        if (import.meta.env.DEV) {
-          console.warn("[OrderbookWS] error");
-        }
+        if (import.meta.env.DEV) console.warn("[OrderbookWS] error");
       };
 
       this.socket.onclose = () => {
         this.connected = false;
         this.emitConnection();
         this.clearRuntimeTimers();
-        if (import.meta.env.DEV) {
-          console.warn("[OrderbookWS] disconnected");
-        }
+        if (import.meta.env.DEV) console.warn("[OrderbookWS] disconnected");
         this.scheduleReconnect();
       };
     } catch {
@@ -155,33 +145,89 @@ class OrderbookWsService {
 
     const eventType = String(msg.event_type || msg.type || "").toLowerCase();
     if (!eventType || eventType === "pong" || eventType === "ping") return;
-    if (!MARKET_EVENT_TYPES.has(eventType)) return;
 
-    let assetId = msg.asset_id || msg.assetId || msg.asset || msg.token_id;
-    if (!assetId && this.subscribedAssets.size === 1) {
-      assetId = [...this.subscribedAssets][0];
+    const store = useMarketStore.getState();
+
+    // ── last_trade_price ────────────────────────────────
+    if (eventType === "last_trade_price") {
+      const assetId = msg.asset_id;
+      if (!assetId) return;
+
+      const trade: RealtimeTrade = {
+        id: `ws-trade-${++tradeIdCounter}`,
+        price: parseFloat(msg.price ?? 0),
+        size: parseFloat(msg.size ?? 0),
+        side: String(msg.side ?? "BUY").toUpperCase() as "BUY" | "SELL",
+        timestamp: Date.now(),
+      };
+
+      store.addTrade(assetId, trade);
+
+      if (import.meta.env.DEV) {
+        console.debug("[OrderbookWS] trade", assetId.slice(-8), trade.side, trade.price, trade.size);
+      }
+      return;
     }
-    if (!assetId) return;
 
-    const prev = this.books.get(assetId);
+    // ── best_bid_ask ────────────────────────────────────
+    if (eventType === "best_bid_ask") {
+      const assetId = msg.asset_id;
+      if (!assetId) return;
 
-    const next: Orderbook = {
-      bids: Array.isArray(msg.bids) ? msg.bids : prev?.bids || [],
-      asks: Array.isArray(msg.asks) ? msg.asks : prev?.asks || [],
-      asset_id: String(assetId),
-      hash: String(msg.hash || prev?.hash || ""),
-      timestamp: toIsoTimestamp(msg.timestamp || msg.ts || msg.time || msg.updated_at || prev?.timestamp),
-      market: String(msg.market || prev?.market || ""),
-    };
-
-    this.books.set(assetId, next);
-
-    if (import.meta.env.DEV) {
-      console.debug("[OrderbookWS]", eventType, assetId, next.timestamp);
+      store.setBestBidAsk(
+        assetId,
+        msg.best_bid != null ? parseFloat(msg.best_bid) : null,
+        msg.best_ask != null ? parseFloat(msg.best_ask) : null
+      );
+      return;
     }
 
-    const listeners = this.listeners.get(assetId);
-    listeners?.forEach((listener) => listener(next));
+    // ── price_change (incremental orderbook update) ─────
+    if (eventType === "price_change") {
+      const changes = msg.changes || msg.price_changes;
+      if (Array.isArray(changes) && changes.length > 0) {
+        store.applyPriceChanges(changes);
+      }
+      return;
+    }
+
+    // ── book / book_snapshot (full orderbook) ────────────
+    if (eventType === "book" || eventType === "book_snapshot" || eventType === "book_update") {
+      let assetId = msg.asset_id || msg.assetId || msg.asset || msg.token_id;
+      if (!assetId && this.subscribedAssets.size === 1) {
+        assetId = [...this.subscribedAssets][0];
+      }
+      if (!assetId) return;
+
+      const prev = this.books.get(assetId);
+
+      const next: Orderbook = {
+        bids: Array.isArray(msg.bids) ? msg.bids : prev?.bids || [],
+        asks: Array.isArray(msg.asks) ? msg.asks : prev?.asks || [],
+        asset_id: String(assetId),
+        hash: String(msg.hash || prev?.hash || ""),
+        timestamp: toIsoTimestamp(msg.timestamp || msg.ts || msg.time || msg.updated_at || prev?.timestamp),
+        market: String(msg.market || prev?.market || ""),
+      };
+
+      this.books.set(assetId, next);
+
+      // Also push to Zustand store
+      store.setBook(assetId, next.bids, next.asks);
+
+      // Notify legacy listeners
+      const listeners = this.listeners.get(assetId);
+      listeners?.forEach((listener) => listener(next));
+      return;
+    }
+
+    // ── new_market / market_resolved (log for now) ──────
+    if (eventType === "new_market" || eventType === "market_resolved") {
+      if (import.meta.env.DEV) {
+        console.info("[OrderbookWS]", eventType, msg);
+      }
+      return;
+    }
   }
 
   private sendMarketSubscription() {
@@ -203,20 +249,25 @@ class OrderbookWsService {
     }
   }
 
+  /**
+   * CRITICAL: Polymarket Market channel requires raw "PING" every 10 seconds.
+   * NOT a JSON message. Without this, server disconnects after ~10s.
+   */
   private startPing() {
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = setInterval(() => {
       if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ type: "ping" }));
+        this.socket.send("PING");
       }
-    }, 30_000);
+    }, 10_000);
   }
 
   private startHealthMonitor() {
     if (this.healthTimer) clearInterval(this.healthTimer);
     this.healthTimer = setInterval(() => {
       if (!this.connected || this.listeners.size === 0) return;
-      if (Date.now() - this.lastEventAt < 15_000) return;
+      // If no events for 20s, something is wrong
+      if (Date.now() - this.lastEventAt < 20_000) return;
 
       if (import.meta.env.DEV) {
         console.warn("[OrderbookWS] stale stream detected, reconnecting");
@@ -227,16 +278,10 @@ class OrderbookWsService {
 
   private forceReconnect() {
     this.clearRuntimeTimers();
-
     if (this.socket) {
-      try {
-        this.socket.close();
-      } catch {
-        // ignore close errors
-      }
+      try { this.socket.close(); } catch { /* ignore */ }
       this.socket = null;
     }
-
     this.connected = false;
     this.emitConnection();
     this.scheduleReconnect();
@@ -247,14 +292,8 @@ class OrderbookWsService {
   }
 
   private clearRuntimeTimers() {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
-    if (this.healthTimer) {
-      clearInterval(this.healthTimer);
-      this.healthTimer = null;
-    }
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    if (this.healthTimer) { clearInterval(this.healthTimer); this.healthTimer = null; }
   }
 
   private scheduleReconnect() {
@@ -271,17 +310,8 @@ class OrderbookWsService {
 
   private cleanupSocket() {
     this.clearRuntimeTimers();
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.socket) { this.socket.close(); this.socket = null; }
     this.connected = false;
     this.emitConnection();
   }
