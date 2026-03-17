@@ -41,7 +41,7 @@ export function useFeaturedEvents(limit = 10) {
           image: e.image || "",
           volume: Number(e.volume ?? e.volume24hr ?? 0),
           liquidity: Number(e.liquidity ?? 0),
-          markets: (e.markets || [])
+          markets: activeMarkets
             .map((m: any) => normalizeMarket({ ...m, event_slug: e.slug }))
             .sort((a: NormalizedMarket, b: NormalizedMarket) => {
               const aPrice = a.outcomePrices?.[0] ?? 0;
