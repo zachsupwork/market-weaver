@@ -14,6 +14,7 @@ import {
   Wallet, RefreshCw, Loader2, PieChart, ClipboardList, History,
   ArrowDownToLine, ArrowUpFromLine, AlertCircle, Info, ChevronDown,
   DollarSign, ExternalLink, Banknote, Settings, Copy, Check, ArrowRightLeft,
+  Trophy, PartyPopper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
