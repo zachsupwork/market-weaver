@@ -57,13 +57,24 @@ const Portfolio = () => {
   const [posFilter, setPosFilter] = useState<PositionFilter>("all");
   const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
   const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [claimPosition, setClaimPosition] = useState<ClaimablePosition | null>(null);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
 
   const handleSellClick = useCallback((pos: any) => {
     setSellPosition(pos as SellPositionData);
     setSellModalOpen(true);
   }, []);
 
+  const handleClaimClick = useCallback((pos: any) => {
+    setClaimPosition(pos as ClaimablePosition);
+    setClaimModalOpen(true);
+  }, []);
+
   const handleSellComplete = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handleClaimComplete = useCallback(() => {
     refetch();
   }, [refetch]);
 
