@@ -65,6 +65,30 @@ export default function Account() {
   const [tab, setTab] = useState<Tab>(initialTab);
   const { proxyAddress } = useProxyWallet();
 
+  // ── Sell / Claim modals ──────────────────────────────────
+  const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [claimPosition, setClaimPosition] = useState<ClaimablePosition | null>(null);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
+
+  const handleSellClick = useCallback((pos: any) => {
+    setSellPosition(pos as SellPositionData);
+    setSellModalOpen(true);
+  }, []);
+
+  const handleClaimClick = useCallback((pos: any) => {
+    setClaimPosition(pos as ClaimablePosition);
+    setClaimModalOpen(true);
+  }, []);
+
+  const handleSellComplete = useCallback(() => {
+    refetchPositions();
+  }, [refetchPositions]);
+
+  const handleClaimComplete = useCallback(() => {
+    refetchPositions();
+  }, [refetchPositions]);
+
   // ── Balances ──────────────────────────────────────────────
   const { data: maticBalance, refetch: refetchMatic } = useBalance({ address });
 
