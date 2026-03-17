@@ -25,7 +25,16 @@ export function useFeaturedEvents(limit = 10) {
 
       return events
         .filter((e: any) => Array.isArray(e.markets) && e.markets.length >= 2)
-        .map((e: any): FeaturedEvent => ({
+        .map((e: any): FeaturedEvent => {
+          // Filter to only active, order-accepting markets
+          const activeMarkets = (e.markets || []).filter((m: any) => {
+            const active = m.active !== false && m.closed !== true;
+            const accepting = m.accepting_orders !== false && m.acceptingOrders !== false;
+            return active && accepting;
+          });
+          if (activeMarkets.length < 2) return null;
+
+          return {
           id: e.id || "",
           title: e.title || e.name || "",
           slug: e.slug || "",
