@@ -49,6 +49,9 @@ type GridItem =
   | { type: "event"; data: FeaturedEvent; volume: number };
 
 const Index = () => {
+  // Connect to Sports + RTDS WebSocket feeds for live scores & crypto prices
+  useLiveDataFeeds();
+
   const [category, setCategory] = useState<CategoryId>("trending");
   const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
   const [search, setSearch] = useState("");
