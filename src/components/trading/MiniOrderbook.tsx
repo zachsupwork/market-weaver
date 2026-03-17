@@ -333,7 +333,11 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
 
         {!currentYes && !currentNo && queueCount === 0 && (
           <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground/60">
-            {connected ? "waiting for trades…" : "connecting…"}
+            {!connected
+              ? "connecting…"
+              : storeLastPrice
+                ? `last: ${(storeLastPrice * 100).toFixed(0)}¢`
+                : "listening…"}
           </div>
         )}
       </div>
