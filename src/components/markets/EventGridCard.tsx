@@ -3,6 +3,9 @@ import { TrendingUp, Layers, ExternalLink } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { OrderBookPreview } from "./OrderBookPreview";
 import { LiveTradeTicker } from "./LiveTradeTicker";
+import { SportScoreBadge } from "./SportScoreBadge";
+import { CryptoPriceBadge } from "./CryptoPriceBadge";
+import { extractSportsSlug, extractCryptoSymbol } from "@/lib/live-data-utils";
 import type { FeaturedEvent } from "@/hooks/useFeaturedEvents";
 
 function formatVol(n: number): string {
@@ -66,6 +69,18 @@ export function EventGridCard({ event }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Live data badge (sports score or crypto price) */}
+      {(() => {
+        const sportsSlug = extractSportsSlug(
+          event.markets[0]?.tags,
+          event.slug
+        );
+        const cryptoSym = extractCryptoSymbol(event.title, event.markets[0]?.tags);
+        if (sportsSlug) return <div className="mb-2"><SportScoreBadge sportsSlug={sportsSlug} /></div>;
+        if (cryptoSym) return <div className="mb-2"><CryptoPriceBadge symbol={cryptoSym} /></div>;
+        return null;
+      })()}
 
       {/* Top 5 candidates */}
       <div className="space-y-0.5 mb-2">

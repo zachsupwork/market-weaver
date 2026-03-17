@@ -21,6 +21,10 @@ import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
 import { EventGridCard } from "@/components/markets/EventGridCard";
 import { orderbookWsService } from "@/services/orderbook-ws.service";
+import { useLiveDataFeeds } from "@/hooks/useLiveDataFeeds";
+import { SportScoreBadge } from "@/components/markets/SportScoreBadge";
+import { CryptoPriceBadge } from "@/components/markets/CryptoPriceBadge";
+import { extractCryptoSymbol, extractSportsSlug } from "@/lib/live-data-utils";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -45,6 +49,9 @@ type GridItem =
   | { type: "event"; data: FeaturedEvent; volume: number };
 
 const Index = () => {
+  // Connect to Sports + RTDS WebSocket feeds for live scores & crypto prices
+  useLiveDataFeeds();
+
   const [category, setCategory] = useState<CategoryId>("trending");
   const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
   const [search, setSearch] = useState("");
@@ -348,6 +355,15 @@ const Index = () => {
                       </h3>
                     </div>
                   </Link>
+
+                  {/* Live sports score or crypto price badge */}
+                  {(() => {
+                    const sportsSlug = extractSportsSlug(market.tags, market.event_slug);
+                    const cryptoSym = extractCryptoSymbol(market.question, market.tags);
+                    if (sportsSlug) return <div className="mb-2"><SportScoreBadge sportsSlug={sportsSlug} tags={market.tags} /></div>;
+                    if (cryptoSym) return <div className="mb-2"><CryptoPriceBadge symbol={cryptoSym} /></div>;
+                    return null;
+                  })()}
 
                   {/* Progress bar */}
                   <div className="mb-3">
