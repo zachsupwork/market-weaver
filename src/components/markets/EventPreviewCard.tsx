@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { LiveTradeTicker } from "./LiveTradeTicker";
+import { MiniSpread } from "./MiniSpread";
 import type { FeaturedEvent } from "@/hooks/useFeaturedEvents";
 
 function formatVol(n: number): string {
