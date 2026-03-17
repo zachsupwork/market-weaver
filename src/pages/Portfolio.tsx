@@ -1,9 +1,10 @@
 import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
+import { ClaimWinningsModal, type ClaimablePosition } from "@/components/trading/ClaimWinningsModal";
 import {
   Wallet, AlertCircle, Loader2, History, PieChart, ClipboardList,
-  ArrowUpDown, Filter, RefreshCw, TrendingUp,
+  ArrowUpDown, Filter, RefreshCw, TrendingUp, Trophy, PartyPopper,
 } from "lucide-react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
