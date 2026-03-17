@@ -30,7 +30,9 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
   });
 
   // Use Zustand store for real-time trades
-  const recentTrades = useMarketStore((s) => tokenId ? s.assets[tokenId]?.recentTrades : undefined);
+  const assetData = useMarketStore((s) => tokenId ? s.assets[tokenId] : undefined);
+  const recentTrades = assetData?.recentTrades;
+  const storeLastPrice = assetData?.lastTradePrice;
   const consumeTrade = useMarketStore((s) => s.consumeTrade);
 
   // Queues for pending trades per side
