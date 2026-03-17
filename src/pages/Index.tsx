@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useFeaturedEvents, type FeaturedEvent } from "@/hooks/useFeaturedEvents";
 import { Link } from "react-router-dom";
 import { Activity, Loader2, TrendingUp, BarChart3, Search, Trophy, Wallet, ChevronDown, ChevronUp, ExternalLink, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,9 +18,9 @@ import {
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/lib/polymarket-api";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
-import { Progress } from "@/components/ui/progress";
 import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
-import { FeaturedEvents } from "@/components/markets/FeaturedEvents";
+import { EventGridCard } from "@/components/markets/EventGridCard";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -38,6 +39,10 @@ function polymarketUrl(market: NormalizedMarket): string {
   if (marketSlug) return `https://polymarket.com/market/${marketSlug}`;
   return `https://polymarket.com`;
 }
+
+type GridItem =
+  | { type: "market"; data: NormalizedMarket; volume: number }
+  | { type: "event"; data: FeaturedEvent; volume: number };
 
 const Index = () => {
   const [category, setCategory] = useState<CategoryId>("trending");
@@ -69,6 +74,8 @@ const Index = () => {
     textQuery: debouncedSearch || undefined,
   });
 
+  const { data: events } = useFeaturedEvents(20);
+
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 
@@ -90,11 +97,40 @@ const Index = () => {
     setHasMore((markets as NormalizedMarket[]).length >= limit);
   }, [markets, offset, limit]);
 
+  // Subscribe event token IDs to WS for live prices
+  useEffect(() => {
+    if (!events || events.length === 0) return;
+    const tokenIds = new Set<string>();
+    events.forEach((e) =>
+      e.markets.forEach((m) => {
+        if (m.clobTokenIds?.[0]) tokenIds.add(m.clobTokenIds[0]);
+      })
+    );
+    const unsubs = [...tokenIds].map((id) =>
+      orderbookWsService.subscribe(id, () => {})
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [events]);
+
   const loadMore = useCallback(() => {
     if (!isFetching && hasMore) {
       setOffset(prev => prev + limit);
     }
   }, [isFetching, hasMore, limit]);
+
+  // Filter events by category
+  const filteredEvents = useMemo(() => {
+    if (!events) return [];
+    if (category === "trending" || category === "new" || category === "breaking") return events;
+
+    return events.filter((e) => {
+      // Infer category from event title + child market questions/tags
+      const texts = [e.title, ...e.markets.map(m => m.question || "")].join(" ");
+      const tags = e.markets.flatMap(m => m.tags || []);
+      const inferred = inferCategory({ question: texts, tags });
+      return inferred === category;
+    });
+  }, [events, category]);
 
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
@@ -128,16 +164,37 @@ const Index = () => {
       list = sortByTrending(list);
     }
 
-    // Show all tradable markets (LIVE + UNAVAILABLE with valid condition_id) as "live"
-    // Only truly ended/closed/archived go to the ended bucket
     const tradable = list.filter(m => m.statusLabel === "LIVE" || (m.statusLabel === "UNAVAILABLE" && isBytes32Hex(m.condition_id)));
     const ended = list.filter(m => m.statusLabel === "ENDED" || m.statusLabel === "CLOSED" || m.statusLabel === "ARCHIVED");
 
-    return {
-      liveMarkets: tradable,
-      endedMarkets: ended,
-    };
+    return { liveMarkets: tradable, endedMarkets: ended };
   }, [allMarkets, category, sportsSubcat, search]);
+
+  // Merge markets + events into a single sorted list
+  const combinedGrid = useMemo((): GridItem[] => {
+    const items: GridItem[] = [];
+
+    // Add markets
+    for (const m of liveMarkets) {
+      if (!m.condition_id || !isBytes32Hex(m.condition_id)) continue;
+      items.push({ type: "market", data: m, volume: m.volume24h || 0 });
+    }
+
+    // Add filtered events (dedupe: skip events whose child market condition_ids are already shown)
+    const marketConditionIds = new Set(liveMarkets.map(m => m.condition_id));
+    for (const e of filteredEvents) {
+      // Only add event if at least one child market isn't already in the grid individually
+      const hasUniqueChildren = e.markets.some(m => !marketConditionIds.has(m.condition_id));
+      if (hasUniqueChildren || e.markets.length >= 3) {
+        items.push({ type: "event", data: e, volume: e.volume });
+      }
+    }
+
+    // Sort by volume descending
+    items.sort((a, b) => b.volume - a.volume);
+
+    return items;
+  }, [liveMarkets, filteredEvents]);
 
   return (
     <div className="min-h-screen">
@@ -181,9 +238,6 @@ const Index = () => {
             </div>
           </div>
         )}
-
-        {/* Featured Events */}
-        <FeaturedEvents />
 
         {/* Quick links */}
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-6">
@@ -266,11 +320,15 @@ const Index = () => {
           </div>
         )}
 
-        {/* Market cards grid */}
-        {liveMarkets.length > 0 && (
+        {/* Combined grid: markets + events */}
+        {combinedGrid.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {liveMarkets.map((market) => {
-              if (!market.condition_id || !isBytes32Hex(market.condition_id)) return null;
+            {combinedGrid.map((item) => {
+              if (item.type === "event") {
+                return <EventGridCard key={`evt-${item.data.slug}`} event={item.data} />;
+              }
+
+              const market = item.data;
               const yesPrice = market.outcomePrices?.[0];
               const noPrice = market.outcomePrices?.[1];
               const yesPct = yesPrice !== undefined ? Math.round(yesPrice * 100) : 50;
@@ -383,7 +441,7 @@ const Index = () => {
           </div>
         )}
 
-        {!isLoading && liveMarkets.length === 0 && endedMarkets.length === 0 && !error && (
+        {!isLoading && combinedGrid.length === 0 && endedMarkets.length === 0 && !error && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-sm">No markets found{category !== "trending" ? ` in "${CATEGORIES.find(c => c.id === category)?.label || category}"` : ""}.</p>
             <p className="text-xs mt-1">Try a different category or search term.</p>
