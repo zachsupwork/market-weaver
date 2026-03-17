@@ -158,26 +158,27 @@ serve(async (req) => {
           const priceList = typeof resolutionPrices === "string" ? JSON.parse(resolutionPrices) : resolutionPrices;
           if (tokenIndex >= 0 && tokenIndex < priceList.length) {
             const outcomePrice = parseFloat(priceList[tokenIndex]) || 0;
-            // Winner if outcome price >= 0.95 (resolved to ~1.0) OR
-            // if market is resolved and this outcome has the highest price
             if (outcomePrice >= 0.95) {
               isWinner = true;
             } else if (resolved) {
-              // Check if this is the highest-priced outcome (winner in resolved market)
               const maxPrice = Math.max(...priceList.map((p: any) => parseFloat(p) || 0));
               isWinner = outcomePrice === maxPrice && maxPrice > 0.5;
             }
           }
         }
-        // Fallback: if market resolved and P&L is very positive, likely a winner
-        if (!isWinner && resolved && cashPnl > 0 && currentPrice >= 0.9) {
-          isWinner = true;
-        }
       }
 
-      // Debug log for winner detection
+      // Fallback: resolved + positive realized value strongly suggests a winner.
+      if (!isWinner && resolved && cashPnl > 0 && size > 0.001) {
+        isWinner = true;
+      }
+
+      const redeemable = resolved && isWinner && size > 0.001;
+
       if (resolved || isWinner || redeemable) {
-        console.log(`[positions] RESOLVED position: market="${market?.question?.substring(0, 40)}" resolved=${resolved} isWinner=${isWinner} redeemable=${redeemable} currentPrice=${currentPrice} cashPnl=${cashPnl} outcome=${outcome}`);
+        console.log(
+          `[positions] RESOLVED position: market="${market?.question?.substring(0, 40)}" resolved=${resolved} isWinner=${isWinner} redeemable=${redeemable} currentPrice=${currentPrice} cashPnl=${cashPnl} outcome=${outcome}`
+        );
       }
 
       return {
