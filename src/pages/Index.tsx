@@ -356,6 +356,15 @@ const Index = () => {
                     </div>
                   </Link>
 
+                  {/* Live sports score or crypto price badge */}
+                  {(() => {
+                    const sportsSlug = extractSportsSlug(market.tags, market.event_slug);
+                    const cryptoSym = extractCryptoSymbol(market.question, market.tags);
+                    if (sportsSlug) return <div className="mb-2"><SportScoreBadge sportsSlug={sportsSlug} tags={market.tags} /></div>;
+                    if (cryptoSym) return <div className="mb-2"><CryptoPriceBadge symbol={cryptoSym} /></div>;
+                    return null;
+                  })()}
+
                   {/* Progress bar */}
                   <div className="mb-3">
                     <div className="flex justify-between text-xs mb-1">
