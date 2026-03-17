@@ -25,14 +25,23 @@ export function useFeaturedEvents(limit = 10) {
 
       return events
         .filter((e: any) => Array.isArray(e.markets) && e.markets.length >= 2)
-        .map((e: any): FeaturedEvent => ({
+        .map((e: any): FeaturedEvent => {
+          // Filter to only active, order-accepting markets
+          const activeMarkets = (e.markets || []).filter((m: any) => {
+            const active = m.active !== false && m.closed !== true;
+            const accepting = m.accepting_orders !== false && m.acceptingOrders !== false;
+            return active && accepting;
+          });
+          if (activeMarkets.length < 2) return null;
+
+          return {
           id: e.id || "",
           title: e.title || e.name || "",
           slug: e.slug || "",
           image: e.image || "",
           volume: Number(e.volume ?? e.volume24hr ?? 0),
           liquidity: Number(e.liquidity ?? 0),
-          markets: (e.markets || [])
+          markets: activeMarkets
             .map((m: any) => normalizeMarket({ ...m, event_slug: e.slug }))
             .sort((a: NormalizedMarket, b: NormalizedMarket) => {
               const aPrice = a.outcomePrices?.[0] ?? 0;
@@ -40,8 +49,9 @@ export function useFeaturedEvents(limit = 10) {
               return bPrice - aPrice;
             })
             .slice(0, 10),
-        }))
-        .filter((e: FeaturedEvent) => e.title && e.slug)
+        };
+        })
+        .filter((e): e is FeaturedEvent => e !== null && !!e.title && !!e.slug)
         .slice(0, limit);
     },
     staleTime: 30_000,

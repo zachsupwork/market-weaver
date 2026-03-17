@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchTrades, type TradeRecord } from "@/lib/polymarket-api";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -9,32 +9,45 @@ interface Props {
 }
 
 export function LiveTradeTicker({ tokenIds, maxItems = 5 }: Props) {
-  const [trades, setTrades] = useState<(TradeRecord & { _label?: string })[]>([]);
+  const [trades, setTrades] = useState<TradeRecord[]>([]);
+  const seenIds = useRef(new Set<string>());
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (tokenIds.length === 0) return;
+    try {
+      const results = await Promise.all(
+        tokenIds.slice(0, 5).map((id) => fetchTrades(id, 3))
+      );
+      const all = results
+        .flat()
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, maxItems);
 
-    const load = async () => {
-      try {
-        // Fetch 3 trades per candidate, merge & sort
-        const results = await Promise.all(
-          tokenIds.slice(0, 5).map((id) => fetchTrades(id, 3))
-        );
-        const all = results
-          .flat()
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      setTrades((prev) => {
+        // Only add genuinely new trades (incremental diff)
+        const newIds = new Set(all.map((t) => t.id));
+        const added = all.filter((t) => !seenIds.current.has(t.id));
+        newIds.forEach((id) => seenIds.current.add(id));
+
+        if (added.length === 0 && prev.length > 0) return prev;
+
+        // Merge new trades at the top, keep max
+        const merged = [...added, ...prev]
           .slice(0, maxItems);
-        setTrades(all);
-      } catch {
-        /* noop */
-      }
-    };
-
-    load();
-    intervalRef.current = setInterval(load, 8000);
-    return () => clearInterval(intervalRef.current);
+        return merged.length > 0 ? merged : all;
+      });
+    } catch {
+      /* noop */
+    }
   }, [tokenIds.join(","), maxItems]);
+
+  useEffect(() => {
+    seenIds.current.clear();
+    load();
+    intervalRef.current = setInterval(load, 2000);
+    return () => clearInterval(intervalRef.current);
+  }, [load]);
 
   if (trades.length === 0) return null;
 
@@ -50,13 +63,7 @@ export function LiveTradeTicker({ tokenIds, maxItems = 5 }: Props) {
             transition={{ duration: 0.2 }}
             className="flex items-center gap-1.5 text-[10px] font-mono"
           >
-            <span
-              className={
-                t.side === "BUY"
-                  ? "text-yes"
-                  : "text-no"
-              }
-            >
+            <span className={t.side === "BUY" ? "text-yes" : "text-no"}>
               {t.side === "BUY" ? "▲" : "▼"}
             </span>
             <span className="text-muted-foreground">
