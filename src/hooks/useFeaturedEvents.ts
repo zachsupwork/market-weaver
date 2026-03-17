@@ -1,3 +1,4 @@
+// Featured events hook - fetches top multi-outcome events from Gamma API
 import { useQuery } from "@tanstack/react-query";
 import { fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarket, type NormalizedMarket } from "@/lib/normalizePolymarket";
