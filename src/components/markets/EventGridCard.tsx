@@ -70,6 +70,18 @@ export function EventGridCard({ event }: Props) {
         </div>
       </div>
 
+      {/* Live data badge (sports score or crypto price) */}
+      {(() => {
+        const sportsSlug = extractSportsSlug(
+          event.markets[0]?.tags,
+          event.slug
+        );
+        const cryptoSym = extractCryptoSymbol(event.title, event.markets[0]?.tags);
+        if (sportsSlug) return <div className="mb-2"><SportScoreBadge sportsSlug={sportsSlug} /></div>;
+        if (cryptoSym) return <div className="mb-2"><CryptoPriceBadge symbol={cryptoSym} /></div>;
+        return null;
+      })()}
+
       {/* Top 5 candidates */}
       <div className="space-y-0.5 mb-2">
         {event.markets.slice(0, 5).map((m) => (
