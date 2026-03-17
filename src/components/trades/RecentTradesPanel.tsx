@@ -1,8 +1,9 @@
 import { useRecentTrades, type BitqueryTrade } from "@/hooks/useRecentTrades";
+import { useMarketStore, type RealtimeTrade } from "@/stores/useMarketStore";
 import { Loader2, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function truncateAddress(addr: string): string {
@@ -79,6 +80,44 @@ interface RecentTradesPanelProps {
 
 export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1_000, className }: RecentTradesPanelProps) {
   const { data: trades, isLoading, error } = useRecentTrades({ conditionId, tokenId, limit, pollMs });
+
+  // Also consume WS trades from Zustand store
+  const wsRecentTrades = useMarketStore((s) => tokenId ? s.assets[tokenId]?.recentTrades : undefined);
+
+  // Convert WS trades to BitqueryTrade format and merge
+  const wsMapped = useMemo<BitqueryTrade[]>(() => {
+    if (!wsRecentTrades || wsRecentTrades.length === 0) return [];
+    return wsRecentTrades.map((t: RealtimeTrade) => ({
+      id: t.id,
+      timestamp: new Date(t.timestamp).toISOString(),
+      price: t.price,
+      priceUsd: t.price,
+      size: t.size,
+      sideAmount: t.size,
+      side: t.side,
+      buyer: "",
+      seller: "",
+      tokenName: t.side === "BUY" ? "Yes" : "No",
+      tokenSymbol: t.side === "BUY" ? "YES" : "NO",
+      tokenAddress: tokenId || "",
+      txHash: "",
+    }));
+  }, [wsRecentTrades, tokenId]);
+
+  // Merge REST + WS trades, dedupe by id, sort newest first
+  const mergedTrades = useMemo(() => {
+    const all = [...(wsMapped || []), ...(trades || [])];
+    const seen = new Set<string>();
+    const deduped: BitqueryTrade[] = [];
+    for (const t of all) {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        deduped.push(t);
+      }
+    }
+    deduped.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return deduped.slice(0, limit);
+  }, [trades, wsMapped, limit]);
   const [displayedTrades, setDisplayedTrades] = useState<BitqueryTrade[]>([]);
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set());
   const [nowTick, setNowTick] = useState(0);
@@ -127,17 +166,17 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
   }, [limit, markAsNew]);
 
   useEffect(() => {
-    if (!trades || trades.length === 0) return;
+    if (!mergedTrades || mergedTrades.length === 0) return;
 
     if (isFirstLoad.current) {
       isFirstLoad.current = false;
-      const seeded = trades.slice(0, limit);
+      const seeded = mergedTrades.slice(0, limit);
       setDisplayedTrades(seeded);
       displayedIdsRef.current = new Set(seeded.map((t) => t.id));
       return;
     }
 
-    const unseen = trades.filter((trade) => !displayedIdsRef.current.has(trade.id));
+    const unseen = mergedTrades.filter((trade) => !displayedIdsRef.current.has(trade.id));
     if (unseen.length === 0) return;
 
     const staged = [...unseen].sort(
@@ -155,7 +194,7 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
       const timer = setTimeout(() => insertTrade(trade), idx * 110);
       timersRef.current.push(timer);
     });
-  }, [trades, limit, insertTrade, tokenId, conditionId]);
+  }, [mergedTrades, limit, insertTrade, tokenId, conditionId]);
 
   useEffect(() => {
     setDisplayedTrades((prev) => prev.slice(0, limit));

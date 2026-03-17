@@ -30,7 +30,9 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
   });
 
   // Use Zustand store for real-time trades
-  const recentTrades = useMarketStore((s) => tokenId ? s.assets[tokenId]?.recentTrades : undefined);
+  const assetData = useMarketStore((s) => tokenId ? s.assets[tokenId] : undefined);
+  const recentTrades = assetData?.recentTrades;
+  const storeLastPrice = assetData?.lastTradePrice;
   const consumeTrade = useMarketStore((s) => s.consumeTrade);
 
   // Queues for pending trades per side
@@ -264,12 +266,12 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         </div>
       </div>
 
-      {/* Spread line with last price */}
+      {/* Spread line with last price (prefer Zustand store, fallback to book) */}
       <div className="flex items-center gap-1 my-0.5">
         <div className="flex-1 h-px bg-border" />
-        {lastPrice && (
+        {(storeLastPrice ?? lastPrice) && (
           <span className="text-[8px] text-primary font-semibold">
-            {(parseFloat(lastPrice) * 100).toFixed(0)}¢
+            {((storeLastPrice ?? parseFloat(lastPrice)) * 100).toFixed(0)}¢
           </span>
         )}
         <div className="flex-1 h-px bg-border" />
@@ -331,7 +333,11 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
 
         {!currentYes && !currentNo && queueCount === 0 && (
           <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground/60">
-            {connected ? "waiting for trades…" : "connecting…"}
+            {!connected
+              ? "connecting…"
+              : storeLastPrice
+                ? `last: ${(storeLastPrice * 100).toFixed(0)}¢`
+                : "listening…"}
           </div>
         )}
       </div>
