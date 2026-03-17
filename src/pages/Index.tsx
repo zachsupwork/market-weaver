@@ -19,6 +19,7 @@ import { isBytes32Hex, type NormalizedMarket, type MarketStatusLabel } from "@/l
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 import { Progress } from "@/components/ui/progress";
 import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
+import { FeaturedEvents } from "@/components/markets/FeaturedEvents";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -180,6 +181,9 @@ const Index = () => {
             </div>
           </div>
         )}
+
+        {/* Featured Events */}
+        <FeaturedEvents />
 
         {/* Quick links */}
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-6">
