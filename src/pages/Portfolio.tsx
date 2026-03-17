@@ -54,6 +54,17 @@ const Portfolio = () => {
   const [sortKey, setSortKey] = useState<SortKey>("value");
   const [sortDesc, setSortDesc] = useState(true);
   const [posFilter, setPosFilter] = useState<PositionFilter>("all");
+  const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+
+  const handleSellClick = useCallback((pos: any) => {
+    setSellPosition(pos as SellPositionData);
+    setSellModalOpen(true);
+  }, []);
+
+  const handleSellComplete = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   const { data: maticBalance } = useBalance({ address });
   const { data: usdcRaw } = useReadContract({
