@@ -1,12 +1,13 @@
 import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
+import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
 import {
   Wallet, AlertCircle, Loader2, History, PieChart, ClipboardList,
   ArrowUpDown, Filter, RefreshCw, TrendingUp,
 } from "lucide-react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { DepositWithdraw } from "@/components/wallet/DepositWithdraw";
 import { OrdersPanel } from "@/components/orders/OrdersPanel";
