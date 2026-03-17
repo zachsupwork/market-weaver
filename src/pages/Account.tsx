@@ -642,7 +642,7 @@ export default function Account() {
             {positions && positions.length > 0 && (
               <div className="grid gap-3">
                 {positions.map((pos: any, i: number) => (
-                  <PositionCard key={pos.condition_id || i} position={pos} />
+                  <PositionCard key={pos.condition_id || i} position={pos} onSell={handleSellClick} onClaim={handleClaimClick} />
                 ))}
               </div>
             )}
