@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { TrendingUp, Layers } from "lucide-react";
+import { TrendingUp, Layers, ExternalLink } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { OrderBookPreview } from "./OrderBookPreview";
 import { LiveTradeTicker } from "./LiveTradeTicker";
