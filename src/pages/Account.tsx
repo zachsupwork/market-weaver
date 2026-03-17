@@ -82,12 +82,12 @@ export default function Account() {
   }, []);
 
   const handleSellComplete = useCallback(() => {
-    refetchPositions();
-  }, [refetchPositions]);
+    refetchPositions?.();
+  }, []);
 
   const handleClaimComplete = useCallback(() => {
-    refetchPositions();
-  }, [refetchPositions]);
+    refetchPositions?.();
+  }, []);
 
   // ── Balances ──────────────────────────────────────────────
   const { data: maticBalance, refetch: refetchMatic } = useBalance({ address });
