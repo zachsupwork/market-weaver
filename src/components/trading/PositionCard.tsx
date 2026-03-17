@@ -34,9 +34,10 @@ interface PositionCardProps {
   orderId?: string;
   compact?: boolean;
   onSell?: (position: PositionCardProps["position"]) => void;
+  onClaim?: (position: PositionCardProps["position"]) => void;
 }
 
-export function PositionCard({ position, showCancel, orderId, compact, onSell }: PositionCardProps) {
+export function PositionCard({ position, showCancel, orderId, compact, onSell, onClaim }: PositionCardProps) {
   const [cancelling, setCancelling] = useState(false);
   const navigate = useNavigate();
   const size = parseFloat(position.size || "0");
