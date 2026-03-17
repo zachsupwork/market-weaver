@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEventById, isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
-import { ArrowLeft, Loader2, BarChart3, TrendingUp, Droplets, ExternalLink, Calendar } from "lucide-react";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
+import { useMarketStore } from "@/stores/useMarketStore";
+import { ArrowLeft, Loader2, BarChart3, TrendingUp, Droplets, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LiveOrderbook } from "@/components/trading/LiveOrderbook";
+import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
+import { OrderTicket } from "@/components/trading/OrderTicket";
+import { motion, AnimatePresence } from "framer-motion";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -13,14 +20,57 @@ function formatVol(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
-function formatPrice(p: number | undefined): string {
-  if (p === undefined || p === null || isNaN(p)) return "—";
-  return `${Math.round(p * 100)}¢`;
+/** Candidate row in the leaderboard */
+function CandidateRow({
+  market,
+  selected,
+  onSelect,
+}: {
+  market: NormalizedMarket;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const tokenId = market.clobTokenIds?.[0];
+  const wsPrice = useMarketStore((s) => (tokenId ? s.assets[tokenId]?.lastTradePrice : null));
+  const price = wsPrice ?? market.outcomePrices?.[0] ?? 0;
+  const pct = Math.round(price * 100);
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all rounded-lg",
+        selected
+          ? "bg-primary/10 border border-primary/30"
+          : "hover:bg-muted/50 border border-transparent"
+      )}
+    >
+      <span className="flex-1 text-sm font-medium truncate">{market.question}</span>
+      <div className="w-16 shrink-0">
+        <Progress value={pct} className="h-1.5" />
+      </div>
+      <AnimatePresence mode="popLayout">
+        <motion.span
+          key={pct}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={{ duration: 0.15 }}
+          className="text-sm font-mono font-semibold w-10 text-right shrink-0 text-primary"
+        >
+          {pct}%
+        </motion.span>
+      </AnimatePresence>
+      <span className="text-xs text-muted-foreground font-mono w-16 text-right shrink-0 hidden sm:block">
+        {formatVol(market.volume24h)}
+      </span>
+    </button>
+  );
 }
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
-  const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["polymarket-event", eventId],
@@ -28,6 +78,40 @@ const EventDetail = () => {
     enabled: !!eventId,
     staleTime: 30_000,
   });
+
+  const markets = useMemo(() => {
+    if (!event?.markets) return [];
+    const all = normalizeMarkets(event.markets);
+    return all
+      .filter((m) => isBytes32Hex(m.condition_id))
+      .sort((a, b) => (b.outcomePrices?.[0] ?? 0) - (a.outcomePrices?.[0] ?? 0));
+  }, [event]);
+
+  const liveMarkets = useMemo(
+    () => markets.filter((m) => m.statusLabel === "LIVE"),
+    [markets]
+  );
+
+  // Subscribe all token IDs to WebSocket for live prices
+  useEffect(() => {
+    if (liveMarkets.length === 0) return;
+    const tokenIds = new Set<string>();
+    liveMarkets.forEach((m) => {
+      if (m.clobTokenIds?.[0]) tokenIds.add(m.clobTokenIds[0]);
+      if (m.clobTokenIds?.[1]) tokenIds.add(m.clobTokenIds[1]);
+    });
+    const unsubs = [...tokenIds].map((id) => orderbookWsService.subscribe(id, () => {}));
+    return () => unsubs.forEach((u) => u());
+  }, [liveMarkets]);
+
+  // Reset selection when markets change
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [eventId]);
+
+  const selected = liveMarkets[selectedIdx] ?? liveMarkets[0];
+  const yesTokenId = selected?.clobTokenIds?.[0] ?? "";
+  const noTokenId = selected?.clobTokenIds?.[1] ?? "";
 
   if (isLoading) {
     return (
@@ -49,10 +133,6 @@ const EventDetail = () => {
   }
 
   const title = event.title || event.question || "Untitled Event";
-  const rawMarkets = event.markets || [];
-  const markets = normalizeMarkets(rawMarkets);
-  const liveMarkets = markets.filter(m => isBytes32Hex(m.condition_id) && m.statusLabel === "LIVE");
-  const endedMarkets = markets.filter(m => m.statusLabel !== "LIVE");
   const pmSlug = event.slug || eventId;
   const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : null;
   const totalVol = markets.reduce((s, m) => s + m.totalVolume, 0);
@@ -60,24 +140,25 @@ const EventDetail = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="container py-8 max-w-5xl">
+      <div className="container py-6 max-w-7xl">
+        {/* Back link */}
         <Link
           to="/events"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" /> Events
         </Link>
 
-        {/* Event Header */}
-        <div className="mb-8">
-          <div className="flex items-start gap-4 mb-4">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-start gap-4 mb-3">
             {event.image && (
-              <img src={event.image} alt="" className="h-16 w-16 rounded-xl bg-muted shrink-0 object-cover" />
+              <img src={event.image} alt="" className="h-14 w-14 rounded-xl bg-muted shrink-0 object-cover" />
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold mb-1">{title}</h1>
+              <h1 className="text-xl font-bold mb-0.5">{title}</h1>
               {event.description && (
-                <p className="text-sm text-muted-foreground line-clamp-3">{event.description}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>
               )}
             </div>
             {pmUrl && (
@@ -93,163 +174,105 @@ const EventDetail = () => {
             )}
           </div>
 
-          {/* Stats bar */}
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <BarChart3 className="h-4 w-4" />
+          {/* Stats */}
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <BarChart3 className="h-3.5 w-3.5" />
               <span className="font-mono font-semibold text-foreground">{formatVol(totalVol)}</span>
-              <span>volume</span>
+              vol
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Droplets className="h-4 w-4" />
+            <div className="flex items-center gap-1">
+              <Droplets className="h-3.5 w-3.5" />
               <span className="font-mono font-semibold text-foreground">{formatVol(totalLiq)}</span>
-              <span>liquidity</span>
+              liq
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{markets.length}</span>
-              <span>market{markets.length !== 1 ? "s" : ""}</span>
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-foreground">{liveMarkets.length}</span>
+              candidate{liveMarkets.length !== 1 ? "s" : ""}
             </div>
             {liveMarkets.length > 0 && (
-              <span className="rounded-full bg-yes/10 border border-yes/20 px-2.5 py-0.5 text-xs font-mono text-yes">
-                {liveMarkets.length} LIVE
+              <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+                LIVE
               </span>
             )}
           </div>
-
-          {event.tags && event.tags.length > 0 && (
-            <div className="flex gap-1.5 mt-3">
-              {event.tags.slice(0, 5).map((tag: any) => {
-                const label = typeof tag === "string" ? tag : tag?.label ?? tag?.slug ?? "";
-                if (!label) return null;
-                return (
-                  <span key={label} className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                    {label}
-                  </span>
-                );
-              })}
-            </div>
-          )}
         </div>
 
-        {/* Live Markets */}
-        {liveMarkets.length > 0 && (
-          <>
-            <h2 className="text-lg font-semibold mb-4">Live Markets ({liveMarkets.length})</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {liveMarkets.map((market) => {
-                const yesPrice = market.outcomePrices?.[0];
-                const noPrice = market.outcomePrices?.[1];
-
-                return (
-                  <div
-                    key={market.condition_id}
-                    className="rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30"
-                  >
-                    <Link
-                      to={`/trade/${encodeURIComponent(market.condition_id)}`}
-                      className="block"
-                    >
-                      <h3 className="text-sm font-semibold leading-snug mb-3 line-clamp-2 hover:text-primary transition-colors">
-                        {market.question}
-                      </h3>
-                    </Link>
-
-                    <div className="flex gap-2 mb-3">
-                      <button
-                        onClick={() => setTradeModal({ market, outcome: 0 })}
-                        className="flex-1 rounded-lg bg-yes/10 border border-yes/20 py-2 text-xs font-semibold text-yes hover:bg-yes/20 transition-all"
-                      >
-                        Buy Yes {formatPrice(yesPrice)}
-                      </button>
-                      <button
-                        onClick={() => setTradeModal({ market, outcome: 1 })}
-                        className="flex-1 rounded-lg bg-no/10 border border-no/20 py-2 text-xs font-semibold text-no hover:bg-no/20 transition-all"
-                      >
-                        Buy No {formatPrice(noPrice)}
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <BarChart3 className="h-3 w-3" />
-                        <span>{formatVol(market.volume24h)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3" />
-                        <span>{formatVol(market.totalVolume)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Droplets className="h-3 w-3" />
-                        <span>{formatVol(market.liquidity)}</span>
-                      </div>
-                      <span className="ml-auto rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
-                        LIVE
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Main layout: two columns */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left: Leaderboard + Tabs */}
+          <div className="flex-1 min-w-0">
+            {/* Leaderboard header */}
+            <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground border-b border-border mb-1">
+              <span className="flex-1">Candidate</span>
+              <span className="w-16 text-right">Prob</span>
+              <span className="w-10" />
+              <span className="w-16 text-right hidden sm:block">24h Vol</span>
             </div>
-          </>
-        )}
 
-        {/* Ended/Other Markets */}
-        {endedMarkets.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-lg font-semibold mb-4 text-muted-foreground">
-              Ended / Other ({endedMarkets.length})
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {endedMarkets.map((market) => {
-                const yesPrice = market.outcomePrices?.[0];
-                const noPrice = market.outcomePrices?.[1];
+            {/* Candidate rows */}
+            <div className="space-y-0.5 mb-4 max-h-[50vh] overflow-y-auto">
+              {liveMarkets.map((m, idx) => (
+                <CandidateRow
+                  key={m.condition_id}
+                  market={m}
+                  selected={idx === selectedIdx}
+                  onSelect={() => setSelectedIdx(idx)}
+                />
+              ))}
+              {liveMarkets.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">No live candidates.</p>
+              )}
+            </div>
 
-                return (
-                  <div
-                    key={market.condition_id || market.id || market.question}
-                    className="rounded-xl border border-border bg-card p-5 opacity-60"
-                  >
-                    <h3 className="text-sm font-semibold leading-snug mb-3 line-clamp-2">
-                      {market.question}
-                    </h3>
-
-                    <div className="flex items-center gap-4 mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Yes</span>
-                        <span className="font-mono text-lg font-bold text-yes">{formatPrice(yesPrice)}</span>
-                      </div>
-                      <div className="h-5 w-px bg-border" />
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">No</span>
-                        <span className="font-mono text-lg font-bold text-no">{formatPrice(noPrice)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{formatVol(market.totalVolume)} vol</span>
-                      <span className="ml-auto rounded-full bg-muted border border-border px-2 py-0.5 text-[10px] font-mono">
-                        {market.statusLabel}
-                      </span>
-                    </div>
+            {/* Orderbook + Trades tabs */}
+            {selected && (
+              <Tabs defaultValue="orderbook" className="mt-2">
+                <TabsList className="w-full">
+                  <TabsTrigger value="orderbook" className="flex-1">Orderbook</TabsTrigger>
+                  <TabsTrigger value="trades" className="flex-1">Activity</TabsTrigger>
+                </TabsList>
+                <TabsContent value="orderbook" className="mt-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <LiveOrderbook tokenId={yesTokenId || undefined} outcome="Yes" />
+                    <LiveOrderbook tokenId={noTokenId || undefined} outcome="No" />
                   </div>
-                );
-              })}
+                </TabsContent>
+                <TabsContent value="trades" className="mt-3">
+                  <RecentTradesPanel
+                    conditionId={selected.condition_id}
+                    tokenId={yesTokenId || undefined}
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
+          </div>
+
+          {/* Right: Trading sidebar */}
+          <div className="lg:w-80 shrink-0">
+            <div className="lg:sticky lg:top-20">
+              {selected ? (
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <h3 className="text-sm font-semibold mb-3 line-clamp-2">{selected.question}</h3>
+                  <OrderTicket
+                    yesTokenId={yesTokenId}
+                    noTokenId={noTokenId}
+                    yesPrice={selected.outcomePrices?.[0] ?? 0.5}
+                    noPrice={selected.outcomePrices?.[1] ?? 0.5}
+                    conditionId={selected.condition_id}
+                    isTradable={selected.statusLabel === "LIVE"}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-6 text-center">
+                  <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Select a candidate to trade</p>
+                </div>
+              )}
             </div>
           </div>
-        )}
-
-        {markets.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-8">No markets in this event.</p>
-        )}
+        </div>
       </div>
-
-      {tradeModal && (
-        <QuickTradeModal
-          market={tradeModal.market}
-          initialOutcome={tradeModal.outcome}
-          onClose={() => setTradeModal(null)}
-        />
-      )}
     </div>
   );
 };
