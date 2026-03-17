@@ -88,6 +88,7 @@ const App = () => (
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/builder" element={<BuilderDashboard />} />
                   <Route path="/settings/polymarket" element={<PolymarketSettings />} />
+                  <Route path="/history" element={<History />} />
                   <Route path="/settings/api-keys" element={<BuilderKeys />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
