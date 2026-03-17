@@ -154,11 +154,26 @@ export async function fetchMarketByConditionId(conditionId: string): Promise<Nor
 }
 
 export async function fetchOrderbook(tokenId: string): Promise<Orderbook | null> {
-  const res = await fetch(`${fnUrl("polymarket-proxy-orderbook")}?token_id=${encodeURIComponent(tokenId)}`, {
-    headers: { "apikey": ANON_KEY },
-  });
-  if (!res.ok) return null;
-  return res.json();
+  const url = `${fnUrl("polymarket-proxy-orderbook")}?token_id=${encodeURIComponent(tokenId)}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { "apikey": ANON_KEY } });
+      if (res.ok) return res.json();
+      // Retry on 502/503/504 (upstream transient errors)
+      if (res.status >= 502 && res.status <= 504 && attempt < 2) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      return null;
+    } catch {
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
 }
 
 export async function fetchTrades(tokenId: string, limit = 50): Promise<TradeRecord[]> {
