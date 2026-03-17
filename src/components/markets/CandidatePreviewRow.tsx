@@ -66,7 +66,7 @@ export function CandidatePreviewRow({
             flash ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          {pct}%
+          {pct}¢
         </motion.span>
       </AnimatePresence>
       {showTrade && (

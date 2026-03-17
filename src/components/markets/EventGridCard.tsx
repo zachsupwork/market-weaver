@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { TrendingUp, Layers } from "lucide-react";
+import { TrendingUp, Layers, ExternalLink } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { OrderBookPreview } from "./OrderBookPreview";
 import { LiveTradeTicker } from "./LiveTradeTicker";
@@ -38,9 +38,21 @@ export function EventGridCard({ event }: Props) {
           />
         )}
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
-            {event.title}
-          </h3>
+          <div className="flex items-start gap-1">
+            <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
+              {event.title}
+            </h3>
+            <a
+              href={`https://polymarket.com/event/${event.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 mt-0.5 text-muted-foreground hover:text-primary transition-colors"
+              title="View on Polymarket"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <Layers className="h-3 w-3 text-primary" />
             <span className="text-[10px] text-muted-foreground">
