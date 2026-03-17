@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
