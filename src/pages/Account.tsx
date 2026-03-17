@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { usePositions } from "@/hooks/usePositions";
 import { WalletTransfer } from "@/components/wallet/WalletTransfer";
 import { PositionCard } from "@/components/trading/PositionCard";
+import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
+import { ClaimWinningsModal, type ClaimablePosition } from "@/components/trading/ClaimWinningsModal";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
