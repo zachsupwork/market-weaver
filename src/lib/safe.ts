@@ -138,3 +138,65 @@ export async function withdrawFromSafe(params: {
   const tx = await executeSafeTransaction(safeAddress, safeTx, signature, signer);
   return tx.wait();
 }
+
+// ── CTF Redemption ──────────────────────────────────────────────
+
+/** Polymarket CTF contract on Polygon */
+export const CTF_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
+
+/** USDC.e collateral on Polygon */
+const COLLATERAL_TOKEN = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+
+const CTF_REDEEM_IFACE = new ethers.utils.Interface([
+  "function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets)",
+]);
+
+/**
+ * Build a Safe transaction that calls CTF.redeemPositions for a binary market.
+ * indexSets [1, 2] covers both YES (index 0 → 2^0=1) and NO (index 1 → 2^1=2).
+ */
+export function buildRedeemTx(
+  conditionId: string,
+  nonce: number,
+  indexSets: number[] = [1, 2]
+): SafeTransaction {
+  const data = CTF_REDEEM_IFACE.encodeFunctionData("redeemPositions", [
+    COLLATERAL_TOKEN,
+    ethers.constants.HashZero, // parentCollectionId = 0 for top-level
+    conditionId,
+    indexSets,
+  ]);
+  return {
+    to: CTF_ADDRESS,
+    value: "0",
+    data,
+    operation: 0,
+    safeTxGas: 0,
+    baseGas: 0,
+    gasPrice: "0",
+    gasToken: ZERO_ADDRESS,
+    refundReceiver: ZERO_ADDRESS,
+    nonce,
+  };
+}
+
+/**
+ * Full redeem flow: build → sign → execute CTF.redeemPositions via the user's Safe.
+ * Returns the transaction receipt.
+ */
+export async function redeemFromSafe(params: {
+  safeAddress: string;
+  conditionId: string;
+  signer: ethers.Signer;
+  chainId?: number;
+  indexSets?: number[];
+}): Promise<ethers.ContractReceipt> {
+  const { safeAddress, conditionId, signer, chainId = 137, indexSets = [1, 2] } = params;
+  const provider = signer.provider!;
+
+  const nonce = await getSafeNonce(safeAddress, provider);
+  const safeTx = buildRedeemTx(conditionId, nonce, indexSets);
+  const signature = await signSafeTransaction(safeTx, signer, safeAddress, chainId);
+  const tx = await executeSafeTransaction(safeAddress, safeTx, signature, signer);
+  return tx.wait();
+}
