@@ -1,8 +1,9 @@
 import { useRecentTrades, type BitqueryTrade } from "@/hooks/useRecentTrades";
+import { useMarketStore, type RealtimeTrade } from "@/stores/useMarketStore";
 import { Loader2, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function truncateAddress(addr: string): string {
