@@ -200,6 +200,52 @@ const Portfolio = () => {
 
         {isConnected && (
           <>
+            {/* Claimable winnings banner */}
+            {claimablePositions.length > 0 && (
+              <div className="rounded-lg border border-yes/30 bg-yes/5 p-4 mb-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-full bg-yes/20 p-2">
+                      <PartyPopper className="h-5 w-5 text-yes" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-yes">
+                        You won ${totalClaimable.toFixed(2)}!
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {claimablePositions.length} winning position{claimablePositions.length > 1 ? "s" : ""} ready to claim
+                      </p>
+                    </div>
+                  </div>
+                  {claimablePositions.length === 1 ? (
+                    <Button
+                      className="bg-yes hover:bg-yes/90 text-yes-foreground"
+                      size="sm"
+                      onClick={() => handleClaimClick(claimablePositions[0])}
+                    >
+                      <Trophy className="h-4 w-4 mr-1" /> Claim ${totalClaimable.toFixed(2)}
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {claimablePositions.map((pos: any, i: number) => {
+                        const val = parseFloat(pos.currentValue || "0") || parseFloat(pos.size || "0");
+                        return (
+                          <Button
+                            key={pos.asset || pos.condition_id || i}
+                            className="bg-yes hover:bg-yes/90 text-yes-foreground"
+                            size="sm"
+                            onClick={() => handleClaimClick(pos)}
+                          >
+                            <Trophy className="h-3 w-3 mr-1" /> ${val.toFixed(2)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               <div className="rounded-lg border border-border bg-card p-3">
