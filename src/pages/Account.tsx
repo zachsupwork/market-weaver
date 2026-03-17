@@ -140,8 +140,7 @@ export default function Account() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  // ── Positions ────────────────────────────────────────────
-  const { data: positions, isLoading: posLoading, error: posError, refetch: refetchPositions } = usePositions();
+  // ── Positions (declared above, before sell/claim callbacks) ──
 
   // ── Bridge Deposit (secondary) ───────────────────────────
   const [depositLoading, setDepositLoading] = useState(false);
