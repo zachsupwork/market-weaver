@@ -332,6 +332,13 @@ const Portfolio = () => {
           </>
         )}
       </div>
+
+      <SellPositionModal
+        open={sellModalOpen}
+        onOpenChange={setSellModalOpen}
+        position={sellPosition}
+        onSellComplete={handleSellComplete}
+      />
     </div>
   );
 };
