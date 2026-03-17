@@ -258,7 +258,10 @@ export async function fetchEvents(params?: {
 }
 
 export async function fetchEventById(eventId: string): Promise<any | null> {
-  const res = await fetch(`${fnUrl("polymarket-proxy-events")}?id=${encodeURIComponent(eventId)}`, {
+  // Gamma API expects numeric IDs via /events/:id. Slugs must use ?slug= param.
+  const isNumeric = /^\d+$/.test(eventId);
+  const param = isNumeric ? `id=${encodeURIComponent(eventId)}` : `slug=${encodeURIComponent(eventId)}`;
+  const res = await fetch(`${fnUrl("polymarket-proxy-events")}?${param}`, {
     headers: { "apikey": ANON_KEY },
   });
   if (!res.ok) return null;
