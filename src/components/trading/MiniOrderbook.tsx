@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useOrderbookWs } from "@/hooks/useOrderbookWs";
+import { useMarketStore, type RealtimeTrade } from "@/stores/useMarketStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,7 @@ const FLIGHT_DURATION_MS = 1500;
 
 /**
  * Compact 3-row orderbook preview for market cards.
- * Trades are queued per-side and shown one at a time to avoid clutter.
+ * Trades come from the Zustand store (last_trade_price WS events).
  */
 export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrderbookProps) {
   const { book, connected, changedPrices } = useOrderbookWs(tokenId, {
@@ -28,15 +29,19 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
     pollInterval: 1_000,
   });
 
+  // Use Zustand store for real-time trades
+  const recentTrades = useMarketStore((s) => tokenId ? s.assets[tokenId]?.recentTrades : undefined);
+  const consumeTrade = useMarketStore((s) => s.consumeTrade);
+
   // Queues for pending trades per side
   const yesQueueRef = useRef<FlightTick[]>([]);
   const noQueueRef = useRef<FlightTick[]>([]);
   const [currentYes, setCurrentYes] = useState<FlightTick | null>(null);
   const [currentNo, setCurrentNo] = useState<FlightTick | null>(null);
   const [queueCount, setQueueCount] = useState(0);
-  const seenFlightIds = useRef<Set<string>>(new Set());
   const yesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processedTradeIds = useRef<Set<string>>(new Set());
 
   // Pop next from YES queue
   const popYes = useCallback(() => {
@@ -46,7 +51,6 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
       setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
       yesTimerRef.current = setTimeout(() => {
         setCurrentYes(null);
-        // Small gap before next
         yesTimerRef.current = setTimeout(popYes, 150);
       }, FLIGHT_DURATION_MS);
     } else {
@@ -69,9 +73,52 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
     }
   }, []);
 
-  // Enqueue incoming trades
+  // Enqueue trades from Zustand store (last_trade_price events)
+  useEffect(() => {
+    if (!recentTrades || recentTrades.length === 0) return;
+
+    let addedYes = false;
+    let addedNo = false;
+
+    for (const trade of recentTrades) {
+      if (processedTradeIds.current.has(trade.id)) continue;
+      processedTradeIds.current.add(trade.id);
+
+      // BUY = YES, SELL = NO
+      const isYes = trade.side === "BUY";
+      const tick: FlightTick = {
+        id: trade.id,
+        label: `${isYes ? "YES" : "NO"} ${(trade.price * 100).toFixed(0)}¢ · ${trade.size.toFixed(1)}`,
+        tone: isYes ? "yes" : "no",
+        xOffset: Math.random() * 15 + 3,
+      };
+
+      if (isYes) {
+        if (yesQueueRef.current.length < 8) yesQueueRef.current.push(tick);
+        addedYes = true;
+      } else {
+        if (noQueueRef.current.length < 8) noQueueRef.current.push(tick);
+        addedNo = true;
+      }
+    }
+
+    setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
+
+    if (addedYes && !currentYes && !yesTimerRef.current) popYes();
+    if (addedNo && !currentNo && !noTimerRef.current) popNo();
+
+    // Trim processed IDs set
+    if (processedTradeIds.current.size > 200) {
+      const arr = [...processedTradeIds.current];
+      processedTradeIds.current = new Set(arr.slice(-100));
+    }
+  }, [recentTrades, currentYes, currentNo, popYes, popNo]);
+
+  // Fallback: also enqueue from orderbook price changes (for when WS trades are sparse)
   useEffect(() => {
     if (!book || changedPrices.size === 0) return;
+    // Only use this fallback if we haven't gotten any WS trades recently
+    if (recentTrades && recentTrades.length > 0) return;
 
     let addedYes = false;
     let addedNo = false;
@@ -83,19 +130,18 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         : (book.asks || []).find((a) => a.price === price);
       if (!level) return;
 
-      const id = `${key}-${book.timestamp}-${idx}`;
-      if (seenFlightIds.current.has(id)) return;
-      seenFlightIds.current.add(id);
+      const id = `ob-${key}-${book.timestamp}-${idx}`;
+      if (processedTradeIds.current.has(id)) return;
+      processedTradeIds.current.add(id);
 
       const tick: FlightTick = {
         id,
         label: `${side === "bid" ? "YES" : "NO"} ${(+price * 100).toFixed(0)}¢ · ${(+level.size).toFixed(0)}`,
         tone: side === "bid" ? "yes" : "no",
-        xOffset: Math.random() * 15 + 3, // 3-18% tight to edge
+        xOffset: Math.random() * 15 + 3,
       };
 
       if (tick.tone === "yes") {
-        // Cap queue to prevent unbounded growth
         if (yesQueueRef.current.length < 8) yesQueueRef.current.push(tick);
         addedYes = true;
       } else {
@@ -105,11 +151,9 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
     });
 
     setQueueCount(yesQueueRef.current.length + noQueueRef.current.length);
-
-    // Kick off display if not already animating
     if (addedYes && !currentYes && !yesTimerRef.current) popYes();
     if (addedNo && !currentNo && !noTimerRef.current) popNo();
-  }, [book, changedPrices, currentYes, currentNo, popYes, popNo]);
+  }, [book, changedPrices, recentTrades, currentYes, currentNo, popYes, popNo]);
 
   // Cleanup timers
   useEffect(() => {
