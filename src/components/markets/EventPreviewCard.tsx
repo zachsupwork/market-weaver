@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { LiveTradeTicker } from "./LiveTradeTicker";
-import { MiniSpread } from "./MiniSpread";
+import { OrderBookPreview } from "./OrderBookPreview";
 import type { FeaturedEvent } from "@/hooks/useFeaturedEvents";
 
 function formatVol(n: number): string {
@@ -68,8 +68,8 @@ export function EventPreviewCard({ event }: Props) {
             ))}
           </div>
 
-          {/* Mini order book spread for top candidate */}
-          {tokenIds[0] && <MiniSpread tokenId={tokenIds[0]} />}
+          {/* Live order book preview for top candidate */}
+          {tokenIds[0] && <OrderBookPreview tokenId={tokenIds[0]} maxRows={3} />}
 
           {/* Live trade ticker */}
           <LiveTradeTicker tokenIds={tokenIds} maxItems={3} />
