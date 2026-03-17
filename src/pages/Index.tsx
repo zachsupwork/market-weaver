@@ -182,6 +182,9 @@ const Index = () => {
           </div>
         )}
 
+        {/* Featured Events */}
+        <FeaturedEvents />
+
         {/* Quick links */}
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-6">
           <Link to="/live" className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-all group flex items-center gap-2">
