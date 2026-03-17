@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Radio, Trophy, User } from 'lucide-react';
+import { Activity, BarChart3, Radio, Trophy, User, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AccountDropdown } from './AccountDropdown';
 
@@ -8,6 +8,7 @@ const navItems = [
   { to: "/live", icon: Radio, label: "Live" },
   { to: "/events", icon: Activity, label: "Events" },
   { to: "/leaderboard", icon: Trophy, label: "Leaders" },
+  { to: "/history", icon: History, label: "History" },
   { to: "/account", icon: User, label: "Account" },
 ];
 

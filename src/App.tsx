@@ -26,6 +26,7 @@ import Admin from "./pages/Admin";
 import PolymarketSettings from "./pages/PolymarketSettings";
 import BuilderKeys from "./pages/BuilderKeys";
 import BuilderDashboard from "./pages/BuilderDashboard";
+import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -87,6 +88,7 @@ const App = () => (
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/builder" element={<BuilderDashboard />} />
                   <Route path="/settings/polymarket" element={<PolymarketSettings />} />
+                  <Route path="/history" element={<History />} />
                   <Route path="/settings/api-keys" element={<BuilderKeys />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
