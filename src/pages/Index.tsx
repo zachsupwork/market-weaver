@@ -21,6 +21,10 @@ import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
 import { MiniOrderbook } from "@/components/trading/MiniOrderbook";
 import { EventGridCard } from "@/components/markets/EventGridCard";
 import { orderbookWsService } from "@/services/orderbook-ws.service";
+import { useLiveDataFeeds } from "@/hooks/useLiveDataFeeds";
+import { SportScoreBadge } from "@/components/markets/SportScoreBadge";
+import { CryptoPriceBadge } from "@/components/markets/CryptoPriceBadge";
+import { extractCryptoSymbol, extractSportsSlug } from "@/lib/live-data-utils";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
