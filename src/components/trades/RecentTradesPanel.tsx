@@ -166,17 +166,17 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
   }, [limit, markAsNew]);
 
   useEffect(() => {
-    if (!trades || trades.length === 0) return;
+    if (!mergedTrades || mergedTrades.length === 0) return;
 
     if (isFirstLoad.current) {
       isFirstLoad.current = false;
-      const seeded = trades.slice(0, limit);
+      const seeded = mergedTrades.slice(0, limit);
       setDisplayedTrades(seeded);
       displayedIdsRef.current = new Set(seeded.map((t) => t.id));
       return;
     }
 
-    const unseen = trades.filter((trade) => !displayedIdsRef.current.has(trade.id));
+    const unseen = mergedTrades.filter((trade) => !displayedIdsRef.current.has(trade.id));
     if (unseen.length === 0) return;
 
     const staged = [...unseen].sort(
@@ -194,7 +194,7 @@ export function RecentTradesPanel({ conditionId, tokenId, limit = 30, pollMs = 1
       const timer = setTimeout(() => insertTrade(trade), idx * 110);
       timersRef.current.push(timer);
     });
-  }, [trades, limit, insertTrade, tokenId, conditionId]);
+  }, [mergedTrades, limit, insertTrade, tokenId, conditionId]);
 
   useEffect(() => {
     setDisplayedTrades((prev) => prev.slice(0, limit));
