@@ -14,6 +14,7 @@ import {
   Wallet, RefreshCw, Loader2, PieChart, ClipboardList, History,
   ArrowDownToLine, ArrowUpFromLine, AlertCircle, Info, ChevronDown,
   DollarSign, ExternalLink, Banknote, Settings, Copy, Check, ArrowRightLeft,
+  Trophy, PartyPopper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -614,11 +615,61 @@ export default function Account() {
         {tab === "positions" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Open Positions</h2>
+              <h2 className="text-lg font-semibold">Positions</h2>
               <Button variant="outline" size="sm" onClick={() => refetchPositions()} className="gap-1.5">
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh
               </Button>
             </div>
+
+            {/* Winnings Banner */}
+            {(() => {
+              const winners = (positions || []).filter((p: any) => p.redeemable && p.isWinner);
+              const totalWinnings = winners.reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
+              if (winners.length === 0) return null;
+              return (
+                <Card className="border-yes/30 bg-yes/5 glow-yes">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-yes/20 flex items-center justify-center">
+                          <PartyPopper className="h-5 w-5 text-yes" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-yes">You have winnings to collect!</p>
+                          <p className="text-xs text-muted-foreground">
+                            {winners.length} winning position{winners.length > 1 ? "s" : ""} · ${totalWinnings.toFixed(2)} USDC.e available
+                          </p>
+                        </div>
+                      </div>
+                      {winners.length === 1 ? (
+                        <Button
+                          size="sm"
+                          className="bg-yes hover:bg-yes/90 text-yes-foreground gap-1.5"
+                          onClick={() => handleClaimClick(winners[0])}
+                        >
+                          <Trophy className="h-3.5 w-3.5" /> Claim ${totalWinnings.toFixed(2)}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {winners.map((w: any, i: number) => (
+                            <Button
+                              key={w.condition_id || i}
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-yes/30 text-yes hover:bg-yes/10"
+                              onClick={() => handleClaimClick(w)}
+                            >
+                              Claim {w.outcome}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {posLoading && (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
