@@ -756,6 +756,20 @@ export default function Account() {
           </div>
         )}
       </div>
+
+      <SellPositionModal
+        open={sellModalOpen}
+        onOpenChange={setSellModalOpen}
+        position={sellPosition}
+        onSellComplete={handleSellComplete}
+      />
+
+      <ClaimWinningsModal
+        open={claimModalOpen}
+        onOpenChange={setClaimModalOpen}
+        position={claimPosition}
+        onClaimComplete={handleClaimComplete}
+      />
     </div>
   );
 }
