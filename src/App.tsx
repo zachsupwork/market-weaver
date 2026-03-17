@@ -83,6 +83,7 @@ const App = () => (
                   <Route path="/market/:slug" element={<MarketDetail />} />
                   <Route path="/events" element={<ExploreEvents />} />
                   <Route path="/events/:eventId" element={<EventDetail />} />
+                  <Route path="/event/:eventId" element={<EventDetail />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/builder" element={<BuilderDashboard />} />
                   <Route path="/settings/polymarket" element={<PolymarketSettings />} />
