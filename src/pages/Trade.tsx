@@ -420,7 +420,7 @@ const Trade = () => {
                 <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">LIVE</span>
                 {(market.event_slug || market.market_slug || market.slug) && (
                   <a
-                    href={`https://polymarket.com/event/${market.event_slug || market.market_slug || market.slug}`}
+                    href={market.event_slug ? `https://polymarket.com/event/${market.event_slug}` : `https://polymarket.com/market/${market.market_slug || market.slug}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-primary hover:underline ml-auto"
