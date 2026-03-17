@@ -175,7 +175,10 @@ serve(async (req) => {
         }
       }
 
-      const redeemable = resolved && isWinner && size > 0;
+      // Debug log for winner detection
+      if (resolved || isWinner || redeemable) {
+        console.log(`[positions] RESOLVED position: market="${market?.question?.substring(0, 40)}" resolved=${resolved} isWinner=${isWinner} redeemable=${redeemable} currentPrice=${currentPrice} cashPnl=${cashPnl} outcome=${outcome}`);
+      }
 
       return {
         asset: pos.asset,
