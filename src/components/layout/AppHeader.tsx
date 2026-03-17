@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Radio, Trophy, User } from 'lucide-react';
+import { Activity, BarChart3, Radio, Trophy, User, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AccountDropdown } from './AccountDropdown';
 
