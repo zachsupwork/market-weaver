@@ -1,9 +1,10 @@
 import { usePositions } from "@/hooks/usePositions";
 import { PositionCard } from "@/components/trading/PositionCard";
 import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
+import { ClaimWinningsModal, type ClaimablePosition } from "@/components/trading/ClaimWinningsModal";
 import {
   Wallet, AlertCircle, Loader2, History, PieChart, ClipboardList,
-  ArrowUpDown, Filter, RefreshCw, TrendingUp,
+  ArrowUpDown, Filter, RefreshCw, TrendingUp, Trophy, PartyPopper,
 } from "lucide-react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -56,13 +57,24 @@ const Portfolio = () => {
   const [posFilter, setPosFilter] = useState<PositionFilter>("all");
   const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
   const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [claimPosition, setClaimPosition] = useState<ClaimablePosition | null>(null);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
 
   const handleSellClick = useCallback((pos: any) => {
     setSellPosition(pos as SellPositionData);
     setSellModalOpen(true);
   }, []);
 
+  const handleClaimClick = useCallback((pos: any) => {
+    setClaimPosition(pos as ClaimablePosition);
+    setClaimModalOpen(true);
+  }, []);
+
   const handleSellComplete = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handleClaimComplete = useCallback(() => {
     refetch();
   }, [refetch]);
 
@@ -140,6 +152,19 @@ const Portfolio = () => {
   const activeCount = positions?.filter((p: any) => !p.resolved).length || 0;
   const winnerCount = positions?.filter((p: any) => p.isWinner).length || 0;
 
+  // Claimable winning positions
+  const claimablePositions = useMemo(() => {
+    if (!positions) return [];
+    return positions.filter((p: any) => p.redeemable && p.isWinner && parseFloat(p.size || "0") > 0);
+  }, [positions]);
+
+  const totalClaimable = useMemo(() => {
+    return claimablePositions.reduce((sum: number, p: any) => {
+      const size = parseFloat(p.size || "0");
+      return sum + (parseFloat(p.currentValue || "0") || size);
+    }, 0);
+  }, [claimablePositions]);
+
   const tabs: { id: Tab; label: string; icon: any; count?: number }[] = [
     { id: "positions", label: "Positions", icon: PieChart, count: positions?.length },
     { id: "orders", label: "Orders", icon: ClipboardList },
@@ -175,6 +200,52 @@ const Portfolio = () => {
 
         {isConnected && (
           <>
+            {/* Claimable winnings banner */}
+            {claimablePositions.length > 0 && (
+              <div className="rounded-lg border border-yes/30 bg-yes/5 p-4 mb-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-full bg-yes/20 p-2">
+                      <PartyPopper className="h-5 w-5 text-yes" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-yes">
+                        You won ${totalClaimable.toFixed(2)}!
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {claimablePositions.length} winning position{claimablePositions.length > 1 ? "s" : ""} ready to claim
+                      </p>
+                    </div>
+                  </div>
+                  {claimablePositions.length === 1 ? (
+                    <Button
+                      className="bg-yes hover:bg-yes/90 text-yes-foreground"
+                      size="sm"
+                      onClick={() => handleClaimClick(claimablePositions[0])}
+                    >
+                      <Trophy className="h-4 w-4 mr-1" /> Claim ${totalClaimable.toFixed(2)}
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {claimablePositions.map((pos: any, i: number) => {
+                        const val = parseFloat(pos.currentValue || "0") || parseFloat(pos.size || "0");
+                        return (
+                          <Button
+                            key={pos.asset || pos.condition_id || i}
+                            className="bg-yes hover:bg-yes/90 text-yes-foreground"
+                            size="sm"
+                            onClick={() => handleClaimClick(pos)}
+                          >
+                            <Trophy className="h-3 w-3 mr-1" /> ${val.toFixed(2)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               <div className="rounded-lg border border-border bg-card p-3">
@@ -304,7 +375,7 @@ const Portfolio = () => {
                 {processedPositions.length > 0 && (
                   <div className="grid gap-3">
                     {processedPositions.map((pos: any, i: number) => (
-                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} onSell={handleSellClick} />
+                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} onSell={handleSellClick} onClaim={handleClaimClick} />
                     ))}
                   </div>
                 )}
@@ -338,6 +409,13 @@ const Portfolio = () => {
         onOpenChange={setSellModalOpen}
         position={sellPosition}
         onSellComplete={handleSellComplete}
+      />
+
+      <ClaimWinningsModal
+        open={claimModalOpen}
+        onOpenChange={setClaimModalOpen}
+        position={claimPosition}
+        onClaimComplete={handleClaimComplete}
       />
     </div>
   );

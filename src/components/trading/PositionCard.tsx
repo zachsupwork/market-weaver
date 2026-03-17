@@ -34,9 +34,10 @@ interface PositionCardProps {
   orderId?: string;
   compact?: boolean;
   onSell?: (position: PositionCardProps["position"]) => void;
+  onClaim?: (position: PositionCardProps["position"]) => void;
 }
 
-export function PositionCard({ position, showCancel, orderId, compact, onSell }: PositionCardProps) {
+export function PositionCard({ position, showCancel, orderId, compact, onSell, onClaim }: PositionCardProps) {
   const [cancelling, setCancelling] = useState(false);
   const navigate = useNavigate();
   const size = parseFloat(position.size || "0");
@@ -152,9 +153,9 @@ export function PositionCard({ position, showCancel, orderId, compact, onSell }:
               variant="default"
               size="sm"
               className="h-7 text-xs gap-1 bg-yes hover:bg-yes/90 text-yes-foreground"
-              onClick={() => toast.info("Redemption coming soon — redeem on Polymarket directly for now.")}
+              onClick={() => onClaim ? onClaim(position) : toast.info("Redemption coming soon — redeem on Polymarket directly for now.")}
             >
-              <Trophy className="h-3 w-3" /> Redeem
+              <Trophy className="h-3 w-3" /> Claim
             </Button>
           )}
           {showCancel && orderId && (
