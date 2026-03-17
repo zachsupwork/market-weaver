@@ -152,6 +152,19 @@ const Portfolio = () => {
   const activeCount = positions?.filter((p: any) => !p.resolved).length || 0;
   const winnerCount = positions?.filter((p: any) => p.isWinner).length || 0;
 
+  // Claimable winning positions
+  const claimablePositions = useMemo(() => {
+    if (!positions) return [];
+    return positions.filter((p: any) => p.redeemable && p.isWinner && parseFloat(p.size || "0") > 0);
+  }, [positions]);
+
+  const totalClaimable = useMemo(() => {
+    return claimablePositions.reduce((sum: number, p: any) => {
+      const size = parseFloat(p.size || "0");
+      return sum + (parseFloat(p.currentValue || "0") || size);
+    }, 0);
+  }, [claimablePositions]);
+
   const tabs: { id: Tab; label: string; icon: any; count?: number }[] = [
     { id: "positions", label: "Positions", icon: PieChart, count: positions?.length },
     { id: "orders", label: "Orders", icon: ClipboardList },
