@@ -3,6 +3,9 @@ import { TrendingUp, Layers, ExternalLink } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { OrderBookPreview } from "./OrderBookPreview";
 import { LiveTradeTicker } from "./LiveTradeTicker";
+import { SportScoreBadge } from "./SportScoreBadge";
+import { CryptoPriceBadge } from "./CryptoPriceBadge";
+import { extractSportsSlug, extractCryptoSymbol } from "@/lib/live-data-utils";
 import type { FeaturedEvent } from "@/hooks/useFeaturedEvents";
 
 function formatVol(n: number): string {
