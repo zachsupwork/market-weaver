@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { usePositions } from "@/hooks/usePositions";
 import { WalletTransfer } from "@/components/wallet/WalletTransfer";
 import { PositionCard } from "@/components/trading/PositionCard";
+import { SellPositionModal, type SellPositionData } from "@/components/trading/SellPositionModal";
+import { ClaimWinningsModal, type ClaimablePosition } from "@/components/trading/ClaimWinningsModal";
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
@@ -62,6 +64,33 @@ export default function Account() {
   const initialTab = (searchParams.get("tab") as Tab) || "balances";
   const [tab, setTab] = useState<Tab>(initialTab);
   const { proxyAddress } = useProxyWallet();
+
+  // ── Positions (must be before sell/claim callbacks) ────────
+  const { data: positions, isLoading: posLoading, error: posError, refetch: refetchPositions } = usePositions();
+
+  // ── Sell / Claim modals ──────────────────────────────────
+  const [sellPosition, setSellPosition] = useState<SellPositionData | null>(null);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [claimPosition, setClaimPosition] = useState<ClaimablePosition | null>(null);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
+
+  const handleSellClick = useCallback((pos: any) => {
+    setSellPosition(pos as SellPositionData);
+    setSellModalOpen(true);
+  }, []);
+
+  const handleClaimClick = useCallback((pos: any) => {
+    setClaimPosition(pos as ClaimablePosition);
+    setClaimModalOpen(true);
+  }, []);
+
+  const handleSellComplete = useCallback(() => {
+    refetchPositions();
+  }, [refetchPositions]);
+
+  const handleClaimComplete = useCallback(() => {
+    refetchPositions();
+  }, [refetchPositions]);
 
   // ── Balances ──────────────────────────────────────────────
   const { data: maticBalance, refetch: refetchMatic } = useBalance({ address });
@@ -111,8 +140,7 @@ export default function Account() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  // ── Positions ────────────────────────────────────────────
-  const { data: positions, isLoading: posLoading, error: posError, refetch: refetchPositions } = usePositions();
+  // ── Positions (declared above, before sell/claim callbacks) ──
 
   // ── Bridge Deposit (secondary) ───────────────────────────
   const [depositLoading, setDepositLoading] = useState(false);
@@ -616,7 +644,7 @@ export default function Account() {
             {positions && positions.length > 0 && (
               <div className="grid gap-3">
                 {positions.map((pos: any, i: number) => (
-                  <PositionCard key={pos.condition_id || i} position={pos} />
+                  <PositionCard key={pos.condition_id || i} position={pos} onSell={handleSellClick} onClaim={handleClaimClick} />
                 ))}
               </div>
             )}
@@ -730,6 +758,20 @@ export default function Account() {
           </div>
         )}
       </div>
+
+      <SellPositionModal
+        open={sellModalOpen}
+        onOpenChange={setSellModalOpen}
+        position={sellPosition}
+        onSellComplete={handleSellComplete}
+      />
+
+      <ClaimWinningsModal
+        open={claimModalOpen}
+        onOpenChange={setClaimModalOpen}
+        position={claimPosition}
+        onClaimComplete={handleClaimComplete}
+      />
     </div>
   );
 }
