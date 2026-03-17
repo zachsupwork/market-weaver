@@ -264,12 +264,12 @@ export function MiniOrderbook({ tokenId, className, wsEnabled = true }: MiniOrde
         </div>
       </div>
 
-      {/* Spread line with last price */}
+      {/* Spread line with last price (prefer Zustand store, fallback to book) */}
       <div className="flex items-center gap-1 my-0.5">
         <div className="flex-1 h-px bg-border" />
-        {lastPrice && (
+        {(storeLastPrice ?? lastPrice) && (
           <span className="text-[8px] text-primary font-semibold">
-            {(parseFloat(lastPrice) * 100).toFixed(0)}¢
+            {((storeLastPrice ?? parseFloat(lastPrice)) * 100).toFixed(0)}¢
           </span>
         )}
         <div className="flex-1 h-px bg-border" />
