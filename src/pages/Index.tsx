@@ -32,9 +32,10 @@ function formatPrice(p: number | undefined): string {
 }
 
 function polymarketUrl(market: NormalizedMarket): string {
-  const slug = market.event_slug || market.market_slug || market.slug;
-  if (slug) return `https://polymarket.com/event/${slug}`;
-  return `https://polymarket.com/event/${market.condition_id}`;
+  if (market.event_slug) return `https://polymarket.com/event/${market.event_slug}`;
+  const marketSlug = market.market_slug || market.slug;
+  if (marketSlug) return `https://polymarket.com/market/${marketSlug}`;
+  return `https://polymarket.com`;
 }
 
 const Index = () => {

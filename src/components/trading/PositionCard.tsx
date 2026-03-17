@@ -41,7 +41,7 @@ export function PositionCard({ position, showCancel, orderId, compact }: Positio
   const polymarketUrl = position.eventSlug
     ? `https://polymarket.com/event/${position.eventSlug}`
     : position.marketSlug
-    ? `https://polymarket.com/event/${position.marketSlug}`
+    ? `https://polymarket.com/market/${position.marketSlug}`
     : null;
 
   const handleCancel = async () => {
