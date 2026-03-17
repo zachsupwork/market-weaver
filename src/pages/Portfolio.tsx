@@ -375,7 +375,7 @@ const Portfolio = () => {
                 {processedPositions.length > 0 && (
                   <div className="grid gap-3">
                     {processedPositions.map((pos: any, i: number) => (
-                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} onSell={handleSellClick} />
+                      <PositionCard key={pos.asset || pos.condition_id || i} position={pos} onSell={handleSellClick} onClaim={handleClaimClick} />
                     ))}
                   </div>
                 )}
