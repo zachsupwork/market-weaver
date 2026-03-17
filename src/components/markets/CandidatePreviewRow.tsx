@@ -55,20 +55,25 @@ export function CandidatePreviewRow({
       <div className="w-14 shrink-0">
         <Progress value={pct} className="h-1.5" />
       </div>
-      <AnimatePresence mode="popLayout">
-        <motion.span
-          key={pct}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.2 }}
-          className={`text-xs font-mono font-semibold w-8 text-right shrink-0 ${
-            flash ? "text-primary" : "text-muted-foreground"
-          }`}
-        >
-          {pct}¢
-        </motion.span>
-      </AnimatePresence>
+      <div className="flex items-center gap-1 shrink-0">
+        <AnimatePresence mode="popLayout">
+          <motion.span
+            key={pct}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.2 }}
+            className={`text-xs font-mono font-semibold ${
+              flash ? "text-primary" : "text-yes"
+            }`}
+          >
+            {pct}¢
+          </motion.span>
+        </AnimatePresence>
+        <span className="text-[10px] font-mono text-muted-foreground/60">
+          /{100 - pct}¢
+        </span>
+      </div>
       {showTrade && (
         <Link
           to={tradeUrl}
