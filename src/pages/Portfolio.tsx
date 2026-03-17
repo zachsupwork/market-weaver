@@ -410,6 +410,13 @@ const Portfolio = () => {
         position={sellPosition}
         onSellComplete={handleSellComplete}
       />
+
+      <ClaimWinningsModal
+        open={claimModalOpen}
+        onOpenChange={setClaimModalOpen}
+        position={claimPosition}
+        onClaimComplete={handleClaimComplete}
+      />
     </div>
   );
 };
