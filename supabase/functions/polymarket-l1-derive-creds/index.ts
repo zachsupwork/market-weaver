@@ -16,6 +16,24 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
+/**
+ * Generate a deterministic UUID v5-like ID from a wallet address.
+ * This allows wallet-only users to have a stable user_id without Supabase auth.
+ */
+async function walletToUserId(address: string): Promise<string> {
+  const namespace = "polymarket-wallet-user";
+  const data = new TextEncoder().encode(`${namespace}:${address.toLowerCase()}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(hashBuffer);
+  // Format as UUID v5
+  bytes[6] = (bytes[6] & 0x0f) | 0x50; // version 5
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
+  const hex = Array.from(bytes.slice(0, 16))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -26,22 +44,6 @@ serve(async (req) => {
   }
 
   try {
-    // ── Authenticate user via JWT ────────────────────────────────
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return jsonResp({ ok: false, error: "Authorization header required" }, 401);
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return jsonResp({ ok: false, error: "Invalid or expired auth token" }, 401);
-    }
-
     // ── Parse input ──────────────────────────────────────────────
     const body = await req.json();
     const { address, signature, timestamp, nonce: rawNonce } = body;
@@ -52,6 +54,28 @@ serve(async (req) => {
 
     if (!timestamp) {
       return jsonResp({ ok: false, error: "Missing timestamp" }, 400);
+    }
+
+    // ── Authenticate: JWT if available, otherwise wallet-address-based ──
+    let userId: string;
+
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      if (user && !userError) {
+        userId = user.id;
+      } else {
+        // JWT provided but invalid — fall back to wallet-based ID
+        userId = await walletToUserId(address);
+      }
+    } else {
+      // No JWT — use deterministic wallet-based ID
+      userId = await walletToUserId(address);
     }
 
     // Use exactly the nonce the client signed (default "0")
@@ -67,7 +91,7 @@ serve(async (req) => {
       "POLY_NONCE": nonce,
     };
 
-    console.log(`[l1-derive] user=${user.id}, address=${address.slice(0, 10)}..., ts=${timestamp}, nonce=${nonce}`);
+    console.log(`[l1-derive] userId=${userId}, address=${address.slice(0, 10)}..., ts=${timestamp}, nonce=${nonce}`);
 
     // ── Step 1: Try GET /auth/derive-api-key first (re-derive existing key) ──
     let creds: { apiKey: string; secret: string; passphrase: string } | null = null;
@@ -117,7 +141,7 @@ serve(async (req) => {
 
     console.log(`[l1-derive] Got creds apiKey=…${creds.apiKey.slice(-6)}, secretLen=${creds.secret.length}`);
 
-    // ── Encrypt and store per-user (skip hard validation to avoid propagation-delay 502s) ──
+    // ── Encrypt and store ──
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
       return jsonResp({ ok: false, error: "MASTER_KEY not configured" }, 500);
@@ -136,7 +160,7 @@ serve(async (req) => {
       .from("polymarket_user_creds")
       .upsert(
         {
-          user_id: user.id,
+          user_id: userId,
           address: address.toLowerCase(),
           value_encrypted: encrypted,
           iv,
@@ -150,7 +174,7 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Failed to store credentials" }, 500);
     }
 
-    console.log(`[l1-derive] Credentials stored for user=${user.id}`);
+    console.log(`[l1-derive] Credentials stored for userId=${userId}`);
     return jsonResp({ ok: true });
   } catch (err) {
     console.error("[l1-derive] error:", err);
