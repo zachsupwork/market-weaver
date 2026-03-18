@@ -164,10 +164,7 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     }
   }
 
-  // Only default to [0.5, 0.5] when outcomes is exactly 2 and prices still empty
-  if (outcomePrices.length === 0 && outcomes.length === 2) {
-    outcomePrices = [0.5, 0.5];
-  }
+  // Never inject synthetic 50/50 prices. Missing API prices must remain empty so the UI can show a real loading state.
 
   // Parse clob token IDs from both key styles
   let clobTokenIds: string[] = safeParseJson(
