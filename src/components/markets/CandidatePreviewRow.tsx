@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   label: string;
-  price: number;
+  price?: number;
   tokenId?: string;
   conditionId?: string;
   eventSlug?: string;
@@ -28,12 +28,24 @@ export function CandidatePreviewRow({
   );
 
   const currentPrice = wsPrice ?? price;
-  const pct = Math.round(currentPrice * 100);
+  const pct = currentPrice !== undefined && currentPrice !== null
+    ? Math.round(currentPrice * 100)
+    : null;
 
   const [flash, setFlash] = useState(false);
-  const prevPrice = useRef(currentPrice);
+  const prevPrice = useRef<number | undefined>(currentPrice);
 
   useEffect(() => {
+    if (
+      currentPrice === undefined ||
+      currentPrice === null ||
+      prevPrice.current === undefined ||
+      prevPrice.current === null
+    ) {
+      prevPrice.current = currentPrice;
+      return;
+    }
+
     if (Math.abs(currentPrice - prevPrice.current) > 0.001) {
       setFlash(true);
       prevPrice.current = currentPrice;
@@ -42,10 +54,10 @@ export function CandidatePreviewRow({
     }
   }, [currentPrice]);
 
-  const tradeUrl = conditionId
+  const tradeUrl = eventSlug
+    ? `/events/${encodeURIComponent(eventSlug)}${conditionId ? `?market=${encodeURIComponent(conditionId)}` : ""}`
+    : conditionId
     ? `/trade/${encodeURIComponent(conditionId)}`
-    : eventSlug
-    ? `/event/${encodeURIComponent(eventSlug)}`
     : "#";
 
   return (
@@ -59,39 +71,47 @@ export function CandidatePreviewRow({
         {label}
       </span>
 
-      {/* Probability bar */}
       <div className="w-20 shrink-0">
-        <div className="h-2 rounded-full bg-muted overflow-hidden">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all duration-500",
-              pct >= 50 ? "bg-yes" : "bg-no"
-            )}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        {pct !== null ? (
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                pct >= 50 ? "bg-yes" : "bg-no"
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        ) : (
+          <div className="h-2 rounded-full bg-muted animate-pulse" />
+        )}
       </div>
 
-      {/* YES/NO prices */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={pct}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.2 }}
-            className={cn(
-              "text-sm font-mono font-bold tabular-nums",
-              flash ? "text-primary" : "text-yes"
-            )}
-          >
-            {pct}¢
-          </motion.span>
-        </AnimatePresence>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          / {100 - pct}¢
-        </span>
+      <div className="flex items-center gap-1.5 shrink-0 min-w-[64px] justify-end">
+        {pct !== null ? (
+          <>
+            <AnimatePresence mode="popLayout">
+              <motion.span
+                key={pct}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.2 }}
+                className={cn(
+                  "text-sm font-mono font-bold tabular-nums",
+                  flash ? "text-primary" : "text-yes"
+                )}
+              >
+                {pct}¢
+              </motion.span>
+            </AnimatePresence>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              / {100 - pct}¢
+            </span>
+          </>
+        ) : (
+          <span className="text-[10px] font-mono text-muted-foreground">—</span>
+        )}
       </div>
 
       {showTrade && (
