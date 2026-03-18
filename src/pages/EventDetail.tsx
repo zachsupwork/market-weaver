@@ -153,10 +153,10 @@ const EventDetail = () => {
 
   // Auto-select first market
   useEffect(() => {
-    if (liveMarkets.length > 0 && !selectedConditionId) {
-      setSelectedConditionId(liveMarkets[0].condition_id);
+    if (tradableMarkets.length > 0 && !selectedConditionId) {
+      setSelectedConditionId(tradableMarkets[0].condition_id);
     }
-  }, [liveMarkets, selectedConditionId]);
+  }, [tradableMarkets, selectedConditionId]);
 
   // Reset on event change
   useEffect(() => {
@@ -166,17 +166,17 @@ const EventDetail = () => {
 
   // Subscribe all token IDs to WebSocket
   useEffect(() => {
-    if (liveMarkets.length === 0) return;
+    if (tradableMarkets.length === 0) return;
     const tokenIds = new Set<string>();
-    liveMarkets.forEach((m) => {
+    tradableMarkets.forEach((m) => {
       if (m.clobTokenIds?.[0]) tokenIds.add(m.clobTokenIds[0]);
       if (m.clobTokenIds?.[1]) tokenIds.add(m.clobTokenIds[1]);
     });
     const unsubs = [...tokenIds].map((id) => orderbookWsService.subscribe(id, () => {}));
     return () => unsubs.forEach((u) => u());
-  }, [liveMarkets]);
+  }, [tradableMarkets]);
 
-  const selected = liveMarkets.find((m) => m.condition_id === selectedConditionId) ?? liveMarkets[0];
+  const selected = tradableMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0];
   const yesTokenId = selected?.clobTokenIds?.[0] ?? "";
   const noTokenId = selected?.clobTokenIds?.[1] ?? "";
 
@@ -211,8 +211,8 @@ const EventDetail = () => {
   const totalLiq = allMarkets.reduce((s, m) => s + m.liquidity, 0);
 
   // Live data badges
-  const sportsSlug = extractSportsSlug(liveMarkets[0]?.tags, pmSlug || "");
-  const cryptoSym = extractCryptoSymbol(title, liveMarkets[0]?.tags);
+  const sportsSlug = extractSportsSlug(tradableMarkets[0]?.tags, pmSlug || "");
+  const cryptoSym = extractCryptoSymbol(title, tradableMarkets[0]?.tags);
 
   // Determine if this is a simple multi-outcome (like "Who will win?") or complex with groups
   const hasMultipleGroups = groups.length > 1;
@@ -288,8 +288,8 @@ const EventDetail = () => {
             </div>
             <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
               <Layers className="h-3 w-3" />
-              <span className="font-mono text-foreground">{liveMarkets.length}</span>
-              <span>market{liveMarkets.length !== 1 ? "s" : ""}</span>
+              <span className="font-mono text-foreground">{tradableMarkets.length}</span>
+              <span>market{tradableMarkets.length !== 1 ? "s" : ""}</span>
             </div>
             {endDate && (
               <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
@@ -297,7 +297,7 @@ const EventDetail = () => {
                 <span className="font-mono text-foreground">{timeUntil(endDate)}</span>
               </div>
             )}
-            {liveMarkets.length > 0 && (
+            {tradableMarkets.length > 0 && (
               <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
                 LIVE
               </span>
@@ -339,7 +339,7 @@ const EventDetail = () => {
                   )}
                 >
                   All
-                  <span className="ml-1 opacity-60">({liveMarkets.length})</span>
+                  <span className="ml-1 opacity-60">({tradableMarkets.length})</span>
                 </button>
               </div>
             )}
@@ -358,7 +358,7 @@ const EventDetail = () => {
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
                 <div className="max-h-[55vh] overflow-y-auto space-y-0.5">
-                  {(activeGroupId === "__all__" ? liveMarkets : (activeGroup?.markets ?? liveMarkets)).map((m, idx) => (
+                  {(activeGroupId === "__all__" ? tradableMarkets : (activeGroup?.markets ?? tradableMarkets)).map((m, idx) => (
                     <CandidateRow
                       key={m.condition_id}
                       market={m}
@@ -383,7 +383,7 @@ const EventDetail = () => {
               </div>
             )}
 
-            {liveMarkets.length === 0 && (
+            {tradableMarkets.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No live markets for this event.</p>
             )}
 
@@ -449,11 +449,11 @@ const EventDetail = () => {
               )}
 
               {/* Quick links to other markets in event */}
-              {liveMarkets.length > 3 && selected && (
+              {tradableMarkets.length > 3 && selected && (
                 <div className="rounded-xl border border-border bg-card p-3">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Other Markets</p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {liveMarkets
+                    {tradableMarkets
                       .filter((m) => m.condition_id !== selectedConditionId)
                       .slice(0, 8)
                       .map((m) => {
