@@ -110,7 +110,8 @@ const EventDetail = () => {
     queryKey: ["polymarket-event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000, // refresh every 30s for status updates
   });
 
   const allMarkets = useMemo(() => {
@@ -119,13 +120,29 @@ const EventDetail = () => {
       .filter((m) => isBytes32Hex(m.condition_id));
   }, [event]);
 
-  const liveMarkets = useMemo(
-    () => allMarkets.filter((m) => m.statusLabel === "LIVE")
+  // Tradable markets: LIVE or markets that are active (not just status === "LIVE")
+  const tradableMarkets = useMemo(
+    () => allMarkets.filter((m) => m.statusLabel === "LIVE" || (m.active && !m.closed && !m.ended))
       .sort((a, b) => (b.outcomePrices?.[0] ?? 0) - (a.outcomePrices?.[0] ?? 0)),
     [allMarkets]
   );
 
-  const groups = useMemo(() => groupMarkets(liveMarkets), [liveMarkets]);
+  // Derive event-level UI status
+  type EventUIStatus = "LIVE" | "UPCOMING" | "ENDED";
+  const eventUIStatus: EventUIStatus = useMemo(() => {
+    // If event itself has resolved flag
+    if (event?.resolved === true) return "ENDED";
+    // If all markets are ended/closed
+    if (allMarkets.length > 0 && allMarkets.every((m) => m.statusLabel === "ENDED" || m.statusLabel === "ARCHIVED" || m.statusLabel === "CLOSED")) return "ENDED";
+    // If any market is actively tradable
+    if (tradableMarkets.length > 0) return "LIVE";
+    // Check if event has a future start/end date
+    const endDate = event?.endDate || event?.end_date_iso;
+    if (endDate && new Date(endDate).getTime() > Date.now()) return "UPCOMING";
+    return "ENDED";
+  }, [event, allMarkets, tradableMarkets]);
+
+  const groups = useMemo(() => groupMarkets(tradableMarkets), [tradableMarkets]);
 
   // Auto-select first group
   useEffect(() => {
