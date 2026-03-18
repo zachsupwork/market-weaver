@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { deriveApiCreds, checkUserCredsStatus, createDepositAddress, testUserCreds } from "@/lib/polymarket-api";
-import { AuthGate } from "@/components/auth/AuthGate";
+// AuthGate is now optional — wallet-only flow is primary
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 
