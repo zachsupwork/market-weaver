@@ -22,7 +22,10 @@ export function QuickTradeModal({ market, initialOutcome, onClose }: QuickTradeM
   const prices = market.outcomePrices || [];
   const price = prices[selectedOutcome] ?? 0.5;
   const shares = price > 0 ? amount / price : 0;
-  const potentialReturn = shares * (1 - price);
+  // Polymarket: each winning share redeems for $1
+  const potentialPayout = shares; // shares × $1
+  const potentialProfit = potentialPayout - amount;
+  const returnPct = amount > 0 ? ((potentialPayout / amount) - 1) * 100 : 0;
 
   const quickAmounts = [1, 5, 10, 100];
 
