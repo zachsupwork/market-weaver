@@ -20,7 +20,9 @@ export function QuickTradeModal({ market, initialOutcome, onClose }: QuickTradeM
 
   const outcomes = market.outcomes || ["Yes", "No"];
   const prices = market.outcomePrices || [];
-  const price = prices[selectedOutcome] ?? null;
+  const rawPrice = prices[selectedOutcome] ?? null;
+  // Snap to nearest cent to match Polymarket's displayed price
+  const price = rawPrice != null ? Math.round(rawPrice * 100) / 100 : null;
   const shares = price != null && price > 0 ? amount / price : 0;
   // Polymarket: each winning share redeems for $1
   const potentialPayout = shares; // shares × $1

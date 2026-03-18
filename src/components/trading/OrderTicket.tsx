@@ -99,13 +99,15 @@ export function OrderTicket({
   const isYes = outcome === "Yes";
   const tokenId = isYes ? yesTokenId : noTokenId;
   const marketPrice = isYes ? yesPrice : noPrice;
-  const hasMarketPrice = marketPrice != null && marketPrice > 0;
+  // Round market price to tick size (e.g. 0.01) to match Polymarket's displayed price
+  const snappedMarketPrice = marketPrice != null ? snapToTick(marketPrice, tickSize) : null;
+  const hasMarketPrice = snappedMarketPrice != null && snappedMarketPrice > 0;
 
   const parsedLimitPrice = parseFloat(limitPrice);
   const isLimitMode = orderMode === "limit";
   const effectivePrice = isLimitMode && !isNaN(parsedLimitPrice) && parsedLimitPrice > 0
     ? parsedLimitPrice
-    : marketPrice ?? 0;
+    : snappedMarketPrice ?? 0;
 
   const availableShares = isYes ? yesPositionSize : noPositionSize;
 
@@ -181,7 +183,7 @@ export function OrderTicket({
       setLimitPrice("");
       setTimeInForce("GTC");
     } else {
-      setLimitPrice(hasMarketPrice ? (marketPrice as number).toFixed(2) : "");
+      setLimitPrice(hasMarketPrice ? (snappedMarketPrice as number).toFixed(2) : "");
     }
     setShowConfirm(false);
   }, [hasMarketPrice, marketPrice]);
