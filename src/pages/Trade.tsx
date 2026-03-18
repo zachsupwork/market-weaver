@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchMarketByConditionId,
@@ -83,6 +83,7 @@ function formatTime(ts: string): string {
 
 const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
+  const navigate = useNavigate();
   const [selectedOutcome, setSelectedOutcome] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "volume">("price");
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "ALL">("1W");
@@ -111,6 +112,13 @@ const Trade = () => {
     refetchInterval: 30_000,
     retry: 2,
   });
+
+  // Redirect to event page when parent event exists (shows all sibling markets)
+  useEffect(() => {
+    if (market?.event_slug && conditionId) {
+      navigate(`/events/${market.event_slug}?market=${conditionId}`, { replace: true });
+    }
+  }, [market?.event_slug, conditionId, navigate]);
 
   const tokenIds = market?.clobTokenIds ?? [];
   const currentTokenId = tokenIds[selectedOutcome] || "";
