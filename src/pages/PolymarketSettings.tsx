@@ -290,7 +290,7 @@ export default function PolymarketSettings() {
               <p className="text-sm text-muted-foreground">
                 No credentials stored yet. Click below to sign with your wallet and derive your Polymarket API key.
               </p>
-              <Button onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed} className="w-full sm:w-auto">
+              <Button onClick={handleDerive} disabled={deriving || !isConnected || !ageConfirmed} className="w-full sm:w-auto">
                 {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
                 {deriving ? "Signing & Deriving..." : "Enable Trading"}
               </Button>
