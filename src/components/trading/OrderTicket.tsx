@@ -112,9 +112,10 @@ export function OrderTicket({
   const shares = useMemo(() => effectivePrice > 0 ? amount / effectivePrice : 0, [amount, effectivePrice]);
   const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
   const feeEnabled = isFeeEnabled();
-  const potentialReturn = isBuy
-    ? (shares * (1 - effectivePrice)).toFixed(2)
-    : (shares * effectivePrice).toFixed(2);
+  // Polymarket formula: each winning share redeems for $1
+  const potentialPayout = shares; // shares × $1
+  const potentialProfit = isBuy ? potentialPayout - amount : shares * effectivePrice;
+  const returnPct = amount > 0 && isBuy ? ((potentialPayout / amount) - 1) * 100 : 0;
 
   const hasInsufficientBalance = isBuy && amount > readiness.usdc.usdcBalance;
   const hasInsufficientShares = !isBuy && shares > availableShares;
