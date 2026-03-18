@@ -131,7 +131,11 @@ export function EventPriceChart({ market, allMarkets }: EventPriceChartProps) {
           <span className="text-sm font-semibold text-foreground">
             {showMulti ? "All Outcomes" : market.question}
           </span>
-          <span className="text-lg font-mono font-bold text-primary">{currentPct}¢</span>
+          {currentPct != null ? (
+            <span className="text-lg font-mono font-bold text-primary">{currentPct}¢</span>
+          ) : (
+            <span className="inline-block h-5 w-10 rounded bg-muted animate-pulse" />
+          )}
         </div>
         <div className="flex items-center gap-1">
           {hasMultiMarkets && (
