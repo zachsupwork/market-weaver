@@ -297,9 +297,23 @@ const EventDetail = () => {
                 <span className="font-mono text-foreground">{timeUntil(endDate)}</span>
               </div>
             )}
-            {tradableMarkets.length > 0 && (
-              <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes">
+            {eventUIStatus === "LIVE" && (
+              <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes inline-flex items-center gap-1">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-yes" />
+                </span>
                 LIVE
+              </span>
+            )}
+            {eventUIStatus === "UPCOMING" && (
+              <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-primary">
+                UPCOMING
+              </span>
+            )}
+            {eventUIStatus === "ENDED" && (
+              <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive">
+                ENDED
               </span>
             )}
           </div>
