@@ -241,7 +241,7 @@ export default function PolymarketSettings() {
                 <p>Last updated: {credStatus.updatedAt ? new Date(credStatus.updatedAt).toLocaleString() : "—"}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}>
+                <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !ageConfirmed}>
                   {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                   Re-derive Credentials
                 </Button>
