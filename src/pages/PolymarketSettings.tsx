@@ -40,21 +40,21 @@ export default function PolymarketSettings() {
   // Supabase auth is optional — wallet-only flow is primary
 
   const refreshCreds = useCallback(async () => {
-    if (!supabaseUser) {
+    if (!address) {
       setCredStatus({ hasCreds: false });
       setCredLoading(false);
       return;
     }
     setCredLoading(true);
     try {
-      const status = await checkUserCredsStatus();
+      const status = await checkUserCredsStatus(address);
       setCredStatus(status);
     } catch {
       setCredStatus({ hasCreds: false });
     } finally {
       setCredLoading(false);
     }
-  }, [supabaseUser]);
+  }, [address]);
 
   useEffect(() => { refreshCreds(); }, [refreshCreds]);
 
