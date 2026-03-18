@@ -324,9 +324,9 @@ const Trade = () => {
 
   const outcomes = market?.outcomes ?? [];
   const prices = market?.outcomePrices ?? [];
-  const yesPrice = prices[0] ?? 0.5;
-  const noPrice = prices[1] ?? 0.5;
-  const currentPrice = prices[selectedOutcome] ?? 0.5;
+  const yesPrice = prices[0] ?? null;
+  const noPrice = prices[1] ?? null;
+  const currentPrice = prices[selectedOutcome] ?? null;
   const currentOutcome = outcomes[selectedOutcome] || (selectedOutcome === 0 ? "Yes" : "No");
   const yesTokenId = tokenIds[0] || "";
   const noTokenId = tokenIds[1] || "";

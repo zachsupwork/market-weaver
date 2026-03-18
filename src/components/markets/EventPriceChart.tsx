@@ -80,8 +80,8 @@ export function EventPriceChart({ market, allMarkets }: EventPriceChartProps) {
 
   // Get live price from WS
   const wsPrice = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
-  const currentPrice = wsPrice ?? market.outcomePrices?.[0] ?? 0.5;
-  const currentPct = Math.round(currentPrice * 100);
+  const currentPrice = wsPrice ?? market.outcomePrices?.[0] ?? null;
+  const currentPct = currentPrice != null ? Math.round(currentPrice * 100) : null;
 
   // Build chart data
   const chartData = useMemo(() => {
