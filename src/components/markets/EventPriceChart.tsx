@@ -80,8 +80,8 @@ export function EventPriceChart({ market, allMarkets }: EventPriceChartProps) {
 
   // Get live price from WS
   const wsPrice = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
-  const currentPrice = wsPrice ?? market.outcomePrices?.[0] ?? 0.5;
-  const currentPct = Math.round(currentPrice * 100);
+  const currentPrice = wsPrice ?? market.outcomePrices?.[0] ?? null;
+  const currentPct = currentPrice != null ? Math.round(currentPrice * 100) : null;
 
   // Build chart data
   const chartData = useMemo(() => {
@@ -131,7 +131,11 @@ export function EventPriceChart({ market, allMarkets }: EventPriceChartProps) {
           <span className="text-sm font-semibold text-foreground">
             {showMulti ? "All Outcomes" : market.question}
           </span>
-          <span className="text-lg font-mono font-bold text-primary">{currentPct}¢</span>
+          {currentPct != null ? (
+            <span className="text-lg font-mono font-bold text-primary">{currentPct}¢</span>
+          ) : (
+            <span className="inline-block h-5 w-10 rounded bg-muted animate-pulse" />
+          )}
         </div>
         <div className="flex items-center gap-1">
           {hasMultiMarkets && (

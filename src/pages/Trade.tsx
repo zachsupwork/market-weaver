@@ -324,9 +324,9 @@ const Trade = () => {
 
   const outcomes = market?.outcomes ?? [];
   const prices = market?.outcomePrices ?? [];
-  const yesPrice = prices[0] ?? 0.5;
-  const noPrice = prices[1] ?? 0.5;
-  const currentPrice = prices[selectedOutcome] ?? 0.5;
+  const yesPrice = prices[0] ?? null;
+  const noPrice = prices[1] ?? null;
+  const currentPrice = prices[selectedOutcome] ?? null;
   const currentOutcome = outcomes[selectedOutcome] || (selectedOutcome === 0 ? "Yes" : "No");
   const yesTokenId = tokenIds[0] || "";
   const noTokenId = tokenIds[1] || "";
@@ -501,8 +501,14 @@ const Trade = () => {
                     )}
                   </div>
                   <div className="text-right">
-                    <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
-                    <span className="block text-[10px] text-muted-foreground">{Math.round(p * 100)}% chance</span>
+                    {p > 0 ? (
+                      <>
+                        <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
+                        <span className="block text-[10px] text-muted-foreground">{Math.round(p * 100)}% chance</span>
+                      </>
+                    ) : (
+                      <div className="h-8 w-12 rounded bg-muted animate-pulse" />
+                    )}
                   </div>
                 </div>
               </button>
@@ -675,8 +681,8 @@ const Trade = () => {
                 <OrderTicket
                   yesTokenId={yesTokenId}
                   noTokenId={noTokenId}
-                  yesPrice={yesPrice}
-                  noPrice={noPrice}
+                  yesPrice={yesPrice ?? 0}
+                  noPrice={noPrice ?? 0}
                   conditionId={conditionId}
                   isTradable={market.accepting_orders !== false && !market.closed && !hasMissingTokenIds}
                   yesPositionSize={yesPositionSize}
