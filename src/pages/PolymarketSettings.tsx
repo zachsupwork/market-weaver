@@ -207,20 +207,7 @@ export default function PolymarketSettings() {
         </CardContent>
       </Card>
 
-      {/* Auth Status */}
-      {!supabaseUser && (
-        <AuthGate autoAnonymous={false}><></></AuthGate>
-      )}
-
-      {/* WalletConnect warning */}
-      {!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID && (
-        <div className="flex items-center gap-2 rounded-md border border-muted bg-muted/50 p-3">
-          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            WalletConnect is disabled. Set <code className="font-mono text-[10px]">VITE_WALLETCONNECT_PROJECT_ID</code> to enable mobile wallets.
-          </p>
-        </div>
-      )}
+      {/* WalletConnect info (suppressed if no project ID) */}
 
       <Separator />
 
