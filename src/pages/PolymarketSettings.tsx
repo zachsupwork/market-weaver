@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccount, useSignTypedData } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { deriveApiCreds, checkUserCredsStatus, createDepositAddress, testUserCreds } from "@/lib/polymarket-api";
-import { AuthGate } from "@/components/auth/AuthGate";
+// AuthGate is now optional — wallet-only flow is primary
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 
@@ -37,35 +37,24 @@ export default function PolymarketSettings() {
   const [testingAuth, setTestingAuth] = useState(false);
   const [authTestResult, setAuthTestResult] = useState<{ valid: boolean; reason?: string } | null>(null);
 
-  // Check Supabase auth state — attempt anonymous sign-in automatically
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSupabaseUser(session?.user ?? null);
-    });
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        setSupabaseUser(session.user);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  // Supabase auth is optional — wallet-only flow is primary
 
   const refreshCreds = useCallback(async () => {
-    if (!supabaseUser) {
+    if (!address) {
       setCredStatus({ hasCreds: false });
       setCredLoading(false);
       return;
     }
     setCredLoading(true);
     try {
-      const status = await checkUserCredsStatus();
+      const status = await checkUserCredsStatus(address);
       setCredStatus(status);
     } catch {
       setCredStatus({ hasCreds: false });
     } finally {
       setCredLoading(false);
     }
-  }, [supabaseUser]);
+  }, [address]);
 
   useEffect(() => { refreshCreds(); }, [refreshCreds]);
 
@@ -79,10 +68,7 @@ export default function PolymarketSettings() {
       toast({ title: "Connect your wallet first", variant: "destructive" });
       return;
     }
-    if (!supabaseUser) {
-      toast({ title: "Sign in to your account first", variant: "destructive" });
-      return;
-    }
+    // No longer require supabaseUser — wallet-only flow
     if (!ageConfirmed) {
       toast({ title: "Please confirm you are 18+ to enable trading", variant: "destructive" });
       return;
@@ -221,20 +207,7 @@ export default function PolymarketSettings() {
         </CardContent>
       </Card>
 
-      {/* Auth Status */}
-      {!supabaseUser && (
-        <AuthGate autoAnonymous={false}><></></AuthGate>
-      )}
-
-      {/* WalletConnect warning */}
-      {!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID && (
-        <div className="flex items-center gap-2 rounded-md border border-muted bg-muted/50 p-3">
-          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            WalletConnect is disabled. Set <code className="font-mono text-[10px]">VITE_WALLETCONNECT_PROJECT_ID</code> to enable mobile wallets.
-          </p>
-        </div>
-      )}
+      {/* WalletConnect info (suppressed if no project ID) */}
 
       <Separator />
 
@@ -268,7 +241,7 @@ export default function PolymarketSettings() {
                 <p>Last updated: {credStatus.updatedAt ? new Date(credStatus.updatedAt).toLocaleString() : "—"}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed}>
+                <Button variant="outline" size="sm" onClick={handleDerive} disabled={deriving || !isConnected || !ageConfirmed}>
                   {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                   Re-derive Credentials
                 </Button>
@@ -317,7 +290,7 @@ export default function PolymarketSettings() {
               <p className="text-sm text-muted-foreground">
                 No credentials stored yet. Click below to sign with your wallet and derive your Polymarket API key.
               </p>
-              <Button onClick={handleDerive} disabled={deriving || !isConnected || !supabaseUser || !ageConfirmed} className="w-full sm:w-auto">
+              <Button onClick={handleDerive} disabled={deriving || !isConnected || !ageConfirmed} className="w-full sm:w-auto">
                 {deriving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
                 {deriving ? "Signing & Deriving..." : "Enable Trading"}
               </Button>

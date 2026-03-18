@@ -3,7 +3,6 @@ import { useProxyWallet } from "./useProxyWallet";
 import { useUsdcApproval } from "./useUsdcApproval";
 import { useState, useEffect, useCallback } from "react";
 import { checkUserCredsStatus } from "@/lib/polymarket-api";
-import { supabase } from "@/integrations/supabase/client";
 
 export type TradingStep = "proxy" | "creds" | "usdc" | "ready";
 
@@ -28,26 +27,30 @@ export function useTradingReadiness(orderAmountUsdc: number): TradingReadiness {
   const [credsLoading, setCredsLoading] = useState(true);
 
   const refreshCreds = useCallback(async () => {
+    if (!address) {
+      setCredsReady(false);
+      setCredsLoading(false);
+      return;
+    }
     setCredsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setCredsReady(false);
-        return;
-      }
-      // Check if creds exist in DB (don't live-validate to avoid false negatives)
-      const result = await checkUserCredsStatus();
+      // Check if creds exist by wallet address (no session required)
+      const result = await checkUserCredsStatus(address);
       setCredsReady(result.hasCreds);
     } catch {
       setCredsReady(false);
     } finally {
       setCredsLoading(false);
     }
-  }, []);
+  }, [address]);
 
   useEffect(() => {
-    if (isConnected) refreshCreds();
-  }, [isConnected, refreshCreds]);
+    if (isConnected && address) refreshCreds();
+    else {
+      setCredsReady(false);
+      setCredsLoading(false);
+    }
+  }, [isConnected, address, refreshCreds]);
 
   const proxyReady = proxy.isDeployed;
   const usdcReady = !usdc.needsApproval;

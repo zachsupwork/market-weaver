@@ -21,37 +21,54 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return jsonResp({ hasCreds: false });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) {
-      return jsonResp({ hasCreds: false });
-    }
-
     const adminClient = getServiceClient();
-    const { data } = await adminClient
-      .from("polymarket_user_creds")
-      .select("address, updated_at")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const url = new URL(req.url);
+    const addressParam = url.searchParams.get("address");
 
-    if (!data) {
-      return jsonResp({ hasCreds: false });
+    // Try JWT-based lookup first
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (user) {
+        const { data } = await adminClient
+          .from("polymarket_user_creds")
+          .select("address, updated_at")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (data) {
+          return jsonResp({
+            hasCreds: true,
+            address: data.address,
+            updatedAt: data.updated_at,
+          });
+        }
+      }
     }
 
-    return jsonResp({
-      hasCreds: true,
-      address: data.address,
-      updatedAt: data.updated_at,
-    });
+    // Fallback: look up by wallet address
+    if (addressParam) {
+      const { data } = await adminClient
+        .from("polymarket_user_creds")
+        .select("address, updated_at")
+        .eq("address", addressParam.toLowerCase())
+        .maybeSingle();
+
+      if (data) {
+        return jsonResp({
+          hasCreds: true,
+          address: data.address,
+          updatedAt: data.updated_at,
+        });
+      }
+    }
+
+    return jsonResp({ hasCreds: false });
   } catch (err) {
     console.error("[user-creds-status] error:", err);
     return jsonResp({ hasCreds: false, error: (err as any).message });

@@ -287,29 +287,68 @@ export async function fetchEventById(eventId: string): Promise<any | null> {
 
 // ── Per-user authenticated trading functions ────────────────────
 
-/** Derive Polymarket API credentials via L1 EIP-712 signature */
+/** Derive Polymarket API credentials via L1 EIP-712 signature (works with or without session) */
 export async function deriveApiCreds(params: {
   address: string;
   signature: string;
   timestamp: string;
   nonce: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await supabase.functions.invoke("polymarket-l1-derive-creds", {
-    body: params,
-  });
-  if (error) return { ok: false, error: error.message };
-  return data;
+  // Try with session auth first
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session) {
+    const { data, error } = await supabase.functions.invoke("polymarket-l1-derive-creds", {
+      body: params,
+    });
+    if (error) return { ok: false, error: error.message };
+    return data;
+  }
+  
+  // No session — call directly with just apikey (no JWT)
+  try {
+    const res = await fetch(fnUrl("polymarket-l1-derive-creds"), {
+      method: "POST",
+      headers: {
+        "apikey": ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Failed to derive credentials" };
+  }
 }
 
-/** Check if current user has stored creds */
-export async function checkUserCredsStatus(): Promise<{
+/** Check if current user has stored creds (by wallet address, no session required) */
+export async function checkUserCredsStatus(walletAddress?: string): Promise<{
   hasCreds: boolean;
   address?: string;
   updatedAt?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke("polymarket-user-creds-status");
-  if (error) return { hasCreds: false };
-  return data;
+  // Try with session first (supabase.functions.invoke adds auth header automatically)
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session) {
+    const qs = walletAddress ? `?address=${encodeURIComponent(walletAddress)}` : "";
+    const { data, error } = await supabase.functions.invoke("polymarket-user-creds-status" + qs);
+    if (!error && data) return data;
+  }
+  
+  // Fallback: direct fetch with address param (no auth needed)
+  if (walletAddress) {
+    try {
+      const res = await fetch(
+        `${fnUrl("polymarket-user-creds-status")}?address=${encodeURIComponent(walletAddress)}`,
+        { headers: { "apikey": ANON_KEY } }
+      );
+      if (res.ok) return await res.json();
+    } catch {}
+  }
+  
+  return { hasCreds: false };
 }
 
 /** Validate stored creds actually work against the CLOB (live check) */

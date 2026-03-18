@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { useAccount, useSignTypedData } from "wagmi";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
 import { deriveApiCreds } from "@/lib/polymarket-api";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface TradingEnablementProps {
@@ -38,13 +37,6 @@ export function TradingEnablement({ orderAmount = 0, readiness: externalReadines
     if (!address) return;
     setDerivingCreds(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Please sign in first to enable trading");
-        setDerivingCreds(false);
-        return;
-      }
-
       const timestamp = String(Math.floor(Date.now() / 1000));
       const nonce = "0";
       const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
