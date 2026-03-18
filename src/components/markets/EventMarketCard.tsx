@@ -1,8 +1,8 @@
 import { useMarketStore } from "@/stores/useMarketStore";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Progress } from "@/components/ui/progress";
 import type { NormalizedMarket } from "@/lib/normalizePolymarket";
+import { extractEventMarketLabel } from "@/lib/event-market-display";
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -24,10 +24,12 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
   const wsYes = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
   const wsNo = useMarketStore((s) => (noTokenId ? s.assets[noTokenId]?.lastTradePrice : null));
 
-  const yesPrice = wsYes ?? market.outcomePrices?.[0];
-  const noPrice = wsNo ?? market.outcomePrices?.[1];
-  const yesCents = yesPrice !== undefined && yesPrice !== null ? Math.round(yesPrice * 100) : null;
-  const noCents = noPrice !== undefined && noPrice !== null ? Math.round(noPrice * 100) : null;
+  const yesPrice = wsYes ?? market.outcomePrices?.[0] ?? null;
+  const noPrice = wsNo ?? market.outcomePrices?.[1] ?? null;
+  const yesPct = yesPrice !== null ? Math.round(yesPrice * 1000) / 10 : null;
+  const yesCents = yesPrice !== null ? Math.round(yesPrice * 100) : null;
+  const noCents = noPrice !== null ? Math.round(noPrice * 100) : null;
+  const displayLabel = extractEventMarketLabel(market.question);
 
   return (
     <button
@@ -39,22 +41,20 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
           : "border-border bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:scale-[1.01]"
       )}
     >
-      {/* Question */}
       <p className="text-sm font-semibold leading-snug line-clamp-2 mb-3 group-hover:text-foreground transition-colors">
-        {market.question}
+        {displayLabel}
       </p>
 
-      {/* Large probability */}
       <div className="flex items-end justify-between mb-2">
-        {yesCents !== null ? (
+        {yesPct !== null ? (
           <AnimatePresence mode="popLayout">
             <motion.span
-              key={yesCents}
+              key={yesPct}
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-2xl font-bold font-mono text-yes"
+              className="text-2xl font-bold font-mono text-foreground"
             >
-              {yesCents}%
+              {yesPct}%
             </motion.span>
           </AnimatePresence>
         ) : (
@@ -65,22 +65,20 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
         </span>
       </div>
 
-      {/* Progress bar */}
       <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
-        {yesCents !== null ? (
+        {yesPct !== null ? (
           <motion.div
             className={cn(
               "h-full rounded-full transition-all duration-500",
-              yesCents >= 50 ? "bg-yes" : "bg-no"
+              yesPct >= 50 ? "bg-yes" : "bg-no"
             )}
             initial={false}
-            animate={{ width: `${yesCents}%` }}
+            animate={{ width: `${yesPct}%` }}
             transition={{ duration: 0.4, ease: "easeOut" }}
           />
         ) : null}
       </div>
 
-      {/* YES / NO pills */}
       <div className="flex items-center gap-2">
         <span className="flex-1 rounded-lg bg-yes/15 border border-yes/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-yes">
           YES {yesCents !== null ? `${yesCents}¢` : "—"}

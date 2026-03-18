@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { extractEventMarketLabel } from "@/lib/event-market-display";
 
 interface Props {
   label: string;
@@ -29,11 +30,12 @@ export function CandidatePreviewRow({
 
   const currentPrice = wsPrice ?? price;
   const pct = currentPrice !== undefined && currentPrice !== null
-    ? Math.round(currentPrice * 100)
+    ? Math.round(currentPrice * 1000) / 10
     : null;
+  const displayLabel = extractEventMarketLabel(label);
 
   const [flash, setFlash] = useState(false);
-  const prevPrice = useRef<number | undefined>(currentPrice);
+  const prevPrice = useRef<number | undefined>(currentPrice ?? undefined);
 
   useEffect(() => {
     if (
@@ -42,7 +44,7 @@ export function CandidatePreviewRow({
       prevPrice.current === undefined ||
       prevPrice.current === null
     ) {
-      prevPrice.current = currentPrice;
+      prevPrice.current = currentPrice ?? undefined;
       return;
     }
 
@@ -68,7 +70,7 @@ export function CandidatePreviewRow({
         </span>
       )}
       <span className="text-xs font-medium text-foreground truncate flex-1 min-w-0">
-        {label}
+        {displayLabel}
       </span>
 
       <div className="w-20 shrink-0">
@@ -99,18 +101,18 @@ export function CandidatePreviewRow({
                 transition={{ duration: 0.2 }}
                 className={cn(
                   "text-sm font-mono font-bold tabular-nums",
-                  flash ? "text-primary" : "text-yes"
+                  flash ? "text-primary" : "text-foreground"
                 )}
               >
-                {pct}¢
+                {pct}%
               </motion.span>
             </AnimatePresence>
             <span className="text-[10px] font-mono text-muted-foreground">
-              / {100 - pct}¢
+              YES
             </span>
           </>
         ) : (
-          <span className="text-[10px] font-mono text-muted-foreground">—</span>
+          <div className="h-4 w-10 rounded bg-muted animate-pulse" />
         )}
       </div>
 
