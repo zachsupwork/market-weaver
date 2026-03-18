@@ -153,12 +153,16 @@ const EventDetail = () => {
     }
   }, [groups, activeGroupId]);
 
-  // Auto-select first market
+  // Auto-select first market (only if none pre-selected via query param)
   useEffect(() => {
     if (tradableMarkets.length > 0 && !selectedConditionId) {
       setSelectedConditionId(tradableMarkets[0].condition_id);
     }
-  }, [tradableMarkets, selectedConditionId]);
+    // If preselected market exists, validate it's in the list
+    if (preselectedMarket && tradableMarkets.length > 0 && !tradableMarkets.find(m => m.condition_id === preselectedMarket)) {
+      setSelectedConditionId(tradableMarkets[0].condition_id);
+    }
+  }, [tradableMarkets, selectedConditionId, preselectedMarket]);
 
   // Reset on event change
   useEffect(() => {
