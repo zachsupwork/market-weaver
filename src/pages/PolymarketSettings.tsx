@@ -68,10 +68,7 @@ export default function PolymarketSettings() {
       toast({ title: "Connect your wallet first", variant: "destructive" });
       return;
     }
-    if (!supabaseUser) {
-      toast({ title: "Sign in to your account first", variant: "destructive" });
-      return;
-    }
+    // No longer require supabaseUser — wallet-only flow
     if (!ageConfirmed) {
       toast({ title: "Please confirm you are 18+ to enable trading", variant: "destructive" });
       return;
