@@ -103,9 +103,11 @@ export function OrderTicket({
 
   const parsedLimitPrice = parseFloat(limitPrice);
   const isLimitMode = orderMode === "limit";
+  // Round market price to tick size (e.g. 0.01) to match Polymarket's displayed price
+  const snappedMarketPrice = marketPrice != null ? snapToTick(marketPrice, tickSize) : null;
   const effectivePrice = isLimitMode && !isNaN(parsedLimitPrice) && parsedLimitPrice > 0
     ? parsedLimitPrice
-    : marketPrice ?? 0;
+    : snappedMarketPrice ?? 0;
 
   const availableShares = isYes ? yesPositionSize : noPositionSize;
 
