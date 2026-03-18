@@ -24,10 +24,10 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
   const wsYes = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
   const wsNo = useMarketStore((s) => (noTokenId ? s.assets[noTokenId]?.lastTradePrice : null));
 
-  const yesPrice = wsYes ?? market.outcomePrices?.[0] ?? 0.5;
-  const noPrice = wsNo ?? market.outcomePrices?.[1] ?? 0.5;
-  const yesCents = Math.round(yesPrice * 100);
-  const noCents = Math.round(noPrice * 100);
+  const yesPrice = wsYes ?? market.outcomePrices?.[0];
+  const noPrice = wsNo ?? market.outcomePrices?.[1];
+  const yesCents = yesPrice !== undefined && yesPrice !== null ? Math.round(yesPrice * 100) : null;
+  const noCents = noPrice !== undefined && noPrice !== null ? Math.round(noPrice * 100) : null;
 
   return (
     <button

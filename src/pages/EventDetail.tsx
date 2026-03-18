@@ -616,13 +616,13 @@ const EventDetail = () => {
                     <div className="flex-1 rounded-xl bg-yes/10 border border-yes/20 p-3 text-center">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Yes</p>
                       <p className="text-xl font-bold font-mono text-yes">
-                        {Math.round((selected.outcomePrices?.[0] ?? 0.5) * 100)}¢
+                        {selected.outcomePrices?.[0] !== undefined ? `${Math.round(selected.outcomePrices[0] * 100)}¢` : "—"}
                       </p>
                     </div>
                     <div className="flex-1 rounded-xl bg-no/10 border border-no/20 p-3 text-center">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">No</p>
                       <p className="text-xl font-bold font-mono text-no">
-                        {Math.round((selected.outcomePrices?.[1] ?? 0.5) * 100)}¢
+                        {selected.outcomePrices?.[1] !== undefined ? `${Math.round(selected.outcomePrices[1] * 100)}¢` : "—"}
                       </p>
                     </div>
                   </div>
@@ -630,10 +630,10 @@ const EventDetail = () => {
                   <OrderTicket
                     yesTokenId={yesTokenId}
                     noTokenId={noTokenId}
-                    yesPrice={selected.outcomePrices?.[0] ?? 0.5}
-                    noPrice={selected.outcomePrices?.[1] ?? 0.5}
+                    yesPrice={selected.outcomePrices?.[0] ?? 0}
+                    noPrice={selected.outcomePrices?.[1] ?? 0}
                     conditionId={selected.condition_id}
-                    isTradable={selected.statusLabel === "LIVE"}
+                    isTradable={selected.statusLabel === "LIVE" && selected.outcomePrices?.[0] !== undefined && selected.outcomePrices?.[1] !== undefined}
                   />
                 </div>
               ) : (
