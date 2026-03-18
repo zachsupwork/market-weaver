@@ -83,25 +83,48 @@ function CandidateRow({
   onSelect: () => void;
 }) {
   const tokenId = market.clobTokenIds?.[0];
+  const noTokenId = market.clobTokenIds?.[1];
   const wsPrice = useMarketStore((s) => (tokenId ? s.assets[tokenId]?.lastTradePrice : null));
+  const wsNo = useMarketStore((s) => (noTokenId ? s.assets[noTokenId]?.lastTradePrice : null));
   const price = wsPrice ?? market.outcomePrices?.[0] ?? 0;
+  const noPrice = wsNo ?? market.outcomePrices?.[1] ?? 0;
   const pct = Math.round(price * 100);
+  const noPct = Math.round(noPrice * 100);
 
   return (
     <button
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 text-left transition-all rounded-lg",
+        "w-full flex items-center gap-3 px-4 py-3 text-left transition-all rounded-xl group",
         selected
-          ? "bg-primary/10 border border-primary/30"
-          : "hover:bg-muted/50 border border-transparent"
+          ? "bg-primary/8 border border-primary/30 shadow-sm shadow-primary/5"
+          : "hover:bg-muted/60 border border-transparent hover:border-border/50"
       )}
     >
-      <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">{rank}</span>
-      <span className="flex-1 text-sm font-medium truncate">{market.question}</span>
-      <div className="w-14 shrink-0">
-        <Progress value={pct} className="h-1.5" />
+      {/* Rank */}
+      <span
+        className={cn(
+          "text-xs font-bold font-mono w-6 h-6 rounded-full flex items-center justify-center shrink-0",
+          rank <= 3 ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+        )}
+      >
+        {rank}
+      </span>
+
+      {/* Question + progress bar */}
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium truncate block">{market.question}</span>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 max-w-[200px]">
+          <motion.div
+            className={cn("h-full rounded-full", pct >= 50 ? "bg-yes" : "bg-no")}
+            initial={false}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.4 }}
+          />
+        </div>
       </div>
+
+      {/* Large percentage */}
       <AnimatePresence mode="popLayout">
         <motion.span
           key={pct}
@@ -109,15 +132,24 @@ function CandidateRow({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 4 }}
           transition={{ duration: 0.15 }}
-          className="text-sm font-mono font-semibold w-10 text-right shrink-0 text-primary"
+          className="text-lg font-bold font-mono text-foreground w-12 text-right shrink-0"
         >
-          {pct}¢
+          {pct}%
         </motion.span>
       </AnimatePresence>
-      <span className="text-[10px] text-muted-foreground/60 font-mono w-10 text-right shrink-0 hidden sm:block">
-        /{100 - pct}¢
-      </span>
-      <span className="text-xs text-muted-foreground font-mono w-14 text-right shrink-0 hidden md:block">
+
+      {/* YES / NO pills */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="rounded-md bg-yes/15 border border-yes/25 px-2 py-1 text-xs font-mono font-bold text-yes">
+          {pct}¢
+        </span>
+        <span className="rounded-md bg-no/15 border border-no/25 px-2 py-1 text-xs font-mono font-bold text-no hidden sm:block">
+          {noPct}¢
+        </span>
+      </div>
+
+      {/* 24h volume */}
+      <span className="text-[10px] text-muted-foreground font-mono w-14 text-right shrink-0 hidden md:block">
         {formatVol(market.volume24h)}
       </span>
     </button>
@@ -276,7 +308,7 @@ const EventDetail = () => {
     <div className="min-h-screen">
       <div className="container py-6 max-w-7xl">
         {/* Navigation */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-5">
           <Link
             to="/events"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -286,7 +318,7 @@ const EventDetail = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleShare}
-              className="rounded-md border border-border p-2 hover:bg-accent transition-all"
+              className="rounded-lg border border-border p-2 hover:bg-accent transition-all"
             >
               <Share2 className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -295,38 +327,38 @@ const EventDetail = () => {
                 href={pmUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors border border-border rounded-lg px-3 py-2"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors border border-border rounded-lg px-3 py-2 hover:border-primary/30"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Polymarket
+                View on Polymarket
               </a>
             )}
           </div>
         </div>
 
         {/* ── Event Header ── */}
-        <div className="mb-5">
-          <div className="flex items-start gap-4 mb-3">
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-start gap-4 mb-4">
             {event.image && (
               <img
                 src={event.image}
                 alt=""
-                className="h-14 w-14 rounded-xl bg-muted shrink-0 object-cover"
+                className="h-16 w-16 rounded-xl bg-muted shrink-0 object-cover ring-2 ring-border"
               />
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold leading-snug">{title}</h1>
+              <h1 className="text-2xl font-bold leading-snug">{title}</h1>
 
-              {/* Event timing */}
-              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              {/* Event timing & status */}
+              <div className="flex flex-wrap items-center gap-2.5 mt-2">
                 {gameStartTime && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-lg px-2.5 py-1">
                     <Clock className="h-3 w-3" />
                     <span>{formatDate(gameStartTime)}</span>
                   </div>
                 )}
                 {endDate && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-lg px-2.5 py-1">
                     <Calendar className="h-3 w-3" />
                     <span>
                       {eventUIStatus === "ENDED" ? "Ended" : `Ends ${timeUntil(endDate)}`}
@@ -335,21 +367,21 @@ const EventDetail = () => {
                 )}
                 {/* Status badge */}
                 {eventUIStatus === "LIVE" && (
-                  <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes inline-flex items-center gap-1">
-                    <span className="relative flex h-1.5 w-1.5">
+                  <span className="rounded-full bg-yes/15 border border-yes/30 px-3 py-1 text-xs font-bold font-mono text-yes inline-flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-yes" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-yes" />
                     </span>
                     LIVE
                   </span>
                 )}
                 {eventUIStatus === "UPCOMING" && (
-                  <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-primary">
+                  <span className="rounded-full bg-primary/15 border border-primary/30 px-3 py-1 text-xs font-bold font-mono text-primary">
                     UPCOMING
                   </span>
                 )}
                 {eventUIStatus === "ENDED" && (
-                  <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive">
+                  <span className="rounded-full bg-destructive/15 border border-destructive/30 px-3 py-1 text-xs font-bold font-mono text-destructive">
                     ENDED
                   </span>
                 )}
@@ -369,57 +401,65 @@ const EventDetail = () => {
             </div>
           )}
 
-          {/* Stats row */}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-2">
-            <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
-              <BarChart3 className="h-3 w-3" />
-              <span className="font-mono text-foreground">{formatVol(totalVol)}</span>
-              <span>vol</span>
+          {/* Stats row — bold, prominent */}
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div className="flex items-center gap-2 rounded-xl bg-muted/70 border border-border px-4 py-2.5">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Volume</p>
+                <p className="text-sm font-bold font-mono text-foreground">{formatVol(totalVol)}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
-              <Droplets className="h-3 w-3" />
-              <span className="font-mono text-foreground">{formatVol(totalLiq)}</span>
-              <span>liq</span>
+            <div className="flex items-center gap-2 rounded-xl bg-muted/70 border border-border px-4 py-2.5">
+              <Droplets className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Liquidity</p>
+                <p className="text-sm font-bold font-mono text-foreground">{formatVol(totalLiq)}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
-              <Layers className="h-3 w-3" />
-              <span className="font-mono text-foreground">{tradableMarkets.length}</span>
-              <span>market{tradableMarkets.length !== 1 ? "s" : ""}</span>
+            <div className="flex items-center gap-2 rounded-xl bg-muted/70 border border-border px-4 py-2.5">
+              <Layers className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Markets</p>
+                <p className="text-sm font-bold font-mono text-foreground">{tradableMarkets.length}</p>
+              </div>
             </div>
           </div>
 
           {/* Expandable description */}
           {description && (
-            <div className="mt-1">
+            <div>
               <button
                 onClick={() => setShowDescription((v) => !v)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                <Info className="h-3 w-3" />
+                <Info className="h-3.5 w-3.5" />
                 <span>Event details</span>
                 {showDescription ? (
-                  <ChevronUp className="h-3 w-3" />
+                  <ChevronUp className="h-3.5 w-3.5" />
                 ) : (
-                  <ChevronDown className="h-3 w-3" />
+                  <ChevronDown className="h-3.5 w-3.5" />
                 )}
               </button>
-              {showDescription && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="mt-2 rounded-lg bg-muted/50 border border-border p-3"
-                >
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                    {description}
-                  </p>
-                  {resolutionSource && (
-                    <p className="text-[10px] text-muted-foreground/60 mt-2">
-                      Resolution source: {resolutionSource}
+              <AnimatePresence>
+                {showDescription && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="mt-2 rounded-xl bg-background border border-border p-4 overflow-hidden"
+                  >
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {description}
                     </p>
-                  )}
-                </motion.div>
-              )}
+                    {resolutionSource && (
+                      <p className="text-[10px] text-muted-foreground/60 mt-2">
+                        Resolution source: {resolutionSource}
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -439,33 +479,33 @@ const EventDetail = () => {
             {/* Category tabs */}
             {hasMultipleGroups && (
               <ScrollArea className="w-full">
-                <div className="flex gap-1 pb-2">
+                <div className="flex gap-1.5 pb-2">
                   {groups.map((g) => (
                     <button
                       key={g.id}
                       onClick={() => setActiveGroupId(g.id)}
                       className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all",
+                        "rounded-xl px-4 py-2 text-xs font-semibold whitespace-nowrap transition-all",
                         activeGroupId === g.id
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:text-foreground"
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                          : "bg-muted text-muted-foreground hover:text-foreground hover:bg-accent"
                       )}
                     >
                       {g.label}
-                      <span className="ml-1 opacity-60">({g.markets.length})</span>
+                      <span className="ml-1.5 opacity-60">({g.markets.length})</span>
                     </button>
                   ))}
                   <button
                     onClick={() => setActiveGroupId("__all__")}
                     className={cn(
-                      "rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all",
+                      "rounded-xl px-4 py-2 text-xs font-semibold whitespace-nowrap transition-all",
                       activeGroupId === "__all__"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                        : "bg-muted text-muted-foreground hover:text-foreground hover:bg-accent"
                     )}
                   >
                     All
-                    <span className="ml-1 opacity-60">({tradableMarkets.length})</span>
+                    <span className="ml-1.5 opacity-60">({tradableMarkets.length})</span>
                   </button>
                 </div>
                 <ScrollBar orientation="horizontal" />
@@ -474,16 +514,16 @@ const EventDetail = () => {
 
             {/* Markets display */}
             {activeGroupId === "__all__" || !hasMultipleGroups ? (
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-3 px-3 py-1.5 text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
-                  <span className="w-5 shrink-0">#</span>
+              <div className="space-y-1">
+                {/* Leaderboard header */}
+                <div className="flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
+                  <span className="w-6 shrink-0">#</span>
                   <span className="flex-1">Market</span>
-                  <span className="w-14 text-right">Prob</span>
-                  <span className="w-10 text-right">Yes</span>
-                  <span className="w-10 text-right hidden sm:block">No</span>
+                  <span className="w-12 text-right">Prob</span>
+                  <span className="w-24 text-right">Yes / No</span>
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
-                <div className="max-h-[50vh] overflow-y-auto space-y-0.5">
+                <div className="max-h-[55vh] overflow-y-auto space-y-0.5 pr-1">
                   {(activeGroupId === "__all__"
                     ? tradableMarkets
                     : activeGroup?.markets ?? tradableMarkets
@@ -499,27 +539,26 @@ const EventDetail = () => {
                 </div>
               </div>
             ) : (
-              /* Horizontal scrollable rows per group */
-              <div className="space-y-4">
+              /* Grid of market cards per group */
+              <div className="space-y-5">
                 {(activeGroup ? [activeGroup] : groups).map((group) => (
                   <div key={group.id}>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                    <h3 className="text-sm font-bold text-foreground mb-3 px-1 flex items-center gap-2">
                       {group.label}
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {group.markets.length} market{group.markets.length !== 1 ? "s" : ""}
+                      </span>
                     </h3>
-                    <ScrollArea className="w-full">
-                      <div className="flex gap-2 pb-2">
-                        {group.markets.map((m) => (
-                          <div key={m.condition_id} className="shrink-0 w-64">
-                            <EventMarketCard
-                              market={m}
-                              selected={m.condition_id === selectedConditionId}
-                              onSelect={() => setSelectedConditionId(m.condition_id)}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {group.markets.map((m) => (
+                        <EventMarketCard
+                          key={m.condition_id}
+                          market={m}
+                          selected={m.condition_id === selectedConditionId}
+                          onSelect={() => setSelectedConditionId(m.condition_id)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -533,10 +572,10 @@ const EventDetail = () => {
 
             {/* Orderbook + Trades */}
             {selected && (
-              <div>
+              <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-xs text-muted-foreground truncate flex-1">
-                    <span className="text-foreground font-medium">Selected:</span> {selected.question}
+                    <span className="text-foreground font-semibold">Selected:</span> {selected.question}
                   </p>
                 </div>
                 <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as any)}>
@@ -566,19 +605,28 @@ const EventDetail = () => {
           </div>
 
           {/* ── Right column: Trading sidebar ── */}
-          <div className="lg:w-80 shrink-0">
+          <div className="lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <h3 className="text-sm font-semibold mb-1 line-clamp-2">{selected.question}</h3>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="rounded-md bg-yes/15 border border-yes/25 px-2 py-0.5 text-xs font-mono font-semibold text-yes">
-                      Yes {Math.round((selected.outcomePrices?.[0] ?? 0.5) * 100)}¢
-                    </span>
-                    <span className="rounded-md bg-no/15 border border-no/25 px-2 py-0.5 text-xs font-mono font-semibold text-no">
-                      No {Math.round((selected.outcomePrices?.[1] ?? 0.5) * 100)}¢
-                    </span>
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
+                  <h3 className="text-sm font-bold mb-2 line-clamp-2">{selected.question}</h3>
+
+                  {/* Large YES/NO display */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex-1 rounded-xl bg-yes/10 border border-yes/20 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Yes</p>
+                      <p className="text-xl font-bold font-mono text-yes">
+                        {Math.round((selected.outcomePrices?.[0] ?? 0.5) * 100)}¢
+                      </p>
+                    </div>
+                    <div className="flex-1 rounded-xl bg-no/10 border border-no/20 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">No</p>
+                      <p className="text-xl font-bold font-mono text-no">
+                        {Math.round((selected.outcomePrices?.[1] ?? 0.5) * 100)}¢
+                      </p>
+                    </div>
                   </div>
+
                   <OrderTicket
                     yesTokenId={yesTokenId}
                     noTokenId={noTokenId}
@@ -589,32 +637,35 @@ const EventDetail = () => {
                   />
                 </div>
               ) : (
-                <div className="rounded-xl border border-border bg-card p-6 text-center">
-                  <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Select a market to trade</p>
+                <div className="rounded-2xl border border-border bg-card p-8 text-center">
+                  <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground font-medium">Select a market to trade</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    Click any market from the list
+                  </p>
                 </div>
               )}
 
               {/* Quick links to other markets */}
               {tradableMarkets.length > 3 && selected && (
-                <div className="rounded-xl border border-border bg-card p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">
                     Other Markets
                   </p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                     {tradableMarkets
                       .filter((m) => m.condition_id !== selectedConditionId)
-                      .slice(0, 8)
+                      .slice(0, 10)
                       .map((m) => {
                         const p = Math.round((m.outcomePrices?.[0] ?? 0.5) * 100);
                         return (
                           <button
                             key={m.condition_id}
                             onClick={() => setSelectedConditionId(m.condition_id)}
-                            className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/50 transition-colors"
+                            className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted/60 transition-colors group"
                           >
-                            <span className="text-xs truncate flex-1">{m.question}</span>
-                            <span className="text-xs font-mono text-primary shrink-0">{p}¢</span>
+                            <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{m.question}</span>
+                            <span className="text-xs font-mono font-bold text-primary shrink-0">{p}¢</span>
                           </button>
                         );
                       })}
