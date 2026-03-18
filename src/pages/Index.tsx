@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useFeaturedEvents, type FeaturedEvent } from "@/hooks/useFeaturedEvents";
 import { Link } from "react-router-dom";
 import {
