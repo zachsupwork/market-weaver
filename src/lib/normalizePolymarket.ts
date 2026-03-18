@@ -70,7 +70,17 @@ export interface NormalizedMarket {
   clob_token_ids: string;
 }
 
-export function isEndedByPrices(outcomePrices?: number[]): boolean {
+/** 
+ * Detect a truly resolved market by prices. 
+ * Only consider "ended" if prices are exactly 0/1 (or within epsilon)
+ * AND the market is explicitly marked as closed/resolved.
+ * Extreme prices alone (e.g. 99¢) don't mean ended — strong favorites exist.
+ */
+export function isEndedByPrices(outcomePrices?: number[], closed?: boolean, resolved?: boolean): boolean {
+  // If explicitly resolved, trust that
+  if (resolved === true) return true;
+  // Only infer from prices if also closed
+  if (!closed) return false;
   if (!outcomePrices || outcomePrices.length !== 2) return false;
   const [a, b] = outcomePrices;
   const lo = (x: number) => x <= 0.01;
