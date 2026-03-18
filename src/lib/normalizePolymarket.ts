@@ -221,8 +221,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
 
   // Event slug for correct Polymarket external links
   // IMPORTANT: Do NOT fall back to market slug — event slugs and market slugs are different!
+  // Gamma API returns event context in `events` array (e.g. events[0].slug)
   const event_slug = String(
-    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
+    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? raw.events?.[0]?.slug ?? ""
   ).trim();
 
   // Check explicit resolved flag from API
@@ -249,13 +250,14 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   }
 
   // Event context fields (from Gamma market or merged event)
-  const eventTitle = String(raw.eventTitle ?? raw.event_title ?? raw.event?.title ?? "").trim();
+  const parentEvent = raw.event ?? raw.events?.[0] ?? {};
+  const eventTitle = String(raw.eventTitle ?? raw.event_title ?? parentEvent.title ?? "").trim();
   const eventDescription = String(
-    raw.eventDescription ?? raw.event_description ?? raw.event?.description ??
+    raw.eventDescription ?? raw.event_description ?? parentEvent.description ??
     raw.resolution_source ?? raw.resolutionSource ?? raw.rules ?? ""
   ).trim();
   const resolutionSource = String(
-    raw.resolution_source ?? raw.resolutionSource ?? raw.event?.resolution_source ?? ""
+    raw.resolution_source ?? raw.resolutionSource ?? parentEvent.resolution_source ?? parentEvent.resolutionSource ?? ""
   ).trim();
 
   return {
