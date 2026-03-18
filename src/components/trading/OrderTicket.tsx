@@ -99,7 +99,7 @@ export function OrderTicket({
   const isYes = outcome === "Yes";
   const tokenId = isYes ? yesTokenId : noTokenId;
   const marketPrice = isYes ? yesPrice : noPrice;
-  const hasMarketPrice = marketPrice != null && marketPrice > 0;
+  const hasMarketPrice = snappedMarketPrice != null && snappedMarketPrice > 0;
 
   const parsedLimitPrice = parseFloat(limitPrice);
   const isLimitMode = orderMode === "limit";
