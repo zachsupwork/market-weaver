@@ -355,6 +355,27 @@ const Trade = () => {
           </div>
         </div>
 
+        {/* Event banner — link to parent event page */}
+        {eventData && (eventData.slug || market?.event_slug) && eventData.markets?.length > 1 && (
+          <Link
+            to={`/event/${encodeURIComponent(eventData.slug || market!.event_slug)}?market=${encodeURIComponent(conditionId!)}`}
+            className="rounded-lg border border-primary/20 bg-primary/5 p-3 mb-4 flex items-center gap-3 hover:bg-primary/10 transition-colors group"
+          >
+            {eventData.image && (
+              <img src={eventData.image} alt="" className="h-8 w-8 rounded-lg bg-muted shrink-0 object-cover" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{eventData.title || eventTitle}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {eventData.markets.length} markets available · View all betting options
+              </p>
+            </div>
+            <span className="text-xs text-primary font-medium shrink-0 group-hover:underline flex items-center gap-1">
+              View Event <ExternalLink className="h-3 w-3" />
+            </span>
+          </Link>
+        )}
+
         {hasMissingTokenIds && (
           <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 mb-4 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-warning shrink-0" />

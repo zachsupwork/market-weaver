@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEventById, isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
@@ -102,7 +102,9 @@ function CandidateRow({
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
-  const [selectedConditionId, setSelectedConditionId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const preselectedMarket = searchParams.get("market");
+  const [selectedConditionId, setSelectedConditionId] = useState<string | null>(preselectedMarket);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
 
@@ -151,12 +153,16 @@ const EventDetail = () => {
     }
   }, [groups, activeGroupId]);
 
-  // Auto-select first market
+  // Auto-select first market (only if none pre-selected via query param)
   useEffect(() => {
     if (tradableMarkets.length > 0 && !selectedConditionId) {
       setSelectedConditionId(tradableMarkets[0].condition_id);
     }
-  }, [tradableMarkets, selectedConditionId]);
+    // If preselected market exists, validate it's in the list
+    if (preselectedMarket && tradableMarkets.length > 0 && !tradableMarkets.find(m => m.condition_id === preselectedMarket)) {
+      setSelectedConditionId(tradableMarkets[0].condition_id);
+    }
+  }, [tradableMarkets, selectedConditionId, preselectedMarket]);
 
   // Reset on event change
   useEffect(() => {
