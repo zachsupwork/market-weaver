@@ -57,13 +57,14 @@ serve(async (req) => {
         .from("polymarket_user_creds")
         .select("address, updated_at")
         .eq("address", addressParam.toLowerCase())
-        .maybeSingle();
+        .order("updated_at", { ascending: false })
+        .limit(1);
 
-      if (data) {
+      if (data && data.length > 0) {
         return jsonResp({
           hasCreds: true,
-          address: data.address,
-          updatedAt: data.updated_at,
+          address: data[0].address,
+          updatedAt: data[0].updated_at,
         });
       }
     }
