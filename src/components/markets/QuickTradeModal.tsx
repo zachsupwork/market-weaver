@@ -77,7 +77,7 @@ export function QuickTradeModal({ market, initialOutcome, onClose }: QuickTradeM
                   {outcome}
                 </span>
                 <span className="block font-mono text-lg font-bold mt-0.5">
-                  {Math.round(p * 100)}¢
+                  {p > 0 ? `${Math.round(p * 100)}¢` : "—"}
                 </span>
               </button>
             );
