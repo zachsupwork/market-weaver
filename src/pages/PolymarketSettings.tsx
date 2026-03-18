@@ -37,18 +37,7 @@ export default function PolymarketSettings() {
   const [testingAuth, setTestingAuth] = useState(false);
   const [authTestResult, setAuthTestResult] = useState<{ valid: boolean; reason?: string } | null>(null);
 
-  // Check Supabase auth state — attempt anonymous sign-in automatically
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSupabaseUser(session?.user ?? null);
-    });
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        setSupabaseUser(session.user);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  // Supabase auth is optional — wallet-only flow is primary
 
   const refreshCreds = useCallback(async () => {
     if (!supabaseUser) {
