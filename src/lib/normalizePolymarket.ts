@@ -221,8 +221,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
 
   // Event slug for correct Polymarket external links
   // IMPORTANT: Do NOT fall back to market slug — event slugs and market slugs are different!
+  // Gamma API returns event context in `events` array (e.g. events[0].slug)
   const event_slug = String(
-    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
+    raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? raw.events?.[0]?.slug ?? ""
   ).trim();
 
   // Check explicit resolved flag from API
