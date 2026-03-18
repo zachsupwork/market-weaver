@@ -391,7 +391,7 @@ async function readEdgeBody(ctxBody: unknown): Promise<string | null> {
 /** Submit a signed order to Polymarket via backend L2 auth proxy */
 export async function postSignedOrder(
   signedOrder: any,
-  orderType: "GTC" | "FOK" | "GTD" = "GTC"
+  orderType: "GTC" | "FOK" | "GTD" | "FAK" = "GTC"
 ): Promise<{
   ok: boolean;
   order?: any;
