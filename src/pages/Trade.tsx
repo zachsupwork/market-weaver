@@ -83,6 +83,7 @@ function formatTime(ts: string): string {
 
 const Trade = () => {
   const { conditionId } = useParams<{ conditionId: string }>();
+  const navigate = useNavigate();
   const [selectedOutcome, setSelectedOutcome] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "volume">("price");
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "ALL">("1W");
