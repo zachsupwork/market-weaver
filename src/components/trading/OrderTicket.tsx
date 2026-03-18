@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { checkUserCredsStatus, postSignedOrder } from "@/lib/polymarket-api";
 import { toast } from "sonner";
-import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft, ExternalLink } from "lucide-react";
+import { Loader2, Wallet, Shield, ChevronDown, ChevronUp, AlertTriangle, Check, Minus, Plus, Copy, ArrowRightLeft, ExternalLink, Calendar as CalendarIcon } from "lucide-react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTradingReadiness } from "@/hooks/useTradingReadiness";
@@ -14,26 +14,26 @@ import { useProxyWallet } from "@/hooks/useProxyWallet";
 import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
 import { calculatePlatformFee, isFeeEnabled, FEE_WALLET_ADDRESS, ERC20_TRANSFER_ABI, PLATFORM_FEE_BPS } from "@/lib/platform-fee";
 import { POLYGON_USDCE_ADDRESS } from "@/lib/constants/tokens";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 export type TradeAction = "BUY_YES" | "BUY_NO" | "SELL_YES" | "SELL_NO";
+type OrderMode = "market" | "limit";
+type TimeInForce = "GTC" | "GTD" | "FOK" | "FAK";
 
 interface OrderTicketProps {
-  /** YES token id */
   yesTokenId: string;
-  /** NO token id */
   noTokenId: string;
-  /** Current YES price (0-1) */
   yesPrice: number;
-  /** Current NO price (0-1) */
   noPrice: number;
   conditionId?: string;
   isTradable?: boolean;
-  /** Initial action to pre-select */
   initialAction?: TradeAction;
-  /** User's YES position size (shares) */
   yesPositionSize?: number;
-  /** User's NO position size (shares) */
   noPositionSize?: number;
+  /** Market tick size (default 0.01) */
+  tickSize?: number;
 }
 
 const TRADING_AGE_KEY = "polyview_trading_age_confirmed";
@@ -45,6 +45,23 @@ const ACTION_LABELS: Record<TradeAction, { label: string; side: "BUY" | "SELL"; 
   SELL_NO:   { label: "Sell No",   side: "SELL", outcome: "No" },
 };
 
+const TIF_OPTIONS: { id: TimeInForce; label: string; description: string }[] = [
+  { id: "GTC", label: "GTC", description: "Good Till Cancel" },
+  { id: "GTD", label: "GTD", description: "Good Till Date" },
+  { id: "FOK", label: "FOK", description: "Fill or Kill" },
+  { id: "FAK", label: "FAK", description: "Fill & Kill" },
+];
+
+function validateTickSize(price: number, tickSize: number): boolean {
+  if (tickSize <= 0) return true;
+  const remainder = Math.abs((price * 100) % (tickSize * 100));
+  return remainder < 0.001 || Math.abs(remainder - tickSize * 100) < 0.001;
+}
+
+function snapToTick(price: number, tickSize: number): number {
+  return Math.round(price / tickSize) * tickSize;
+}
+
 export function OrderTicket({
   yesTokenId,
   noTokenId,
@@ -55,13 +72,21 @@ export function OrderTicket({
   initialAction = "BUY_YES",
   yesPositionSize = 0,
   noPositionSize = 0,
+  tickSize = 0.01,
 }: OrderTicketProps) {
   const [action, setAction] = useState<TradeAction>(initialAction);
   const [amount, setAmount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [orderType, setOrderType] = useState<"GTC" | "FOK" | "GTD">("GTC");
+
+  // Limit order state
+  const [orderMode, setOrderMode] = useState<OrderMode>("market");
+  const [limitPrice, setLimitPrice] = useState<string>("");
+  const [timeInForce, setTimeInForce] = useState<TimeInForce>("GTC");
+  const [gtdDate, setGtdDate] = useState<Date | undefined>();
+  const [gtdTime, setGtdTime] = useState("23:59");
+
   const { isConnected, address, chainId } = useAccount();
   const { proxyAddress } = useProxyWallet();
   const { switchChain } = useSwitchChain();
@@ -71,26 +96,55 @@ export function OrderTicket({
   const isBuy = side === "BUY";
   const isYes = outcome === "Yes";
   const tokenId = isYes ? yesTokenId : noTokenId;
-  const price = isYes ? yesPrice : noPrice;
+  const marketPrice = isYes ? yesPrice : noPrice;
+
+  // Effective price: limit price if limit mode, otherwise market price
+  const parsedLimitPrice = parseFloat(limitPrice);
+  const isLimitMode = orderMode === "limit";
+  const effectivePrice = isLimitMode && !isNaN(parsedLimitPrice) && parsedLimitPrice > 0
+    ? parsedLimitPrice
+    : marketPrice;
+
   const availableShares = isYes ? yesPositionSize : noPositionSize;
 
   const readiness = useTradingReadiness(isBuy ? amount : 0);
 
-  const shares = useMemo(() => price > 0 ? amount / price : 0, [amount, price]);
+  const shares = useMemo(() => effectivePrice > 0 ? amount / effectivePrice : 0, [amount, effectivePrice]);
   const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
   const feeEnabled = isFeeEnabled();
   const potentialReturn = isBuy
-    ? (shares * (1 - price)).toFixed(2)
-    : (shares * price).toFixed(2);
+    ? (shares * (1 - effectivePrice)).toFixed(2)
+    : (shares * effectivePrice).toFixed(2);
 
   const hasInsufficientBalance = isBuy && amount > readiness.usdc.usdcBalance;
   const hasInsufficientShares = !isBuy && shares > availableShares;
   const hasNativeUsdcButNoE = readiness.usdc.usdcNativeBalance > 0 && readiness.usdc.usdcBalance < amount;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
+  // Tick size validation for limit orders
+  const limitPriceError = useMemo(() => {
+    if (!isLimitMode || !limitPrice) return null;
+    const p = parseFloat(limitPrice);
+    if (isNaN(p)) return "Invalid price";
+    if (p <= 0) return "Price must be positive";
+    if (p >= 1) return "Price must be less than $1.00";
+    if (p < tickSize) return `Min price: ${tickSize}`;
+    if (p > 1 - tickSize) return `Max price: ${(1 - tickSize).toFixed(2)}`;
+    if (!validateTickSize(p, tickSize)) return `Must be multiple of ${tickSize}`;
+    return null;
+  }, [isLimitMode, limitPrice, tickSize]);
+
+  // GTD expiration timestamp
+  const gtdExpiration = useMemo(() => {
+    if (timeInForce !== "GTD" || !gtdDate) return 0;
+    const [h, m] = gtdTime.split(":").map(Number);
+    const d = new Date(gtdDate);
+    d.setHours(h || 0, m || 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+  }, [timeInForce, gtdDate, gtdTime]);
+
   const quickAmounts = isBuy ? [1, 5, 10, 100] : [1, 5, 10];
 
-  // Can the user sell this outcome?
   const canSellYes = yesPositionSize > 0;
   const canSellNo = noPositionSize > 0;
 
@@ -105,6 +159,35 @@ export function OrderTicket({
     setShowConfirm(false);
   }
 
+  function handleLimitPriceChange(val: string) {
+    // Allow empty, or valid decimal input
+    if (val === "" || /^\d*\.?\d{0,2}$/.test(val)) {
+      setLimitPrice(val);
+      setShowConfirm(false);
+    }
+  }
+
+  function handleSnapPrice() {
+    const p = parseFloat(limitPrice);
+    if (!isNaN(p) && p > 0) {
+      const snapped = snapToTick(p, tickSize);
+      const clamped = Math.max(tickSize, Math.min(1 - tickSize, snapped));
+      setLimitPrice(clamped.toFixed(2));
+    }
+  }
+
+  const handleModeSwitch = useCallback((mode: OrderMode) => {
+    setOrderMode(mode);
+    if (mode === "market") {
+      setLimitPrice("");
+      setTimeInForce("GTC");
+    } else {
+      // Pre-fill limit price with current market price
+      setLimitPrice(marketPrice.toFixed(2));
+    }
+    setShowConfirm(false);
+  }, [marketPrice]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isConnected || !address) { toast.error("Connect your wallet first"); return; }
@@ -112,6 +195,19 @@ export function OrderTicket({
     if (!ageConfirmed) { toast.error("Confirm age & jurisdiction in Settings"); return; }
     if (!readiness.allReady) { toast.error("Complete all setup steps below before trading"); return; }
     if (amount <= 0) { toast.error("Enter an amount"); return; }
+
+    // Limit order validation
+    if (isLimitMode) {
+      if (!limitPrice || isNaN(parsedLimitPrice) || parsedLimitPrice <= 0) {
+        toast.error("Enter a valid limit price"); return;
+      }
+      if (limitPriceError) {
+        toast.error(limitPriceError); return;
+      }
+      if (timeInForce === "GTD" && (!gtdDate || gtdExpiration <= Math.floor(Date.now() / 1000))) {
+        toast.error("Select a future expiration date/time for GTD orders"); return;
+      }
+    }
 
     if (isBuy && hasInsufficientBalance) {
       if (hasNativeUsdcButNoE) {
@@ -151,7 +247,6 @@ export function OrderTicket({
           feeTxHash = feeTx.hash;
           toast.success("Platform fee paid ✓");
 
-          // Record fee to database
           try {
             await supabase.from("platform_fees").insert({
               user_address: address?.toLowerCase() ?? "",
@@ -173,6 +268,7 @@ export function OrderTicket({
           return;
         }
       }
+
       const credsStatus = await checkUserCredsStatus();
       if (!credsStatus.hasCreds || !credsStatus.address) {
         toast.error("Trading credentials missing. Re-enable trading in Setup below.");
@@ -198,22 +294,30 @@ export function OrderTicket({
       );
 
       const eoaAddr = (await signer.getAddress()).toLowerCase();
+
+      // Determine expiration for GTD orders
+      const orderExpiration = timeInForce === "GTD" ? gtdExpiration : 0;
+      const effectiveOrderType = isLimitMode ? timeInForce : "GTC";
+
       console.log("[OrderTicket] Creating order:", {
         action,
+        mode: orderMode,
         signerAddress: eoaAddr,
         tokenId,
         side,
-        price,
+        price: effectivePrice,
         size: Number(shares.toFixed(6)),
+        orderType: effectiveOrderType,
+        expiration: orderExpiration,
       });
 
       const signedOrder = await clobClient.createOrder({
         tokenID: tokenId,
         side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
-        price,
+        price: effectivePrice,
         size: Number(shares.toFixed(6)),
         feeRateBps: 0,
-        expiration: 0,
+        expiration: orderExpiration,
       });
 
       const orderSigner = ((signedOrder as any)?.order?.signer ?? (signedOrder as any)?.signer ?? "").toLowerCase();
@@ -221,10 +325,11 @@ export function OrderTicket({
         throw new Error(`Signer mismatch: order signed by ${orderSigner} but your wallet is ${eoaAddr}. Re-enable trading with the same wallet.`);
       }
 
-      const result = await postSignedOrder(signedOrder, orderType);
+      const result = await postSignedOrder(signedOrder, effectiveOrderType);
 
       if (result.ok) {
-        toast.success(`${ACTION_LABELS[action].label} order placed — $${amount.toFixed(2)}`);
+        const modeLabel = isLimitMode ? "Limit" : "Market";
+        toast.success(`${modeLabel} ${ACTION_LABELS[action].label} order placed — $${amount.toFixed(2)}${isLimitMode ? ` @ ${effectivePrice.toFixed(2)}` : ""}`);
         setAmount(0);
         setShowConfirm(false);
       } else {
@@ -319,6 +424,152 @@ export function OrderTicket({
         <span className={isYes ? "text-yes" : "text-no"}>{outcome}</span>
       </h3>
 
+      {/* ─── Market / Limit Toggle ─── */}
+      <div className="flex gap-1 mb-3 p-0.5 rounded-lg bg-muted">
+        <button
+          type="button"
+          onClick={() => handleModeSwitch("market")}
+          className={cn(
+            "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
+            orderMode === "market"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Market
+        </button>
+        <button
+          type="button"
+          onClick={() => handleModeSwitch("limit")}
+          className={cn(
+            "flex-1 rounded-md py-1.5 text-xs font-semibold transition-all",
+            orderMode === "limit"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Limit
+        </button>
+      </div>
+
+      {/* ─── Limit Price Input ─── */}
+      {isLimitMode && (
+        <div className="mb-3 space-y-2">
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">
+              Limit Price <span className="text-muted-foreground/60">(tick: {tickSize})</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-mono">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={limitPrice}
+                onChange={(e) => handleLimitPriceChange(e.target.value)}
+                onBlur={handleSnapPrice}
+                placeholder={marketPrice.toFixed(2)}
+                className={cn(
+                  "w-full rounded-md border bg-background pl-7 pr-3 py-2 text-sm font-mono focus:outline-none focus:ring-1",
+                  limitPriceError
+                    ? "border-destructive focus:ring-destructive"
+                    : "border-input focus:ring-ring"
+                )}
+              />
+              {/* Market price shortcut */}
+              <button
+                type="button"
+                onClick={() => setLimitPrice(marketPrice.toFixed(2))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-primary hover:text-primary/80 font-medium"
+              >
+                Mkt
+              </button>
+            </div>
+            {limitPriceError && (
+              <p className="text-[10px] text-destructive mt-0.5">{limitPriceError}</p>
+            )}
+            {isLimitMode && !limitPriceError && parsedLimitPrice > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {parsedLimitPrice < marketPrice
+                  ? `${((1 - parsedLimitPrice / marketPrice) * 100).toFixed(1)}% below market`
+                  : parsedLimitPrice > marketPrice
+                  ? `${((parsedLimitPrice / marketPrice - 1) * 100).toFixed(1)}% above market`
+                  : "At market price"}
+              </p>
+            )}
+          </div>
+
+          {/* Time-in-Force selector */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Time in Force</label>
+            <div className="flex gap-1">
+              {TIF_OPTIONS.map((tif) => (
+                <button
+                  key={tif.id}
+                  type="button"
+                  onClick={() => setTimeInForce(tif.id)}
+                  title={tif.description}
+                  className={cn(
+                    "flex-1 rounded-md py-1.5 text-[10px] font-semibold transition-all border",
+                    timeInForce === tif.id
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "bg-muted text-muted-foreground border-transparent hover:border-border"
+                  )}
+                >
+                  {tif.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-0.5">
+              {TIF_OPTIONS.find((t) => t.id === timeInForce)?.description}
+            </p>
+          </div>
+
+          {/* GTD Date/Time picker */}
+          {timeInForce === "GTD" && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground block">Expiration</label>
+              <div className="flex gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex-1 rounded-md border bg-background px-3 py-1.5 text-xs text-left font-mono flex items-center gap-2",
+                        gtdDate ? "text-foreground border-input" : "text-muted-foreground border-input"
+                      )}
+                    >
+                      <CalendarIcon className="h-3 w-3" />
+                      {gtdDate ? format(gtdDate, "MMM d, yyyy") : "Pick date"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={gtdDate}
+                      onSelect={setGtdDate}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+                <input
+                  type="time"
+                  value={gtdTime}
+                  onChange={(e) => setGtdTime(e.target.value)}
+                  className="w-24 rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              {gtdDate && (
+                <p className="text-[9px] text-muted-foreground">
+                  Expires: {format(gtdDate, "MMM d")} at {gtdTime} (local)
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {!isConnected && (
         <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-center">
           <Wallet className="h-5 w-5 text-primary mx-auto mb-2" />
@@ -349,7 +600,7 @@ export function OrderTicket({
         </div>
       )}
 
-      {/* Balance display: context-aware */}
+      {/* Balance display */}
       {isConnected && (
         <div className="mb-3 space-y-1 px-1">
           {isBuy ? (
@@ -490,8 +741,7 @@ export function OrderTicket({
           )}
           {!isBuy && availableShares > 0 && (
             <button type="button" onClick={() => {
-              // For sell, "Max" sets amount = shares * price (dollar value of all shares)
-              setAmount(Math.floor(availableShares * price * 100) / 100);
+              setAmount(Math.floor(availableShares * effectivePrice * 100) / 100);
               setShowConfirm(false);
             }} className="flex-1 rounded-lg border border-primary/30 bg-primary/5 py-2 text-xs font-mono font-medium text-primary hover:bg-primary/10 transition-all">
               Max
@@ -507,27 +757,34 @@ export function OrderTicket({
       </button>
       {showAdvanced && (
         <div className="mb-3 rounded-md border border-border bg-muted/50 p-2 space-y-2">
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-1 block">Order Type</label>
-            <select value={orderType} onChange={(e) => setOrderType(e.target.value as any)}
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring">
-              <option value="GTC">Good Till Cancel (GTC)</option>
-              <option value="FOK">Fill or Kill (FOK)</option>
-              <option value="GTD">Good Till Date (GTD)</option>
-            </select>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>Order Mode</span>
+            <span className="font-mono font-semibold text-foreground">{isLimitMode ? "Limit" : "Market"}</span>
           </div>
+          {isLimitMode && (
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Time in Force</span>
+              <span className="font-mono font-semibold text-foreground">{timeInForce}</span>
+            </div>
+          )}
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>Token</span>
             <span className="font-mono">{outcome} ({tokenId.slice(0, 8)}…)</span>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>Price</span>
-            <span className="font-mono">{Math.round(price * 100)}¢</span>
+            <span className="font-mono">{Math.round(effectivePrice * 100)}¢{isLimitMode ? " (limit)" : " (market)"}</span>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>Shares</span>
             <span className="font-mono">{shares.toFixed(2)}</span>
           </div>
+          {isLimitMode && timeInForce === "GTD" && gtdExpiration > 0 && (
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Expires</span>
+              <span className="font-mono">{new Date(gtdExpiration * 1000).toLocaleString()}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -538,9 +795,20 @@ export function OrderTicket({
             <span className="text-muted-foreground">Action</span>
             <span className={cn("font-semibold", isYes ? "text-yes" : "text-no")}>{ACTION_LABELS[action].label}</span>
           </div>
+          {isLimitMode && (
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Order Type</span>
+              <span className="font-mono text-foreground">Limit ({timeInForce})</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Price</span>
-            <span className="font-mono text-foreground">{Math.round(price * 100)}¢</span>
+            <span className="font-mono text-foreground">
+              {Math.round(effectivePrice * 100)}¢
+              {isLimitMode && effectivePrice !== marketPrice && (
+                <span className="text-muted-foreground ml-1">(mkt: {Math.round(marketPrice * 100)}¢)</span>
+              )}
+            </span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Est. Shares</span>
@@ -581,13 +849,16 @@ export function OrderTicket({
         <div className="rounded-md border border-warning/30 bg-warning/5 p-3 mb-3">
           <div className="flex items-center gap-2 mb-2">
             <Shield className="h-4 w-4 text-warning" />
-            <span className="text-xs font-semibold text-warning">Confirm Order</span>
+            <span className="text-xs font-semibold text-warning">Confirm {isLimitMode ? "Limit" : "Market"} Order</span>
           </div>
           <div className="text-xs text-muted-foreground space-y-1">
             <p><strong className={isYes ? "text-yes" : "text-no"}>{ACTION_LABELS[action].label}</strong></p>
-            <p>at <strong className="text-foreground">{Math.round(price * 100)}¢</strong> per share</p>
+            <p>at <strong className="text-foreground">{Math.round(effectivePrice * 100)}¢</strong> per share{isLimitMode ? " (limit)" : ""}</p>
             <p>{isBuy ? "Cost" : "Proceeds"}: <strong className="text-foreground">${amount.toFixed(2)}</strong></p>
             <p>Shares: <strong className="text-foreground">{shares.toFixed(2)}</strong></p>
+            {isLimitMode && timeInForce === "GTD" && gtdExpiration > 0 && (
+              <p>Expires: <strong className="text-foreground">{new Date(gtdExpiration * 1000).toLocaleString()}</strong></p>
+            )}
           </div>
           <button type="button" onClick={() => setShowConfirm(false)} className="mt-2 text-[10px] text-muted-foreground hover:text-foreground underline">Cancel</button>
         </div>
@@ -596,7 +867,7 @@ export function OrderTicket({
       {/* Submit button */}
       <button
         type="submit"
-        disabled={submitting || amount <= 0 || !isConnected || !isTradable || (isBuy && hasInsufficientBalance) || (!isBuy && hasInsufficientShares) || !readiness.allReady || !ageConfirmed}
+        disabled={submitting || amount <= 0 || !isConnected || !isTradable || (isBuy && hasInsufficientBalance) || (!isBuy && hasInsufficientShares) || !readiness.allReady || !ageConfirmed || (isLimitMode && !!limitPriceError)}
         className={cn(
           "w-full rounded-lg py-3 text-sm font-bold transition-all disabled:opacity-50",
           isBuy
@@ -611,9 +882,9 @@ export function OrderTicket({
         ) : !readiness.allReady ? (
           "Complete Setup Above"
         ) : showConfirm ? (
-          `Confirm ${ACTION_LABELS[action].label}`
+          `Confirm ${isLimitMode ? "Limit" : ""} ${ACTION_LABELS[action].label}`
         ) : amount > 0 ? (
-          `${ACTION_LABELS[action].label} — $${amount.toFixed(2)}`
+          `${isLimitMode ? "Limit " : ""}${ACTION_LABELS[action].label} — $${amount.toFixed(2)}${isLimitMode ? ` @ ${effectivePrice.toFixed(2)}` : ""}`
         ) : (
           "Enter Amount"
         )}
