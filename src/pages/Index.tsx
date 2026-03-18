@@ -215,38 +215,36 @@ const Index = () => {
         </div>
 
         {/* Stats cards */}
-        {allMarkets.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="h-4 w-4 text-primary" />
-                <span className="text-xs text-muted-foreground font-medium">Markets</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{allMarkets.length}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Markets</span>
             </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <BarChart3 className="h-4 w-4 text-yes" />
-                <span className="text-xs text-muted-foreground font-medium">24h Volume</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-yes">{formatVol(totalVol)}</span>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                <span className="text-xs text-muted-foreground font-medium">Liquidity</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{formatVol(totalLiq)}</span>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <Flame className="h-4 w-4 text-warning" />
-                <span className="text-xs text-muted-foreground font-medium">Events</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{filteredEvents.length}</span>
-            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{marketCount.toLocaleString()}</span>
           </div>
-        )}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="h-4 w-4 text-yes" />
+              <span className="text-xs text-muted-foreground font-medium">24h Volume</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-yes">{formatVol(totalVol)}</span>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Liquidity</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{formatVol(totalLiq)}</span>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <Flame className="h-4 w-4 text-warning" />
+              <span className="text-xs text-muted-foreground font-medium">Events</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{filteredEvents.length}</span>
+          </div>
+        </div>
 
         {/* Quick links */}
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-8">
