@@ -27,6 +27,13 @@ serve(async (req) => {
     });
 
     if (!res.ok) {
+      // Return empty orderbook for 404 (token doesn't exist / resolved market)
+      if (res.status === 404) {
+        return new Response(
+          JSON.stringify({ bids: [], asks: [], asset_id: tokenId, timestamp: String(Date.now()), hash: "", market: "" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const text = await res.text();
       return new Response(
         JSON.stringify({ error: `CLOB API error: ${res.status}`, detail: text.substring(0, 200) }),
