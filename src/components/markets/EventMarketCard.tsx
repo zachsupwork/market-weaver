@@ -1,6 +1,7 @@
 import { useMarketStore } from "@/stores/useMarketStore";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { Progress } from "@/components/ui/progress";
 import type { NormalizedMarket } from "@/lib/normalizePolymarket";
 
 function formatVol(n: number): string {
@@ -15,7 +16,7 @@ interface Props {
   onSelect: () => void;
 }
 
-/** Compact market card for event page grid — shows question + YES/NO prices */
+/** Polymarket-style market card with large probability, colored pills, and progress bar */
 export function EventMarketCard({ market, selected, onSelect }: Props) {
   const yesTokenId = market.clobTokenIds?.[0];
   const noTokenId = market.clobTokenIds?.[1];
@@ -32,40 +33,54 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
     <button
       onClick={onSelect}
       className={cn(
-        "w-full rounded-xl border p-3 text-left transition-all",
+        "w-full rounded-xl border p-4 text-left transition-all group",
         selected
-          ? "border-primary/50 bg-primary/5 shadow-sm shadow-primary/10"
-          : "border-border bg-card hover:border-primary/30 hover:bg-muted/30"
+          ? "border-primary/50 bg-primary/5 shadow-md shadow-primary/10 ring-1 ring-primary/20"
+          : "border-border bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:scale-[1.01]"
       )}
     >
-      <p className="text-sm font-medium leading-snug line-clamp-2 mb-2">
+      {/* Question */}
+      <p className="text-sm font-semibold leading-snug line-clamp-2 mb-3 group-hover:text-foreground transition-colors">
         {market.question}
       </p>
 
-      {/* Price row */}
+      {/* Large probability */}
+      <div className="flex items-end justify-between mb-2">
+        <AnimatePresence mode="popLayout">
+          <motion.span
+            key={yesCents}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-2xl font-bold font-mono text-yes"
+          >
+            {yesCents}%
+          </motion.span>
+        </AnimatePresence>
+        <span className="text-[10px] text-muted-foreground font-mono mb-1">
+          {formatVol(market.volume24h)} vol
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+        <motion.div
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            yesCents >= 50 ? "bg-yes" : "bg-no"
+          )}
+          initial={false}
+          animate={{ width: `${yesCents}%` }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        />
+      </div>
+
+      {/* YES / NO pills */}
       <div className="flex items-center gap-2">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={`y-${yesCents}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-md bg-yes/15 border border-yes/25 px-2 py-0.5 text-xs font-mono font-semibold text-yes"
-          >
-            Yes {yesCents}¢
-          </motion.span>
-        </AnimatePresence>
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={`n-${noCents}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-md bg-no/15 border border-no/25 px-2 py-0.5 text-xs font-mono font-semibold text-no"
-          >
-            No {noCents}¢
-          </motion.span>
-        </AnimatePresence>
-        <span className="ml-auto text-[10px] text-muted-foreground font-mono">
-          {formatVol(market.volume24h)}
+        <span className="flex-1 rounded-lg bg-yes/15 border border-yes/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-yes">
+          YES {yesCents}¢
+        </span>
+        <span className="flex-1 rounded-lg bg-no/15 border border-no/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-no">
+          NO {noCents}¢
         </span>
       </div>
     </button>
