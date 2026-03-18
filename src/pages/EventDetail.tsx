@@ -102,7 +102,9 @@ function CandidateRow({
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
-  const [selectedConditionId, setSelectedConditionId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const preselectedMarket = searchParams.get("market");
+  const [selectedConditionId, setSelectedConditionId] = useState<string | null>(preselectedMarket);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
 
