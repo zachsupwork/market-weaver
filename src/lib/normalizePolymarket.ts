@@ -225,8 +225,11 @@ export function normalizeMarket(raw: any): NormalizedMarket {
     raw.event_slug ?? raw.eventSlug ?? raw.event?.slug ?? ""
   ).trim();
 
-  // Detect ended by extreme prices (resolved market)
-  const ended = isEndedByPrices(outcomePrices);
+  // Check explicit resolved flag from API
+  const resolved = (raw.resolved ?? raw.isResolved) === true;
+
+  // Detect ended by prices + explicit closure/resolution
+  const ended = isEndedByPrices(outcomePrices, closed, resolved);
 
   // Classify market status
   const hasValidConditionId = isBytes32Hex(condition_id);
@@ -235,9 +238,9 @@ export function normalizeMarket(raw: any): NormalizedMarket {
   let statusLabel: MarketStatusLabel;
   if (archived) {
     statusLabel = "ARCHIVED";
-  } else if (ended) {
+  } else if (resolved || ended) {
     statusLabel = "ENDED";
-  } else if (closed || !active) {
+  } else if (closed && !active) {
     statusLabel = "CLOSED";
   } else if (!hasValidConditionId || !hasTradableTokens || !accepting_orders) {
     statusLabel = "UNAVAILABLE";
