@@ -90,7 +90,7 @@ export function EventGridCard({ event }: Props) {
           <CandidatePreviewRow
             key={m.condition_id}
             label={m.question}
-            price={m.outcomePrices?.[0] ?? 0.5}
+            price={m.outcomePrices?.[0]}
             tokenId={m.clobTokenIds?.[0]}
             conditionId={m.condition_id}
             eventSlug={event.slug}

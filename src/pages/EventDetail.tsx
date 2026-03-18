@@ -657,7 +657,7 @@ const EventDetail = () => {
                       .filter((m) => m.condition_id !== selectedConditionId)
                       .slice(0, 10)
                       .map((m) => {
-                        const p = Math.round((m.outcomePrices?.[0] ?? 0.5) * 100);
+                        const p = m.outcomePrices?.[0] !== undefined ? Math.round(m.outcomePrices[0] * 100) : null;
                         return (
                           <button
                             key={m.condition_id}
@@ -665,7 +665,7 @@ const EventDetail = () => {
                             className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted/60 transition-colors group"
                           >
                             <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{m.question}</span>
-                            <span className="text-xs font-mono font-bold text-primary shrink-0">{p}¢</span>
+                            <span className="text-xs font-mono font-bold text-primary shrink-0">{p !== null ? `${p}¢` : "—"}</span>
                           </button>
                         );
                       })}

@@ -46,16 +46,20 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
 
       {/* Large probability */}
       <div className="flex items-end justify-between mb-2">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={yesCents}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold font-mono text-yes"
-          >
-            {yesCents}%
-          </motion.span>
-        </AnimatePresence>
+        {yesCents !== null ? (
+          <AnimatePresence mode="popLayout">
+            <motion.span
+              key={yesCents}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-2xl font-bold font-mono text-yes"
+            >
+              {yesCents}%
+            </motion.span>
+          </AnimatePresence>
+        ) : (
+          <div className="h-8 w-16 rounded-md bg-muted animate-pulse" />
+        )}
         <span className="text-[10px] text-muted-foreground font-mono mb-1">
           {formatVol(market.volume24h)} vol
         </span>
@@ -63,24 +67,26 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
 
       {/* Progress bar */}
       <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
-        <motion.div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            yesCents >= 50 ? "bg-yes" : "bg-no"
-          )}
-          initial={false}
-          animate={{ width: `${yesCents}%` }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        />
+        {yesCents !== null ? (
+          <motion.div
+            className={cn(
+              "h-full rounded-full transition-all duration-500",
+              yesCents >= 50 ? "bg-yes" : "bg-no"
+            )}
+            initial={false}
+            animate={{ width: `${yesCents}%` }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          />
+        ) : null}
       </div>
 
       {/* YES / NO pills */}
       <div className="flex items-center gap-2">
         <span className="flex-1 rounded-lg bg-yes/15 border border-yes/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-yes">
-          YES {yesCents}¢
+          YES {yesCents !== null ? `${yesCents}¢` : "—"}
         </span>
         <span className="flex-1 rounded-lg bg-no/15 border border-no/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-no">
-          NO {noCents}¢
+          NO {noCents !== null ? `${noCents}¢` : "—"}
         </span>
       </div>
     </button>
