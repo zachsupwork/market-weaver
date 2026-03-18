@@ -301,15 +301,33 @@ export async function deriveApiCreds(params: {
   return data;
 }
 
-/** Check if current user has stored creds */
-export async function checkUserCredsStatus(): Promise<{
+/** Check if current user has stored creds (by wallet address, no session required) */
+export async function checkUserCredsStatus(walletAddress?: string): Promise<{
   hasCreds: boolean;
   address?: string;
   updatedAt?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke("polymarket-user-creds-status");
-  if (error) return { hasCreds: false };
-  return data;
+  // Try with session first (supabase.functions.invoke adds auth header automatically)
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session) {
+    const qs = walletAddress ? `?address=${encodeURIComponent(walletAddress)}` : "";
+    const { data, error } = await supabase.functions.invoke("polymarket-user-creds-status" + qs);
+    if (!error && data) return data;
+  }
+  
+  // Fallback: direct fetch with address param (no auth needed)
+  if (walletAddress) {
+    try {
+      const res = await fetch(
+        `${fnUrl("polymarket-user-creds-status")}?address=${encodeURIComponent(walletAddress)}`,
+        { headers: { "apikey": ANON_KEY } }
+      );
+      if (res.ok) return await res.json();
+    } catch {}
+  }
+  
+  return { hasCreds: false };
 }
 
 /** Validate stored creds actually work against the CLOB (live check) */
