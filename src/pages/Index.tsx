@@ -180,8 +180,21 @@ const Index = () => {
     return items;
   }, [liveMarkets, filteredEvents]);
 
-  const totalVol = useMemo(() => allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0), [allMarkets]);
-  const totalLiq = useMemo(() => allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0), [allMarkets]);
+  // Live global stats from edge function
+  const { data: globalStats } = useQuery({
+    queryKey: ["polymarket-global-stats"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("polymarket-global-stats");
+      if (error) throw error;
+      return data as { marketCount: number; totalVolume24h: number; totalLiquidity: number };
+    },
+    staleTime: 30_000,
+    refetchInterval: 45_000,
+  });
+
+  const totalVol = globalStats?.totalVolume24h ?? allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0);
+  const totalLiq = globalStats?.totalLiquidity ?? allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0);
+  const marketCount = globalStats?.marketCount ?? allMarkets.length;
 
   return (
     <div className="min-h-screen">
