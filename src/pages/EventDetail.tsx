@@ -24,7 +24,6 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { LiveOrderbook } from "@/components/trading/LiveOrderbook";
@@ -33,10 +32,9 @@ import { OrderTicket } from "@/components/trading/OrderTicket";
 import { SportScoreBadge } from "@/components/markets/SportScoreBadge";
 import { CryptoPriceBadge } from "@/components/markets/CryptoPriceBadge";
 import { extractSportsSlug, extractCryptoSymbol } from "@/lib/live-data-utils";
+import { extractEventMarketLabel } from "@/lib/event-market-display";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-
-// ── Helpers ─────────────────────────────────────────────────────
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -69,8 +67,6 @@ function formatDate(dateStr: string): string {
   }
 }
 
-// ── CandidateRow ────────────────────────────────────────────────
-
 function CandidateRow({
   market,
   rank,
@@ -86,10 +82,11 @@ function CandidateRow({
   const noTokenId = market.clobTokenIds?.[1];
   const wsPrice = useMarketStore((s) => (tokenId ? s.assets[tokenId]?.lastTradePrice : null));
   const wsNo = useMarketStore((s) => (noTokenId ? s.assets[noTokenId]?.lastTradePrice : null));
-  const price = wsPrice ?? market.outcomePrices?.[0] ?? 0;
-  const noPrice = wsNo ?? market.outcomePrices?.[1] ?? 0;
-  const pct = Math.round(price * 100);
-  const noPct = Math.round(noPrice * 100);
+  const price = wsPrice ?? market.outcomePrices?.[0] ?? null;
+  const noPrice = wsNo ?? market.outcomePrices?.[1] ?? null;
+  const pct = price !== null ? Math.round(price * 1000) / 10 : null;
+  const noPct = noPrice !== null ? Math.round(noPrice * 1000) / 10 : null;
+  const displayLabel = extractEventMarketLabel(market.question);
 
   return (
     <button
@@ -101,7 +98,6 @@ function CandidateRow({
           : "hover:bg-muted/60 border border-transparent hover:border-border/50"
       )}
     >
-      {/* Rank */}
       <span
         className={cn(
           "text-xs font-bold font-mono w-6 h-6 rounded-full flex items-center justify-center shrink-0",
@@ -111,52 +107,54 @@ function CandidateRow({
         {rank}
       </span>
 
-      {/* Question + progress bar */}
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate block">{market.question}</span>
+        <span className="text-sm font-medium truncate block">{displayLabel}</span>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 max-w-[200px]">
-          <motion.div
-            className={cn("h-full rounded-full", pct >= 50 ? "bg-yes" : "bg-no")}
-            initial={false}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.4 }}
-          />
+          {pct !== null ? (
+            <motion.div
+              className={cn("h-full rounded-full", pct >= 50 ? "bg-yes" : "bg-no")}
+              initial={false}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.4 }}
+            />
+          ) : (
+            <div className="h-full w-1/3 rounded-full bg-muted-foreground/20 animate-pulse" />
+          )}
         </div>
       </div>
 
-      {/* Large percentage */}
       <AnimatePresence mode="popLayout">
-        <motion.span
-          key={pct}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.15 }}
-          className="text-lg font-bold font-mono text-foreground w-12 text-right shrink-0"
-        >
-          {pct}%
-        </motion.span>
+        {pct !== null ? (
+          <motion.span
+            key={pct}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            className="text-lg font-bold font-mono text-foreground w-14 text-right shrink-0"
+          >
+            {pct}%
+          </motion.span>
+        ) : (
+          <div className="h-6 w-12 rounded bg-muted animate-pulse" />
+        )}
       </AnimatePresence>
 
-      {/* YES / NO pills */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="rounded-md bg-yes/15 border border-yes/25 px-2 py-1 text-xs font-mono font-bold text-yes">
-          {pct}¢
+        <span className="rounded-md bg-yes/15 border border-yes/25 px-2 py-1 text-xs font-mono font-bold text-yes min-w-[56px] text-center">
+          {pct !== null ? `${Math.round(price * 100)}¢` : "—"}
         </span>
-        <span className="rounded-md bg-no/15 border border-no/25 px-2 py-1 text-xs font-mono font-bold text-no hidden sm:block">
-          {noPct}¢
+        <span className="rounded-md bg-no/15 border border-no/25 px-2 py-1 text-xs font-mono font-bold text-no hidden sm:block min-w-[56px] text-center">
+          {noPct !== null ? `${Math.round((noPrice ?? 0) * 100)}¢` : "—"}
         </span>
       </div>
 
-      {/* 24h volume */}
       <span className="text-[10px] text-muted-foreground font-mono w-14 text-right shrink-0 hidden md:block">
         {formatVol(market.volume24h)}
       </span>
     </button>
   );
 }
-
-// ── EventDetail ─────────────────────────────────────────────────
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -167,14 +165,13 @@ const EventDetail = () => {
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
   const [showDescription, setShowDescription] = useState(false);
 
-  // Live countdown ticker
   const [, setTick] = useState(0);
   useEffect(() => {
     const iv = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(iv);
   }, []);
 
-  const { data: event, isLoading } = useQuery({
+  const { data: event, isLoading, refetch } = useQuery({
     queryKey: ["polymarket-event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
@@ -191,7 +188,7 @@ const EventDetail = () => {
     () =>
       allMarkets
         .filter((m) => m.statusLabel === "LIVE" || (m.active && !m.closed && !m.ended))
-        .sort((a, b) => (b.outcomePrices?.[0] ?? 0) - (a.outcomePrices?.[0] ?? 0)),
+        .sort((a, b) => (b.outcomePrices?.[0] ?? -1) - (a.outcomePrices?.[0] ?? -1)),
     [allMarkets]
   );
 
@@ -235,7 +232,6 @@ const EventDetail = () => {
     setActiveGroupId(null);
   }, [eventId]);
 
-  // WebSocket subscriptions
   useEffect(() => {
     if (tradableMarkets.length === 0) return;
     const tokenIds = new Set<string>();
@@ -250,13 +246,16 @@ const EventDetail = () => {
   const selected = tradableMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0];
   const yesTokenId = selected?.clobTokenIds?.[0] ?? "";
   const noTokenId = selected?.clobTokenIds?.[1] ?? "";
+  const selectedYesWs = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
+  const selectedNoWs = useMarketStore((s) => (noTokenId ? s.assets[noTokenId]?.lastTradePrice : null));
+  const selectedYesPrice = selected ? selectedYesWs ?? selected.outcomePrices?.[0] ?? null : null;
+  const selectedNoPrice = selected ? selectedNoWs ?? selected.outcomePrices?.[1] ?? null : null;
+  const selectedDisplayLabel = selected ? extractEventMarketLabel(selected.question) : "";
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied to clipboard");
   };
-
-  // ── Loading / Error ───────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -269,15 +268,18 @@ const EventDetail = () => {
   if (!event) {
     return (
       <div className="container py-16 text-center">
-        <p className="text-muted-foreground">Event not found.</p>
-        <Link to="/events" className="text-primary text-sm mt-2 inline-block hover:underline">
-          ← Back to events
-        </Link>
+        <p className="text-muted-foreground">Event not found. It may have ended or been removed.</p>
+        <div className="mt-3 flex items-center justify-center gap-3">
+          <button onClick={() => refetch()} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-all">
+            Retry
+          </button>
+          <Link to="/events" className="text-primary text-sm inline-block hover:underline">
+            Browse live markets
+          </Link>
+        </div>
       </div>
     );
   }
-
-  // ── Derived data ──────────────────────────────────────────────
 
   const title = event.title || event.question || "Untitled Event";
   const pmSlug = event.slug || eventId;
@@ -289,7 +291,6 @@ const EventDetail = () => {
   const hasMultipleGroups = groups.length > 1;
   const activeGroup = groups.find((g) => g.id === activeGroupId) ?? groups[0];
 
-  // Dates
   const endDate = allMarkets
     .map((m) => m.end_date_iso)
     .filter(Boolean)
@@ -302,12 +303,9 @@ const EventDetail = () => {
   const description = event.description || "";
   const resolutionSource = event.resolution_source || event.resolutionSource || "";
 
-  // ── Render ────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen">
       <div className="container py-6 max-w-7xl">
-        {/* Navigation */}
         <div className="flex items-center justify-between mb-5">
           <Link
             to="/events"
@@ -336,7 +334,6 @@ const EventDetail = () => {
           </div>
         </div>
 
-        {/* ── Event Header ── */}
         <div className="mb-6 rounded-2xl border border-border bg-card p-5">
           <div className="flex items-start gap-4 mb-4">
             {event.image && (
@@ -349,7 +346,6 @@ const EventDetail = () => {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold leading-snug">{title}</h1>
 
-              {/* Event timing & status */}
               <div className="flex flex-wrap items-center gap-2.5 mt-2">
                 {gameStartTime && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-lg px-2.5 py-1">
@@ -365,7 +361,6 @@ const EventDetail = () => {
                     </span>
                   </div>
                 )}
-                {/* Status badge */}
                 {eventUIStatus === "LIVE" && (
                   <span className="rounded-full bg-yes/15 border border-yes/30 px-3 py-1 text-xs font-bold font-mono text-yes inline-flex items-center gap-1.5">
                     <span className="relative flex h-2 w-2">
@@ -389,7 +384,6 @@ const EventDetail = () => {
             </div>
           </div>
 
-          {/* Live data badges */}
           {sportsSlug && (
             <div className="mb-3">
               <SportScoreBadge sportsSlug={sportsSlug} />
@@ -401,7 +395,6 @@ const EventDetail = () => {
             </div>
           )}
 
-          {/* Stats row — bold, prominent */}
           <div className="flex flex-wrap items-center gap-3 mb-3">
             <div className="flex items-center gap-2 rounded-xl bg-muted/70 border border-border px-4 py-2.5">
               <BarChart3 className="h-4 w-4 text-primary" />
@@ -426,7 +419,6 @@ const EventDetail = () => {
             </div>
           </div>
 
-          {/* Expandable description */}
           {description && (
             <div>
               <button
@@ -464,11 +456,8 @@ const EventDetail = () => {
           )}
         </div>
 
-        {/* ── Main Two-Column Layout ── */}
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left column */}
           <div className="flex-1 min-w-0 space-y-5">
-            {/* Price chart */}
             {selected && (
               <EventPriceChart
                 market={selected}
@@ -476,7 +465,6 @@ const EventDetail = () => {
               />
             )}
 
-            {/* Category tabs */}
             {hasMultipleGroups && (
               <ScrollArea className="w-full">
                 <div className="flex gap-1.5 pb-2">
@@ -512,14 +500,12 @@ const EventDetail = () => {
               </ScrollArea>
             )}
 
-            {/* Markets display */}
             {activeGroupId === "__all__" || !hasMultipleGroups ? (
               <div className="space-y-1">
-                {/* Leaderboard header */}
                 <div className="flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
                   <span className="w-6 shrink-0">#</span>
-                  <span className="flex-1">Market</span>
-                  <span className="w-12 text-right">Prob</span>
+                  <span className="flex-1">Candidate</span>
+                  <span className="w-14 text-right">Prob</span>
                   <span className="w-24 text-right">Yes / No</span>
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
@@ -539,7 +525,6 @@ const EventDetail = () => {
                 </div>
               </div>
             ) : (
-              /* Grid of market cards per group */
               <div className="space-y-5">
                 {(activeGroup ? [activeGroup] : groups).map((group) => (
                   <div key={group.id}>
@@ -570,12 +555,11 @@ const EventDetail = () => {
               </p>
             )}
 
-            {/* Orderbook + Trades */}
             {selected && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-xs text-muted-foreground truncate flex-1">
-                    <span className="text-foreground font-semibold">Selected:</span> {selected.question}
+                    <span className="text-foreground font-semibold">Selected:</span> {selectedDisplayLabel}
                   </p>
                 </div>
                 <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as any)}>
@@ -604,36 +588,42 @@ const EventDetail = () => {
             )}
           </div>
 
-          {/* ── Right column: Trading sidebar ── */}
           <div className="lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
                 <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
-                  <h3 className="text-sm font-bold mb-2 line-clamp-2">{selected.question}</h3>
+                  <h3 className="text-sm font-bold mb-2 line-clamp-2">{selectedDisplayLabel}</h3>
 
-                  {/* Large YES/NO display */}
                   <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 rounded-xl bg-yes/10 border border-yes/20 p-3 text-center">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Yes</p>
-                      <p className="text-xl font-bold font-mono text-yes">
-                        {selected.outcomePrices?.[0] !== undefined ? `${Math.round(selected.outcomePrices[0] * 100)}¢` : "—"}
-                      </p>
+                      {selectedYesPrice !== null ? (
+                        <p className="text-xl font-bold font-mono text-yes">
+                          {Math.round(selectedYesPrice * 100)}¢
+                        </p>
+                      ) : (
+                        <div className="mx-auto h-7 w-14 rounded bg-muted animate-pulse" />
+                      )}
                     </div>
                     <div className="flex-1 rounded-xl bg-no/10 border border-no/20 p-3 text-center">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">No</p>
-                      <p className="text-xl font-bold font-mono text-no">
-                        {selected.outcomePrices?.[1] !== undefined ? `${Math.round(selected.outcomePrices[1] * 100)}¢` : "—"}
-                      </p>
+                      {selectedNoPrice !== null ? (
+                        <p className="text-xl font-bold font-mono text-no">
+                          {Math.round(selectedNoPrice * 100)}¢
+                        </p>
+                      ) : (
+                        <div className="mx-auto h-7 w-14 rounded bg-muted animate-pulse" />
+                      )}
                     </div>
                   </div>
 
                   <OrderTicket
                     yesTokenId={yesTokenId}
                     noTokenId={noTokenId}
-                    yesPrice={selected.outcomePrices?.[0] ?? 0}
-                    noPrice={selected.outcomePrices?.[1] ?? 0}
+                    yesPrice={selectedYesPrice}
+                    noPrice={selectedNoPrice}
                     conditionId={selected.condition_id}
-                    isTradable={selected.statusLabel === "LIVE" && selected.outcomePrices?.[0] !== undefined && selected.outcomePrices?.[1] !== undefined}
+                    isTradable={selected.statusLabel === "LIVE" && selectedYesPrice !== null && selectedNoPrice !== null}
                   />
                 </div>
               ) : (
@@ -646,7 +636,6 @@ const EventDetail = () => {
                 </div>
               )}
 
-              {/* Quick links to other markets */}
               {tradableMarkets.length > 3 && selected && (
                 <div className="rounded-2xl border border-border bg-card p-4">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">
@@ -657,15 +646,15 @@ const EventDetail = () => {
                       .filter((m) => m.condition_id !== selectedConditionId)
                       .slice(0, 10)
                       .map((m) => {
-                        const p = m.outcomePrices?.[0] !== undefined ? Math.round(m.outcomePrices[0] * 100) : null;
+                        const p = m.outcomePrices?.[0] !== undefined ? Math.round(m.outcomePrices[0] * 1000) / 10 : null;
                         return (
                           <button
                             key={m.condition_id}
                             onClick={() => setSelectedConditionId(m.condition_id)}
                             className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted/60 transition-colors group"
                           >
-                            <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{m.question}</span>
-                            <span className="text-xs font-mono font-bold text-primary shrink-0">{p !== null ? `${p}¢` : "—"}</span>
+                            <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{extractEventMarketLabel(m.question)}</span>
+                            <span className="text-xs font-mono font-bold text-primary shrink-0">{p !== null ? `${p}%` : "—"}</span>
                           </button>
                         );
                       })}
