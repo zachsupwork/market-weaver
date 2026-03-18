@@ -675,8 +675,8 @@ const Trade = () => {
                 <OrderTicket
                   yesTokenId={yesTokenId}
                   noTokenId={noTokenId}
-                  yesPrice={yesPrice}
-                  noPrice={noPrice}
+                  yesPrice={yesPrice ?? 0}
+                  noPrice={noPrice ?? 0}
                   conditionId={conditionId}
                   isTradable={market.accepting_orders !== false && !market.closed && !hasMissingTokenIds}
                   yesPositionSize={yesPositionSize}
