@@ -183,7 +183,7 @@ export function OrderTicket({
       setLimitPrice("");
       setTimeInForce("GTC");
     } else {
-      setLimitPrice(hasMarketPrice ? (marketPrice as number).toFixed(2) : "");
+      setLimitPrice(hasMarketPrice ? (snappedMarketPrice as number).toFixed(2) : "");
     }
     setShowConfirm(false);
   }, [hasMarketPrice, marketPrice]);
