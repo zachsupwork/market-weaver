@@ -1,8 +1,8 @@
 import { useMarketStore } from "@/stores/useMarketStore";
-import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 interface Props {
   label: string;
@@ -10,8 +10,8 @@ interface Props {
   tokenId?: string;
   conditionId?: string;
   eventSlug?: string;
-  /** If true, show a compact Trade button */
   showTrade?: boolean;
+  rank?: number;
 }
 
 export function CandidatePreviewRow({
@@ -21,6 +21,7 @@ export function CandidatePreviewRow({
   conditionId,
   eventSlug,
   showTrade = false,
+  rank,
 }: Props) {
   const wsPrice = useMarketStore((s) =>
     tokenId ? s.assets[tokenId]?.lastTradePrice : null
@@ -48,14 +49,31 @@ export function CandidatePreviewRow({
     : "#";
 
   return (
-    <div className="flex items-center gap-2 py-0.5 group/row">
-      <span className="text-xs text-foreground truncate flex-1 min-w-0">
+    <div className="flex items-center gap-2.5 py-1 group/row rounded-md px-1.5 hover:bg-accent/50 transition-colors">
+      {rank !== undefined && (
+        <span className="text-[10px] font-mono text-muted-foreground w-4 text-right shrink-0">
+          {rank}
+        </span>
+      )}
+      <span className="text-xs font-medium text-foreground truncate flex-1 min-w-0">
         {label}
       </span>
-      <div className="w-14 shrink-0">
-        <Progress value={pct} className="h-1.5" />
+
+      {/* Probability bar */}
+      <div className="w-20 shrink-0">
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-500",
+              pct >= 50 ? "bg-yes" : "bg-no"
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+
+      {/* YES/NO prices */}
+      <div className="flex items-center gap-1.5 shrink-0">
         <AnimatePresence mode="popLayout">
           <motion.span
             key={pct}
@@ -63,22 +81,24 @@ export function CandidatePreviewRow({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.2 }}
-            className={`text-xs font-mono font-semibold ${
+            className={cn(
+              "text-sm font-mono font-bold tabular-nums",
               flash ? "text-primary" : "text-yes"
-            }`}
+            )}
           >
             {pct}¢
           </motion.span>
         </AnimatePresence>
-        <span className="text-[10px] font-mono text-muted-foreground/60">
-          /{100 - pct}¢
+        <span className="text-[10px] font-mono text-muted-foreground">
+          / {100 - pct}¢
         </span>
       </div>
+
       {showTrade && (
         <Link
           to={tradeUrl}
           onClick={(e) => e.stopPropagation()}
-          className="shrink-0 rounded bg-yes/15 border border-yes/25 px-1.5 py-0.5 text-[10px] font-semibold text-yes hover:bg-yes/25 transition-all opacity-70 group-hover/row:opacity-100"
+          className="shrink-0 rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-all opacity-0 group-hover/row:opacity-100"
         >
           Trade
         </Link>
