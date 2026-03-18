@@ -3,10 +3,11 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEventById, isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
-import { groupMarkets, type MarketGroup } from "@/lib/market-grouping";
+import { groupMarkets } from "@/lib/market-grouping";
 import { orderbookWsService } from "@/services/orderbook-ws.service";
 import { useMarketStore } from "@/stores/useMarketStore";
 import { EventMarketCard } from "@/components/markets/EventMarketCard";
+import { EventPriceChart } from "@/components/markets/EventPriceChart";
 import {
   ArrowLeft,
   Loader2,
@@ -17,10 +18,15 @@ import {
   Calendar,
   Layers,
   Share2,
+  Clock,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { LiveOrderbook } from "@/components/trading/LiveOrderbook";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import { OrderTicket } from "@/components/trading/OrderTicket";
@@ -29,6 +35,8 @@ import { CryptoPriceBadge } from "@/components/markets/CryptoPriceBadge";
 import { extractSportsSlug, extractCryptoSymbol } from "@/lib/live-data-utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+
+// ── Helpers ─────────────────────────────────────────────────────
 
 function formatVol(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -46,7 +54,23 @@ function timeUntil(dateStr: string): string {
   return `${hours}h ${mins}m`;
 }
 
-/** Leaderboard row for multi-outcome events (top candidates) */
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+// ── CandidateRow ────────────────────────────────────────────────
+
 function CandidateRow({
   market,
   rank,
@@ -100,6 +124,8 @@ function CandidateRow({
   );
 }
 
+// ── EventDetail ─────────────────────────────────────────────────
+
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const [searchParams] = useSearchParams();
@@ -107,70 +133,77 @@ const EventDetail = () => {
   const [selectedConditionId, setSelectedConditionId] = useState<string | null>(preselectedMarket);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
+  const [showDescription, setShowDescription] = useState(false);
+
+  // Live countdown ticker
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(iv);
+  }, []);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["polymarket-event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
     staleTime: 15_000,
-    refetchInterval: 30_000, // refresh every 30s for status updates
+    refetchInterval: 30_000,
   });
 
   const allMarkets = useMemo(() => {
     if (!event?.markets) return [];
-    return normalizeMarkets(event.markets)
-      .filter((m) => isBytes32Hex(m.condition_id));
+    return normalizeMarkets(event.markets).filter((m) => isBytes32Hex(m.condition_id));
   }, [event]);
 
-  // Tradable markets: LIVE or markets that are active (not just status === "LIVE")
   const tradableMarkets = useMemo(
-    () => allMarkets.filter((m) => m.statusLabel === "LIVE" || (m.active && !m.closed && !m.ended))
-      .sort((a, b) => (b.outcomePrices?.[0] ?? 0) - (a.outcomePrices?.[0] ?? 0)),
+    () =>
+      allMarkets
+        .filter((m) => m.statusLabel === "LIVE" || (m.active && !m.closed && !m.ended))
+        .sort((a, b) => (b.outcomePrices?.[0] ?? 0) - (a.outcomePrices?.[0] ?? 0)),
     [allMarkets]
   );
 
-  // Derive event-level UI status
   type EventUIStatus = "LIVE" | "UPCOMING" | "ENDED";
   const eventUIStatus: EventUIStatus = useMemo(() => {
-    // If event itself has resolved flag
     if (event?.resolved === true) return "ENDED";
-    // If all markets are ended/closed
-    if (allMarkets.length > 0 && allMarkets.every((m) => m.statusLabel === "ENDED" || m.statusLabel === "ARCHIVED" || m.statusLabel === "CLOSED")) return "ENDED";
-    // If any market is actively tradable
+    if (
+      allMarkets.length > 0 &&
+      allMarkets.every(
+        (m) => m.statusLabel === "ENDED" || m.statusLabel === "ARCHIVED" || m.statusLabel === "CLOSED"
+      )
+    )
+      return "ENDED";
     if (tradableMarkets.length > 0) return "LIVE";
-    // Check if event has a future start/end date
-    const endDate = event?.endDate || event?.end_date_iso;
-    if (endDate && new Date(endDate).getTime() > Date.now()) return "UPCOMING";
+    const ed = event?.endDate || event?.end_date_iso;
+    if (ed && new Date(ed).getTime() > Date.now()) return "UPCOMING";
     return "ENDED";
   }, [event, allMarkets, tradableMarkets]);
 
   const groups = useMemo(() => groupMarkets(tradableMarkets), [tradableMarkets]);
 
-  // Auto-select first group
   useEffect(() => {
-    if (groups.length > 0 && !activeGroupId) {
-      setActiveGroupId(groups[0].id);
-    }
+    if (groups.length > 0 && !activeGroupId) setActiveGroupId(groups[0].id);
   }, [groups, activeGroupId]);
 
-  // Auto-select first market (only if none pre-selected via query param)
   useEffect(() => {
     if (tradableMarkets.length > 0 && !selectedConditionId) {
       setSelectedConditionId(tradableMarkets[0].condition_id);
     }
-    // If preselected market exists, validate it's in the list
-    if (preselectedMarket && tradableMarkets.length > 0 && !tradableMarkets.find(m => m.condition_id === preselectedMarket)) {
+    if (
+      preselectedMarket &&
+      tradableMarkets.length > 0 &&
+      !tradableMarkets.find((m) => m.condition_id === preselectedMarket)
+    ) {
       setSelectedConditionId(tradableMarkets[0].condition_id);
     }
   }, [tradableMarkets, selectedConditionId, preselectedMarket]);
 
-  // Reset on event change
   useEffect(() => {
     setSelectedConditionId(null);
     setActiveGroupId(null);
   }, [eventId]);
 
-  // Subscribe all token IDs to WebSocket
+  // WebSocket subscriptions
   useEffect(() => {
     if (tradableMarkets.length === 0) return;
     const tokenIds = new Set<string>();
@@ -191,6 +224,8 @@ const EventDetail = () => {
     toast.success("Link copied to clipboard");
   };
 
+  // ── Loading / Error ───────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-24">
@@ -210,30 +245,37 @@ const EventDetail = () => {
     );
   }
 
+  // ── Derived data ──────────────────────────────────────────────
+
   const title = event.title || event.question || "Untitled Event";
   const pmSlug = event.slug || eventId;
   const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : null;
   const totalVol = allMarkets.reduce((s, m) => s + m.totalVolume, 0);
   const totalLiq = allMarkets.reduce((s, m) => s + m.liquidity, 0);
-
-  // Live data badges
   const sportsSlug = extractSportsSlug(tradableMarkets[0]?.tags, pmSlug || "");
   const cryptoSym = extractCryptoSymbol(title, tradableMarkets[0]?.tags);
-
-  // Determine if this is a simple multi-outcome (like "Who will win?") or complex with groups
   const hasMultipleGroups = groups.length > 1;
   const activeGroup = groups.find((g) => g.id === activeGroupId) ?? groups[0];
 
-  // Get the earliest end date from markets
+  // Dates
   const endDate = allMarkets
     .map((m) => m.end_date_iso)
     .filter(Boolean)
     .sort()[0];
+  const gameStartTime = allMarkets
+    .map((m) => m.game_start_time)
+    .filter(Boolean)
+    .sort()[0];
+
+  const description = event.description || "";
+  const resolutionSource = event.resolution_source || event.resolutionSource || "";
+
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen">
       <div className="container py-6 max-w-7xl">
-        {/* Navigation bar */}
+        {/* Navigation */}
         <div className="flex items-center justify-between mb-4">
           <Link
             to="/events"
@@ -262,26 +304,73 @@ const EventDetail = () => {
           </div>
         </div>
 
-        {/* Event header */}
-        <div className="mb-6">
+        {/* ── Event Header ── */}
+        <div className="mb-5">
           <div className="flex items-start gap-4 mb-3">
             {event.image && (
-              <img src={event.image} alt="" className="h-14 w-14 rounded-xl bg-muted shrink-0 object-cover" />
+              <img
+                src={event.image}
+                alt=""
+                className="h-14 w-14 rounded-xl bg-muted shrink-0 object-cover"
+              />
             )}
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold leading-snug">{title}</h1>
-              {event.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{event.description}</p>
-              )}
+
+              {/* Event timing */}
+              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                {gameStartTime && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    <span>{formatDate(gameStartTime)}</span>
+                  </div>
+                )}
+                {endDate && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      {eventUIStatus === "ENDED" ? "Ended" : `Ends ${timeUntil(endDate)}`}
+                    </span>
+                  </div>
+                )}
+                {/* Status badge */}
+                {eventUIStatus === "LIVE" && (
+                  <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes inline-flex items-center gap-1">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-yes" />
+                    </span>
+                    LIVE
+                  </span>
+                )}
+                {eventUIStatus === "UPCOMING" && (
+                  <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-primary">
+                    UPCOMING
+                  </span>
+                )}
+                {eventUIStatus === "ENDED" && (
+                  <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive">
+                    ENDED
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Live data badges */}
-          {sportsSlug && <div className="mb-3"><SportScoreBadge sportsSlug={sportsSlug} /></div>}
-          {cryptoSym && <div className="mb-3"><CryptoPriceBadge symbol={cryptoSym} /></div>}
+          {sportsSlug && (
+            <div className="mb-3">
+              <SportScoreBadge sportsSlug={sportsSlug} />
+            </div>
+          )}
+          {cryptoSym && (
+            <div className="mb-3">
+              <CryptoPriceBadge symbol={cryptoSym} />
+            </div>
+          )}
 
           {/* Stats row */}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-2">
             <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
               <BarChart3 className="h-3 w-3" />
               <span className="font-mono text-foreground">{formatVol(totalVol)}</span>
@@ -297,78 +386,95 @@ const EventDetail = () => {
               <span className="font-mono text-foreground">{tradableMarkets.length}</span>
               <span>market{tradableMarkets.length !== 1 ? "s" : ""}</span>
             </div>
-            {endDate && (
-              <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
-                <Calendar className="h-3 w-3" />
-                <span className="font-mono text-foreground">{timeUntil(endDate)}</span>
-              </div>
-            )}
-            {eventUIStatus === "LIVE" && (
-              <span className="rounded-full bg-yes/10 border border-yes/20 px-2 py-0.5 text-[10px] font-mono text-yes inline-flex items-center gap-1">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-yes" />
-                </span>
-                LIVE
-              </span>
-            )}
-            {eventUIStatus === "UPCOMING" && (
-              <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-primary">
-                UPCOMING
-              </span>
-            )}
-            {eventUIStatus === "ENDED" && (
-              <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono text-destructive">
-                ENDED
-              </span>
-            )}
           </div>
+
+          {/* Expandable description */}
+          {description && (
+            <div className="mt-1">
+              <button
+                onClick={() => setShowDescription((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Info className="h-3 w-3" />
+                <span>Event details</span>
+                {showDescription ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
+              {showDescription && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mt-2 rounded-lg bg-muted/50 border border-border p-3"
+                >
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {description}
+                  </p>
+                  {resolutionSource && (
+                    <p className="text-[10px] text-muted-foreground/60 mt-2">
+                      Resolution source: {resolutionSource}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Main two-column layout */}
+        {/* ── Main Two-Column Layout ── */}
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left column: Market groups */}
-          <div className="flex-1 min-w-0">
+          {/* Left column */}
+          <div className="flex-1 min-w-0 space-y-5">
+            {/* Price chart */}
+            {selected && (
+              <EventPriceChart
+                market={selected}
+                allMarkets={tradableMarkets}
+              />
+            )}
 
-            {/* Category tabs (only if multiple groups) */}
+            {/* Category tabs */}
             {hasMultipleGroups && (
-              <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-                {groups.map((g) => (
+              <ScrollArea className="w-full">
+                <div className="flex gap-1 pb-2">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => setActiveGroupId(g.id)}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all",
+                        activeGroupId === g.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {g.label}
+                      <span className="ml-1 opacity-60">({g.markets.length})</span>
+                    </button>
+                  ))}
                   <button
-                    key={g.id}
-                    onClick={() => setActiveGroupId(g.id)}
+                    onClick={() => setActiveGroupId("__all__")}
                     className={cn(
                       "rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all",
-                      activeGroupId === g.id
+                      activeGroupId === "__all__"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {g.label}
-                    <span className="ml-1 opacity-60">({g.markets.length})</span>
+                    All
+                    <span className="ml-1 opacity-60">({tradableMarkets.length})</span>
                   </button>
-                ))}
-                {/* "All" button */}
-                <button
-                  onClick={() => setActiveGroupId("__all__")}
-                  className={cn(
-                    "rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all",
-                    activeGroupId === "__all__"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  All
-                  <span className="ml-1 opacity-60">({tradableMarkets.length})</span>
-                </button>
-              </div>
+                </div>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             )}
 
             {/* Markets display */}
             {activeGroupId === "__all__" || !hasMultipleGroups ? (
-              /* Leaderboard view for all markets or single-group events */
-              <div className="space-y-0.5 mb-4">
-                {/* Header */}
+              <div className="space-y-0.5">
                 <div className="flex items-center gap-3 px-3 py-1.5 text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
                   <span className="w-5 shrink-0">#</span>
                   <span className="flex-1">Market</span>
@@ -377,8 +483,11 @@ const EventDetail = () => {
                   <span className="w-10 text-right hidden sm:block">No</span>
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
-                <div className="max-h-[55vh] overflow-y-auto space-y-0.5">
-                  {(activeGroupId === "__all__" ? tradableMarkets : (activeGroup?.markets ?? tradableMarkets)).map((m, idx) => (
+                <div className="max-h-[50vh] overflow-y-auto space-y-0.5">
+                  {(activeGroupId === "__all__"
+                    ? tradableMarkets
+                    : activeGroup?.markets ?? tradableMarkets
+                  ).map((m, idx) => (
                     <CandidateRow
                       key={m.condition_id}
                       market={m}
@@ -390,36 +499,54 @@ const EventDetail = () => {
                 </div>
               </div>
             ) : (
-              /* Card grid for categorized groups */
-              <div className="grid gap-2 sm:grid-cols-2 mb-4 max-h-[55vh] overflow-y-auto">
-                {(activeGroup?.markets ?? []).map((m) => (
-                  <EventMarketCard
-                    key={m.condition_id}
-                    market={m}
-                    selected={m.condition_id === selectedConditionId}
-                    onSelect={() => setSelectedConditionId(m.condition_id)}
-                  />
+              /* Horizontal scrollable rows per group */
+              <div className="space-y-4">
+                {(activeGroup ? [activeGroup] : groups).map((group) => (
+                  <div key={group.id}>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                      {group.label}
+                    </h3>
+                    <ScrollArea className="w-full">
+                      <div className="flex gap-2 pb-2">
+                        {group.markets.map((m) => (
+                          <div key={m.condition_id} className="shrink-0 w-64">
+                            <EventMarketCard
+                              market={m}
+                              selected={m.condition_id === selectedConditionId}
+                              onSelect={() => setSelectedConditionId(m.condition_id)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
+                  </div>
                 ))}
               </div>
             )}
 
             {tradableMarkets.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No live markets for this event.</p>
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No live markets for this event.
+              </p>
             )}
 
-            {/* Orderbook + Trades tabs for selected market */}
+            {/* Orderbook + Trades */}
             {selected && (
-              <div className="mt-2">
+              <div>
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-xs text-muted-foreground truncate flex-1">
-                    <span className="text-foreground font-medium">Selected:</span>{" "}
-                    {selected.question}
+                    <span className="text-foreground font-medium">Selected:</span> {selected.question}
                   </p>
                 </div>
                 <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as any)}>
                   <TabsList className="w-full">
-                    <TabsTrigger value="orderbook" className="flex-1">Orderbook</TabsTrigger>
-                    <TabsTrigger value="trades" className="flex-1">Activity</TabsTrigger>
+                    <TabsTrigger value="orderbook" className="flex-1">
+                      Orderbook
+                    </TabsTrigger>
+                    <TabsTrigger value="trades" className="flex-1">
+                      Activity
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="orderbook" className="mt-3">
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -438,7 +565,7 @@ const EventDetail = () => {
             )}
           </div>
 
-          {/* Right column: Trading sidebar */}
+          {/* ── Right column: Trading sidebar ── */}
           <div className="lg:w-80 shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
@@ -468,10 +595,12 @@ const EventDetail = () => {
                 </div>
               )}
 
-              {/* Quick links to other markets in event */}
+              {/* Quick links to other markets */}
               {tradableMarkets.length > 3 && selected && (
                 <div className="rounded-xl border border-border bg-card p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Other Markets</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+                    Other Markets
+                  </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {tradableMarkets
                       .filter((m) => m.condition_id !== selectedConditionId)
