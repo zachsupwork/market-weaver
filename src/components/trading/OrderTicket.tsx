@@ -112,9 +112,10 @@ export function OrderTicket({
   const shares = useMemo(() => effectivePrice > 0 ? amount / effectivePrice : 0, [amount, effectivePrice]);
   const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
   const feeEnabled = isFeeEnabled();
-  const potentialReturn = isBuy
-    ? (shares * (1 - effectivePrice)).toFixed(2)
-    : (shares * effectivePrice).toFixed(2);
+  // Polymarket formula: each winning share redeems for $1
+  const potentialPayout = shares; // shares × $1
+  const potentialProfit = isBuy ? potentialPayout - amount : shares * effectivePrice;
+  const returnPct = amount > 0 && isBuy ? ((potentialPayout / amount) - 1) * 100 : 0;
 
   const hasInsufficientBalance = isBuy && amount > readiness.usdc.usdcBalance;
   const hasInsufficientShares = !isBuy && shares > availableShares;
@@ -814,10 +815,23 @@ export function OrderTicket({
             <span className="text-muted-foreground">Est. Shares</span>
             <span className="font-mono text-foreground">{shares.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">{isBuy ? "Potential Return" : "Est. Proceeds"}</span>
-            <span className="font-mono text-yes">+${potentialReturn}</span>
-          </div>
+          {isBuy ? (
+            <>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Payout if {outcome}</span>
+                <span className="font-mono text-foreground">${potentialPayout.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Potential Profit</span>
+                <span className="font-mono text-yes">+${potentialProfit.toFixed(2)} ({returnPct > 0 ? `+${returnPct.toFixed(0)}%` : "0%"})</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Est. Proceeds</span>
+              <span className="font-mono text-yes">+${potentialProfit.toFixed(2)}</span>
+            </div>
+          )}
           {feeEnabled && platformFee > 0 && isBuy && (
             <>
               <div className="border-t border-border my-1" />
