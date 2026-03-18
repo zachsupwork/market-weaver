@@ -1,0 +1,1 @@
+ALTER TABLE public.polymarket_user_creds DROP CONSTRAINT IF EXISTS polymarket_user_creds_user_id_fkey;
