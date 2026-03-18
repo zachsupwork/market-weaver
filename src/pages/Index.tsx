@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useFeaturedEvents, type FeaturedEvent } from "@/hooks/useFeaturedEvents";
 import { Link } from "react-router-dom";
 import {
@@ -178,8 +180,21 @@ const Index = () => {
     return items;
   }, [liveMarkets, filteredEvents]);
 
-  const totalVol = useMemo(() => allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0), [allMarkets]);
-  const totalLiq = useMemo(() => allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0), [allMarkets]);
+  // Live global stats from edge function
+  const { data: globalStats } = useQuery({
+    queryKey: ["polymarket-global-stats"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("polymarket-global-stats");
+      if (error) throw error;
+      return data as { marketCount: number; totalVolume24h: number; totalLiquidity: number };
+    },
+    staleTime: 30_000,
+    refetchInterval: 45_000,
+  });
+
+  const totalVol = globalStats?.totalVolume24h ?? allMarkets.reduce((s, m) => s + (m.volume24h || 0), 0);
+  const totalLiq = globalStats?.totalLiquidity ?? allMarkets.reduce((s, m) => s + (m.liquidity || 0), 0);
+  const marketCount = globalStats?.marketCount ?? allMarkets.length;
 
   return (
     <div className="min-h-screen">
@@ -200,38 +215,36 @@ const Index = () => {
         </div>
 
         {/* Stats cards */}
-        {allMarkets.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="h-4 w-4 text-primary" />
-                <span className="text-xs text-muted-foreground font-medium">Markets</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{allMarkets.length}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Markets</span>
             </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <BarChart3 className="h-4 w-4 text-yes" />
-                <span className="text-xs text-muted-foreground font-medium">24h Volume</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-yes">{formatVol(totalVol)}</span>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                <span className="text-xs text-muted-foreground font-medium">Liquidity</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{formatVol(totalLiq)}</span>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-              <div className="flex items-center gap-2 mb-1">
-                <Flame className="h-4 w-4 text-warning" />
-                <span className="text-xs text-muted-foreground font-medium">Events</span>
-              </div>
-              <span className="font-mono text-2xl font-extrabold text-foreground">{filteredEvents.length}</span>
-            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{marketCount.toLocaleString()}</span>
           </div>
-        )}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="h-4 w-4 text-yes" />
+              <span className="text-xs text-muted-foreground font-medium">24h Volume</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-yes">{formatVol(totalVol)}</span>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Liquidity</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{formatVol(totalLiq)}</span>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <Flame className="h-4 w-4 text-warning" />
+              <span className="text-xs text-muted-foreground font-medium">Events</span>
+            </div>
+            <span className="font-mono text-2xl font-extrabold text-foreground">{filteredEvents.length}</span>
+          </div>
+        </div>
 
         {/* Quick links */}
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 mb-8">
