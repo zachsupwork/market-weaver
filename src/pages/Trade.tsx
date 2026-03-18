@@ -501,8 +501,14 @@ const Trade = () => {
                     )}
                   </div>
                   <div className="text-right">
-                    <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
-                    <span className="block text-[10px] text-muted-foreground">{Math.round(p * 100)}% chance</span>
+                    {p > 0 ? (
+                      <>
+                        <span className="font-mono text-2xl font-bold">{Math.round(p * 100)}¢</span>
+                        <span className="block text-[10px] text-muted-foreground">{Math.round(p * 100)}% chance</span>
+                      </>
+                    ) : (
+                      <div className="h-8 w-12 rounded bg-muted animate-pulse" />
+                    )}
                   </div>
                 </div>
               </button>
