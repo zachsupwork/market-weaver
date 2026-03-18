@@ -113,6 +113,13 @@ const Trade = () => {
     retry: 2,
   });
 
+  // Redirect to event page when parent event exists (shows all sibling markets)
+  useEffect(() => {
+    if (market?.event_slug && conditionId) {
+      navigate(`/events/${market.event_slug}?market=${conditionId}`, { replace: true });
+    }
+  }, [market?.event_slug, conditionId, navigate]);
+
   const tokenIds = market?.clobTokenIds ?? [];
   const currentTokenId = tokenIds[selectedOutcome] || "";
 
