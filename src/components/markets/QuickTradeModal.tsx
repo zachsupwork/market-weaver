@@ -120,15 +120,22 @@ export function QuickTradeModal({ market, initialOutcome, onClose }: QuickTradeM
 
             {/* Summary */}
             {amount > 0 && (
-              <div className="space-y-1 mb-3 text-xs px-1">
+              <div className="space-y-1.5 mb-3 text-xs px-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Est. Shares</span>
                   <span className="font-mono">{shares.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Potential Return</span>
-                  <span className="font-mono text-yes">+${potentialReturn.toFixed(2)}</span>
+                  <span className="text-muted-foreground">Payout if {outcomes[selectedOutcome]}</span>
+                  <span className="font-mono">${potentialPayout.toFixed(2)}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Potential Profit</span>
+                  <span className="font-mono text-yes">+${potentialProfit.toFixed(2)} (+{returnPct.toFixed(0)}%)</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 mt-1">
+                  Price = probability. Lower price → higher return if outcome occurs.
+                </p>
               </div>
             )}
 
