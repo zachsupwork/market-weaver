@@ -270,6 +270,29 @@ const Trade = () => {
       .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
   }, [userPositions, tokenIds]);
 
+  // When market not found, try to find the parent event via Gamma API
+  const { data: fallbackEvent, isLoading: fallbackLoading } = useQuery({
+    queryKey: ["fallback-event-lookup", conditionId],
+    queryFn: async () => {
+      const res = await fetch(`https://gamma-api.polymarket.com/markets?condition_id=${conditionId}`);
+      if (!res.ok) return null;
+      const markets = await res.json();
+      const m = Array.isArray(markets) ? markets[0] : markets;
+      if (m?.events?.[0]?.slug) return m.events[0].slug as string;
+      return null;
+    },
+    enabled: !isLoading && !market && isValidId,
+    retry: 1,
+    staleTime: 60_000,
+  });
+
+  // Auto-redirect to event page if fallback found
+  useEffect(() => {
+    if (fallbackEvent && conditionId) {
+      navigate(`/events/${fallbackEvent}?market=${conditionId}`, { replace: true });
+    }
+  }, [fallbackEvent, conditionId, navigate]);
+
   if (!conditionId || conditionId === "undefined" || !isValidId) {
     return (
       <div className="container py-16 text-center">
@@ -288,7 +311,7 @@ const Trade = () => {
     );
   }
 
-  if (isLoading) {
+  if (isLoading || (!market && fallbackLoading) || (!market && fallbackEvent)) {
     return (
       <div className="flex justify-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
