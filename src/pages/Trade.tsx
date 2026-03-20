@@ -288,14 +288,6 @@ const Trade = () => {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   // When market not found, try to find the parent event via Gamma API
   const { data: fallbackEvent, isLoading: fallbackLoading } = useQuery({
     queryKey: ["fallback-event-lookup", conditionId],
@@ -319,7 +311,7 @@ const Trade = () => {
     }
   }, [fallbackEvent, conditionId, navigate]);
 
-  if (!market && (isLoading || fallbackLoading || fallbackEvent)) {
+  if (isLoading || (!market && fallbackLoading) || (!market && fallbackEvent)) {
     return (
       <div className="flex justify-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
