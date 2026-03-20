@@ -14,6 +14,167 @@ export type Database = {
   }
   public: {
     Tables: {
+      bot_config: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          enabled_categories: string[]
+          id: string
+          max_bet_percent: number
+          min_edge: number
+          simulation_mode: boolean
+          updated_at: string
+          user_address: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          enabled_categories?: string[]
+          id?: string
+          max_bet_percent?: number
+          min_edge?: number
+          simulation_mode?: boolean
+          updated_at?: string
+          user_address: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          enabled_categories?: string[]
+          id?: string
+          max_bet_percent?: number
+          min_edge?: number
+          simulation_mode?: boolean
+          updated_at?: string
+          user_address?: string
+        }
+        Relationships: []
+      }
+      bot_opportunities: {
+        Row: {
+          ai_probability: number
+          ai_reasoning: string | null
+          category: string | null
+          condition_id: string
+          created_at: string
+          edge: number
+          executed: boolean
+          expires_at: string
+          id: string
+          market_id: string
+          market_price: number
+          outcome: string
+          question: string
+          status: string
+          user_address: string
+        }
+        Insert: {
+          ai_probability: number
+          ai_reasoning?: string | null
+          category?: string | null
+          condition_id: string
+          created_at?: string
+          edge: number
+          executed?: boolean
+          expires_at?: string
+          id?: string
+          market_id: string
+          market_price: number
+          outcome?: string
+          question: string
+          status?: string
+          user_address: string
+        }
+        Update: {
+          ai_probability?: number
+          ai_reasoning?: string | null
+          category?: string | null
+          condition_id?: string
+          created_at?: string
+          edge?: number
+          executed?: boolean
+          expires_at?: string
+          id?: string
+          market_id?: string
+          market_price?: number
+          outcome?: string
+          question?: string
+          status?: string
+          user_address?: string
+        }
+        Relationships: []
+      }
+      bot_trades: {
+        Row: {
+          condition_id: string
+          created_at: string
+          current_price: number | null
+          entry_price: number
+          error_message: string | null
+          id: string
+          market_id: string
+          opportunity_id: string | null
+          order_id: string | null
+          outcome: string
+          pnl: number | null
+          question: string
+          side: string
+          simulation: boolean
+          size: number
+          status: string
+          updated_at: string
+          user_address: string
+        }
+        Insert: {
+          condition_id: string
+          created_at?: string
+          current_price?: number | null
+          entry_price: number
+          error_message?: string | null
+          id?: string
+          market_id: string
+          opportunity_id?: string | null
+          order_id?: string | null
+          outcome?: string
+          pnl?: number | null
+          question: string
+          side?: string
+          simulation?: boolean
+          size: number
+          status?: string
+          updated_at?: string
+          user_address: string
+        }
+        Update: {
+          condition_id?: string
+          created_at?: string
+          current_price?: number | null
+          entry_price?: number
+          error_message?: string | null
+          id?: string
+          market_id?: string
+          opportunity_id?: string | null
+          order_id?: string | null
+          outcome?: string
+          pnl?: number | null
+          question?: string
+          side?: string
+          simulation?: boolean
+          size?: number
+          status?: string
+          updated_at?: string
+          user_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_trades_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "bot_opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_comments: {
         Row: {
           body: string
