@@ -270,24 +270,6 @@ const Trade = () => {
       .reduce((sum: number, p: any) => sum + parseFloat(p.size || "0"), 0);
   }, [userPositions, tokenIds]);
 
-  if (!conditionId || conditionId === "undefined" || !isValidId) {
-    return (
-      <div className="container py-16 text-center">
-        <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-4" />
-        <p className="text-lg font-semibold text-destructive">Invalid Market ID</p>
-        <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-          This link does not contain a valid Polymarket condition_id (must be 0x + 64 hex characters).
-          {conditionId && (
-            <span className="block mt-1 font-mono text-[10px] break-all">Received: {conditionId}</span>
-          )}
-        </p>
-        <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm mt-4 hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to Live Markets
-        </Link>
-      </div>
-    );
-  }
-
   // When market not found, try to find the parent event via Gamma API
   const { data: fallbackEvent, isLoading: fallbackLoading } = useQuery({
     queryKey: ["fallback-event-lookup", conditionId],
@@ -310,6 +292,24 @@ const Trade = () => {
       navigate(`/events/${fallbackEvent}?market=${conditionId}`, { replace: true });
     }
   }, [fallbackEvent, conditionId, navigate]);
+
+  if (!conditionId || conditionId === "undefined" || !isValidId) {
+    return (
+      <div className="container py-16 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-4" />
+        <p className="text-lg font-semibold text-destructive">Invalid Market ID</p>
+        <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+          This link does not contain a valid Polymarket condition_id (must be 0x + 64 hex characters).
+          {conditionId && (
+            <span className="block mt-1 font-mono text-[10px] break-all">Received: {conditionId}</span>
+          )}
+        </p>
+        <Link to="/live" className="inline-flex items-center gap-1.5 text-primary text-sm mt-4 hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Back to Live Markets
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading || (!market && fallbackLoading) || (!market && fallbackEvent)) {
     return (
