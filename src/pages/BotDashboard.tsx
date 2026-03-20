@@ -426,7 +426,7 @@ export default function BotDashboard() {
                   {pendingOpps.map((opp) => (
                     <TableRow key={opp.id}>
                       <TableCell className="max-w-[200px]">
-                        <Link to={`/trade/${opp.condition_id}`} className="text-sm hover:text-primary truncate block">
+                        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
                           {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
                         </Link>
                         {opp.ai_reasoning && (
