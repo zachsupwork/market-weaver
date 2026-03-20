@@ -92,6 +92,7 @@ export type Database = {
           executed: boolean
           expires_at: string
           external_data: Json | null
+          external_url: string | null
           id: string
           market_id: string
           market_price: number
@@ -112,6 +113,7 @@ export type Database = {
           executed?: boolean
           expires_at?: string
           external_data?: Json | null
+          external_url?: string | null
           id?: string
           market_id: string
           market_price: number
@@ -132,6 +134,7 @@ export type Database = {
           executed?: boolean
           expires_at?: string
           external_data?: Json | null
+          external_url?: string | null
           id?: string
           market_id?: string
           market_price?: number
