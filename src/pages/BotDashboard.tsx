@@ -42,6 +42,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+/** Build the best link for a bot opportunity or trade */
+function botMarketLink(item: { event_slug?: string | null; condition_id: string }) {
+  if (item.event_slug) return `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`;
+  return `/trade/${encodeURIComponent(item.condition_id)}`;
+}
 import {
   useBotConfig,
   useBotOpportunities,
@@ -420,7 +426,7 @@ export default function BotDashboard() {
                   {pendingOpps.map((opp) => (
                     <TableRow key={opp.id}>
                       <TableCell className="max-w-[200px]">
-                        <Link to={`/trade/${opp.condition_id}`} className="text-sm hover:text-primary truncate block">
+                        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
                           {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
                         </Link>
                         {opp.ai_reasoning && (
@@ -449,7 +455,7 @@ export default function BotDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to={`/trade/${opp.condition_id}`}><ArrowUpRight className="h-4 w-4" /></Link>
+                          <Link to={botMarketLink(opp)}><ArrowUpRight className="h-4 w-4" /></Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -529,7 +535,7 @@ export default function BotDashboard() {
                     return (
                       <TableRow key={trade.id}>
                         <TableCell className="max-w-[200px]">
-                          <Link to={`/trade/${trade.condition_id}`} className="text-sm hover:text-primary truncate block">
+                          <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
                             {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
                           </Link>
                         </TableCell>
@@ -631,7 +637,7 @@ export default function BotDashboard() {
                   {trades.map((trade) => (
                     <TableRow key={trade.id}>
                       <TableCell className="max-w-[200px]">
-                        <Link to={`/trade/${trade.condition_id}`} className="text-sm hover:text-primary truncate block">
+                        <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
                           {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
                         </Link>
                       </TableCell>
@@ -895,7 +901,7 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
   return (
     <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <Link to={`/trade/${opp.condition_id}`} className="text-sm hover:text-primary truncate block">
+        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
           {opp.question.length > 50 ? opp.question.substring(0, 50) + "…" : opp.question}
         </Link>
         <div className="flex items-center gap-2 mt-0.5">

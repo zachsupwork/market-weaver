@@ -43,6 +43,7 @@ export interface BotOpportunity {
   expires_at: string;
   token_id: string | null;
   external_data: any;
+  event_slug: string | null;
 }
 
 export interface BotTrade {

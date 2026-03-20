@@ -93,6 +93,14 @@ serve(async (req) => {
       const yesPrice = prices[0];
       if (isNaN(yesPrice) || yesPrice <= 0.03 || yesPrice >= 0.97) continue;
 
+      // Extract event slug if available
+      let eventSlug: string | null = null;
+      if (Array.isArray(m.events) && m.events.length > 0 && m.events[0].slug) {
+        eventSlug = m.events[0].slug;
+      } else if (m.eventSlug) {
+        eventSlug = m.eventSlug;
+      }
+
       // Normalize the market object for downstream use
       candidates.push({
         ...m,
@@ -100,6 +108,7 @@ serve(async (req) => {
         _yesPrice: yesPrice,
         _parsedPrices: prices,
         _tokenIds: parseClobTokenIds(m.clobTokenIds),
+        _eventSlug: eventSlug,
       });
 
       if (candidates.length >= MAX_AI_CALLS) break;
@@ -171,6 +180,7 @@ serve(async (req) => {
             status: "pending",
             executed: false,
             token_id: tokenId || null,
+            event_slug: market._eventSlug || null,
           });
 
           console.log(`[bot-scan] ✓ Opportunity: ${market.question?.substring(0, 50)} edge=${Math.abs(edge).toFixed(3)}`);
