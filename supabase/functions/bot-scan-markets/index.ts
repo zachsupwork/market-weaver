@@ -40,42 +40,84 @@ serve(async (req) => {
 
     const minEdge = config.min_edge || 0.05;
     const categories = config.enabled_categories || [];
+    const maxMarkets = config.max_markets_to_scan || 200;
 
-    // Fetch active markets from Gamma
-    const marketsRes = await fetch(`${GAMMA_HOST}/markets?closed=false&limit=100&order=volume&ascending=false`);
-    if (!marketsRes.ok) {
-      const t = await marketsRes.text();
-      return jsonResp({ error: `Gamma API error: ${marketsRes.status}` }, 502);
+    // Fetch active markets with pagination
+    const allMarkets: any[] = [];
+    const batchSize = 50;
+    let offset = 0;
+
+    while (allMarkets.length < maxMarkets) {
+      const limit = Math.min(batchSize, maxMarkets - allMarkets.length);
+      const marketsRes = await fetch(
+        `${GAMMA_HOST}/markets?closed=false&limit=${limit}&offset=${offset}&order=volume&ascending=false`
+      );
+      if (!marketsRes.ok) {
+        console.error(`[bot-scan] Gamma API error at offset ${offset}: ${marketsRes.status}`);
+        break;
+      }
+      const batch = await marketsRes.json();
+      if (!Array.isArray(batch) || batch.length === 0) break;
+
+      allMarkets.push(...batch);
+      offset += batch.length;
+
+      // Rate limit between pagination calls
+      if (batch.length === limit) {
+        await new Promise(r => setTimeout(r, 300));
+      } else {
+        break; // No more markets
+      }
     }
-    const markets = await marketsRes.json();
 
-    // Get Supabase function URL for AI analysis
+    console.log(`[bot-scan] Fetched ${allMarkets.length} markets for ${userAddress}`);
+
+    // Get Supabase function URL for AI analysis and external data
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     const opportunities: any[] = [];
     const errors: string[] = [];
+    let scanned = 0;
 
-    // Analyze top markets (limit to avoid rate limits)
-    const marketsToAnalyze = (Array.isArray(markets) ? markets : []).slice(0, 20);
-
-    for (const market of marketsToAnalyze) {
+    for (const market of allMarkets) {
       if (!market.outcomePrices || !market.condition_id) continue;
 
       const yesPrice = parseFloat(market.outcomePrices?.[0] || "0");
       if (yesPrice <= 0.02 || yesPrice >= 0.98) continue; // Skip near-certain markets
 
+      scanned++;
+
       try {
+        // Fetch external data first
+        let externalData: any = null;
+        try {
+          const extRes = await fetch(`${supabaseUrl}/functions/v1/fetch-external-data`, {
+            method: "POST",
+            headers: { "apikey": supabaseAnonKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ market }),
+          });
+          if (extRes.ok) {
+            const extBody = await extRes.json();
+            if (extBody.ok) externalData = extBody.data;
+          }
+        } catch (e) {
+          console.warn(`[bot-scan] External data fetch failed for ${market.condition_id}:`, (e as any).message);
+        }
+
+        // Call AI analysis with external data
         const aiRes = await fetch(`${supabaseUrl}/functions/v1/ai-analyze-market`, {
           method: "POST",
-          headers: {
-            "apikey": supabaseAnonKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ market }),
+          headers: { "apikey": supabaseAnonKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ market, externalData }),
         });
 
         if (!aiRes.ok) {
+          if (aiRes.status === 429) {
+            console.warn("[bot-scan] Rate limited, pausing...");
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+          }
           errors.push(`AI analysis failed for ${market.condition_id}: ${aiRes.status}`);
           continue;
         }
@@ -90,6 +132,10 @@ serve(async (req) => {
         if (categories.length > 0 && aiData.category && !categories.includes(aiData.category)) continue;
 
         if (Math.abs(edge) >= minEdge) {
+          // Extract token IDs
+          const tokenIds = market.clobTokenIds || [];
+          const tokenId = edge > 0 ? tokenIds[0] : tokenIds[1]; // YES token if bullish, NO if bearish
+
           const opportunity = {
             user_address: userAddress.toLowerCase(),
             market_id: market.id || market.condition_id,
@@ -103,13 +149,15 @@ serve(async (req) => {
             category: aiData.category,
             status: "pending",
             executed: false,
+            token_id: tokenId || null,
+            external_data: externalData,
           };
 
           opportunities.push(opportunity);
         }
 
-        // Small delay to avoid rate limiting
-        await new Promise(r => setTimeout(r, 500));
+        // Delay between AI calls to avoid rate limiting
+        await new Promise(r => setTimeout(r, 800));
       } catch (e) {
         errors.push(`Error analyzing ${market.condition_id}: ${(e as any).message}`);
       }
@@ -136,7 +184,8 @@ serve(async (req) => {
 
     return jsonResp({
       ok: true,
-      scanned: marketsToAnalyze.length,
+      scanned,
+      total_fetched: allMarkets.length,
       opportunities_found: opportunities.length,
       opportunities,
       errors: errors.length > 0 ? errors : undefined,
