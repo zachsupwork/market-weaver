@@ -43,19 +43,14 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-/** Build the best link for a bot opportunity or trade */
-function botMarketHref(item: { external_url?: string | null; event_slug?: string | null; condition_id: string }): string {
-  if (item.external_url) return item.external_url;
+/** Build internal PolyView link for a bot opportunity or trade */
+function botMarketHref(item: { event_slug?: string | null; condition_id: string }): string {
   if (item.event_slug) return `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`;
-  return `https://polymarket.com/market/${item.condition_id}`;
+  return `/trade/${encodeURIComponent(item.condition_id)}`;
 }
 
-function isExternal(url: string) { return url.startsWith("http"); }
-
-function BotLink({ item, className, children }: { item: { external_url?: string | null; event_slug?: string | null; condition_id: string }; className?: string; children: React.ReactNode }) {
-  const href = botMarketHref(item);
-  if (isExternal(href)) return <a href={href} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>;
-  return <Link to={href} className={className}>{children}</Link>;
+function BotLink({ item, className, children }: { item: { event_slug?: string | null; condition_id: string }; className?: string; children: React.ReactNode }) {
+  return <Link to={botMarketHref(item)} className={className}>{children}</Link>;
 }
 import {
   useBotConfig,
