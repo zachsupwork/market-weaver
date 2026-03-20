@@ -535,7 +535,7 @@ export default function BotDashboard() {
                     return (
                       <TableRow key={trade.id}>
                         <TableCell className="max-w-[200px]">
-                          <Link to={`/trade/${trade.condition_id}`} className="text-sm hover:text-primary truncate block">
+                          <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
                             {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
                           </Link>
                         </TableCell>
