@@ -901,7 +901,7 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
   return (
     <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <Link to={`/trade/${opp.condition_id}`} className="text-sm hover:text-primary truncate block">
+        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
           {opp.question.length > 50 ? opp.question.substring(0, 50) + "…" : opp.question}
         </Link>
         <div className="flex items-center gap-2 mt-0.5">
