@@ -17,6 +17,10 @@ export interface BotConfig {
   min_edge: number;
   max_bet_percent: number;
   enabled_categories: string[];
+  max_markets_to_scan: number;
+  take_profit_percent: number;
+  stop_loss_percent: number;
+  exit_before_resolution_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +41,8 @@ export interface BotOpportunity {
   executed: boolean;
   created_at: string;
   expires_at: string;
+  token_id: string | null;
+  external_data: any;
 }
 
 export interface BotTrade {
@@ -56,6 +62,10 @@ export interface BotTrade {
   simulation: boolean;
   order_id: string | null;
   error_message: string | null;
+  token_id: string | null;
+  exit_price: number | null;
+  exit_reason: string | null;
+  exited: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -194,4 +204,29 @@ export function useBotExecutor(address?: string) {
   }, [address, isExecuting, queryClient]);
 
   return { execute, isExecuting };
+}
+
+export function useBotMonitor(address?: string) {
+  const queryClient = useQueryClient();
+  const [isMonitoring, setIsMonitoring] = useState(false);
+
+  const monitor = useCallback(async () => {
+    if (isMonitoring) return;
+    setIsMonitoring(true);
+    try {
+      const res = await fetch(fnUrl("bot-monitor-positions"), {
+        headers: { apikey: ANON_KEY },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Monitor failed: ${res.status}`);
+      if (address) {
+        queryClient.invalidateQueries({ queryKey: ["bot-trades", address.toLowerCase()] });
+      }
+      return data;
+    } finally {
+      setIsMonitoring(false);
+    }
+  }, [isMonitoring, queryClient, address]);
+
+  return { monitor, isMonitoring };
 }
