@@ -1,0 +1,153 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+function jsonResp(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResp({ error: "POST required" }, 405);
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) return jsonResp({ error: "LOVABLE_API_KEY not configured" }, 500);
+
+    const { market } = await req.json();
+    if (!market || !market.question) return jsonResp({ error: "market with question required" }, 400);
+
+    const category = detectCategory(market);
+    const systemPrompt = buildSystemPrompt(category);
+    const userPrompt = buildUserPrompt(market, category);
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "predict_outcome",
+              description: "Return a probability prediction for a prediction market outcome",
+              parameters: {
+                type: "object",
+                properties: {
+                  probability: {
+                    type: "number",
+                    description: "Predicted probability of YES outcome (0.0 to 1.0)",
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: ["low", "medium", "high"],
+                    description: "Confidence level in the prediction",
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Brief reasoning for the prediction (2-3 sentences)",
+                  },
+                  key_factors: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Top 3 factors influencing the prediction",
+                  },
+                },
+                required: ["probability", "confidence", "reasoning", "key_factors"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "predict_outcome" } },
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) return jsonResp({ error: "Rate limited, try again later" }, 429);
+      if (response.status === 402) return jsonResp({ error: "AI credits exhausted" }, 402);
+      const text = await response.text();
+      console.error("AI gateway error:", response.status, text);
+      return jsonResp({ error: "AI analysis failed" }, 500);
+    }
+
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall?.function?.arguments) {
+      return jsonResp({ error: "No prediction returned from AI" }, 500);
+    }
+
+    const prediction = JSON.parse(toolCall.function.arguments);
+
+    // Clamp probability
+    prediction.probability = Math.max(0.01, Math.min(0.99, prediction.probability));
+
+    return jsonResp({
+      ok: true,
+      prediction,
+      market_id: market.condition_id || market.id,
+      category,
+    });
+  } catch (err) {
+    console.error("[ai-analyze-market] error:", err);
+    return jsonResp({ error: (err as any).message }, 500);
+  }
+});
+
+function detectCategory(market: any): string {
+  const q = (market.question || market.title || "").toLowerCase();
+  const tags = (market.tags || []).map((t: string) => t.toLowerCase());
+  const allText = q + " " + tags.join(" ");
+
+  if (/nba|nfl|mlb|nhl|soccer|football|tennis|ufc|mma|boxing|premier league|champions league|world cup|super bowl|playoff|game \d|series|match|tournament|championship|win.*season/i.test(allText)) return "Sports";
+  if (/president|election|democrat|republican|senate|congress|governor|poll|vote|nominee|cabinet|party|legislation|impeach|primary/i.test(allText)) return "Politics";
+  if (/bitcoin|btc|ethereum|eth|crypto|solana|sol|token|defi|nft|blockchain|price.*\$|above|below.*price/i.test(allText)) return "Crypto";
+  if (/stock|s&p|nasdaq|fed|interest rate|gdp|inflation|earnings|ipo|market cap|dow|treasury/i.test(allText)) return "Finance";
+  return "General";
+}
+
+function buildSystemPrompt(category: string): string {
+  const base = `You are an expert prediction market analyst. Your job is to estimate the TRUE probability of an event occurring, based on all available knowledge up to your training cutoff. Be calibrated: if you think something has a 30% chance, say 0.30. Do not be biased toward 50%. Consider base rates, recent trends, and domain-specific factors.`;
+
+  const categoryGuides: Record<string, string> = {
+    Sports: `For sports markets: consider team/player form, injuries, head-to-head records, home/away advantage, motivation, and recent performance trends. Use historical base rates for similar events.`,
+    Politics: `For political markets: consider polling data, historical patterns, incumbent advantage, fundraising, endorsements, demographic trends, and prediction market consensus. Be aware of polling biases.`,
+    Crypto: `For crypto markets: consider current price trends, market sentiment, technical analysis patterns, regulatory news, macro conditions, and historical volatility. Crypto markets are highly volatile.`,
+    Finance: `For financial markets: consider economic indicators, Fed policy, earnings trends, historical patterns, and macro conditions. Be conservative with extreme predictions.`,
+    General: `Consider all available evidence and base rates. Be well-calibrated.`,
+  };
+
+  return base + "\n\n" + (categoryGuides[category] || categoryGuides.General);
+}
+
+function buildUserPrompt(market: any, category: string): string {
+  const parts = [`Market Question: "${market.question}"`];
+
+  if (market.description) parts.push(`Description: ${market.description.substring(0, 500)}`);
+  if (market.end_date_iso) parts.push(`Resolution date: ${market.end_date_iso}`);
+  if (market.outcomePrices) {
+    const yesPrice = parseFloat(market.outcomePrices[0]);
+    if (!isNaN(yesPrice)) parts.push(`Current market YES price: ${(yesPrice * 100).toFixed(1)}%`);
+  }
+  if (market.volume) parts.push(`Total volume: $${Number(market.volume).toLocaleString()}`);
+
+  parts.push(`\nCategory: ${category}`);
+  parts.push(`\nAnalyze this market and predict the probability of the YES outcome. Consider all relevant factors.`);
+
+  return parts.join("\n");
+}
