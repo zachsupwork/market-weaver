@@ -44,9 +44,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 /** Build the best link for a bot opportunity or trade */
-function botMarketLink(item: { event_slug?: string | null; condition_id: string }) {
-  if (item.event_slug) return `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`;
-  return `/trade/${encodeURIComponent(item.condition_id)}`;
+function botMarketLink(item: { external_url?: string | null; event_slug?: string | null; condition_id: string }): { href: string; external: boolean } {
+  if (item.external_url) return { href: item.external_url, external: true };
+  if (item.event_slug) return { href: `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`, external: false };
+  return { href: `https://polymarket.com/market/${item.condition_id}`, external: true };
 }
 import {
   useBotConfig,

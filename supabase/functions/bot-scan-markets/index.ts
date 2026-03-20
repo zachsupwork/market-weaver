@@ -166,6 +166,11 @@ serve(async (req) => {
         if (Math.abs(edge) >= minEdge) {
           const tokenId = edge > 0 ? market._tokenIds[0] : market._tokenIds[1];
 
+          const eventSlug = market._eventSlug;
+          const externalUrl = eventSlug
+            ? `https://polymarket.com/event/${eventSlug}`
+            : `https://polymarket.com/market/${market.condition_id}`;
+
           opportunities.push({
             user_address: userAddress.toLowerCase(),
             market_id: market.id || market.condition_id,
@@ -180,7 +185,8 @@ serve(async (req) => {
             status: "pending",
             executed: false,
             token_id: tokenId || null,
-            event_slug: market._eventSlug || null,
+            event_slug: eventSlug || null,
+            external_url: externalUrl,
           });
 
           console.log(`[bot-scan] ✓ Opportunity: ${market.question?.substring(0, 50)} edge=${Math.abs(edge).toFixed(3)}`);
