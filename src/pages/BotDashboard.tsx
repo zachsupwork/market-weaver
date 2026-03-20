@@ -544,9 +544,9 @@ export default function BotDashboard() {
                     return (
                       <TableRow key={trade.id}>
                         <TableCell className="max-w-[200px]">
-                          <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
+                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
                             {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                          </Link>
+                          </BotLink>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
