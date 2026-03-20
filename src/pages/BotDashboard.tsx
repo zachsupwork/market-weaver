@@ -42,6 +42,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+/** Build the best link for a bot opportunity or trade */
+function botMarketLink(item: { event_slug?: string | null; condition_id: string }) {
+  if (item.event_slug) return `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`;
+  return `/trade/${encodeURIComponent(item.condition_id)}`;
+}
 import {
   useBotConfig,
   useBotOpportunities,
