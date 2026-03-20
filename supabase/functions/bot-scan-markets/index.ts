@@ -180,6 +180,7 @@ serve(async (req) => {
             status: "pending",
             executed: false,
             token_id: tokenId || null,
+            event_slug: market._eventSlug || null,
           });
 
           console.log(`[bot-scan] ✓ Opportunity: ${market.question?.substring(0, 50)} edge=${Math.abs(edge).toFixed(3)}`);
