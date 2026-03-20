@@ -88,6 +88,7 @@ export type Database = {
           condition_id: string
           created_at: string
           edge: number
+          event_slug: string | null
           executed: boolean
           expires_at: string
           external_data: Json | null
@@ -107,6 +108,7 @@ export type Database = {
           condition_id: string
           created_at?: string
           edge: number
+          event_slug?: string | null
           executed?: boolean
           expires_at?: string
           external_data?: Json | null
@@ -126,6 +128,7 @@ export type Database = {
           condition_id?: string
           created_at?: string
           edge?: number
+          event_slug?: string | null
           executed?: boolean
           expires_at?: string
           external_data?: Json | null
