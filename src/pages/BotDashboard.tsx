@@ -44,9 +44,18 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 /** Build the best link for a bot opportunity or trade */
-function botMarketLink(item: { event_slug?: string | null; condition_id: string }) {
+function botMarketHref(item: { external_url?: string | null; event_slug?: string | null; condition_id: string }): string {
+  if (item.external_url) return item.external_url;
   if (item.event_slug) return `/events/${item.event_slug}?market=${encodeURIComponent(item.condition_id)}`;
-  return `/trade/${encodeURIComponent(item.condition_id)}`;
+  return `https://polymarket.com/market/${item.condition_id}`;
+}
+
+function isExternal(url: string) { return url.startsWith("http"); }
+
+function BotLink({ item, className, children }: { item: { external_url?: string | null; event_slug?: string | null; condition_id: string }; className?: string; children: React.ReactNode }) {
+  const href = botMarketHref(item);
+  if (isExternal(href)) return <a href={href} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>;
+  return <Link to={href} className={className}>{children}</Link>;
 }
 import {
   useBotConfig,
@@ -426,9 +435,9 @@ export default function BotDashboard() {
                   {pendingOpps.map((opp) => (
                     <TableRow key={opp.id}>
                       <TableCell className="max-w-[200px]">
-                        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
+                        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
                           {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
-                        </Link>
+                        </BotLink>
                         {opp.ai_reasoning && (
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
                         )}
@@ -455,7 +464,7 @@ export default function BotDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to={botMarketLink(opp)}><ArrowUpRight className="h-4 w-4" /></Link>
+                          <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -535,9 +544,9 @@ export default function BotDashboard() {
                     return (
                       <TableRow key={trade.id}>
                         <TableCell className="max-w-[200px]">
-                          <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
+                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
                             {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                          </Link>
+                          </BotLink>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
@@ -637,9 +646,9 @@ export default function BotDashboard() {
                   {trades.map((trade) => (
                     <TableRow key={trade.id}>
                       <TableCell className="max-w-[200px]">
-                        <Link to={botMarketLink(trade)} className="text-sm hover:text-primary truncate block">
+                        <BotLink item={trade} className="text-sm hover:text-primary truncate block">
                           {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                        </Link>
+                        </BotLink>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
@@ -901,9 +910,9 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
   return (
     <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <Link to={botMarketLink(opp)} className="text-sm hover:text-primary truncate block">
+        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
           {opp.question.length > 50 ? opp.question.substring(0, 50) + "…" : opp.question}
-        </Link>
+        </BotLink>
         <div className="flex items-center gap-2 mt-0.5">
           <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
           {opp.external_data && (

@@ -1,0 +1,1 @@
+ALTER TABLE bot_opportunities ADD COLUMN IF NOT EXISTS external_url TEXT;
