@@ -455,7 +455,7 @@ export default function BotDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to={`/trade/${opp.condition_id}`}><ArrowUpRight className="h-4 w-4" /></Link>
+                          <Link to={botMarketLink(opp)}><ArrowUpRight className="h-4 w-4" /></Link>
                         </Button>
                       </TableCell>
                     </TableRow>
