@@ -68,3 +68,12 @@ verify_jwt = false
 
 [functions.polymarket-global-stats]
 verify_jwt = false
+
+[functions.ai-analyze-market]
+verify_jwt = false
+
+[functions.bot-scan-markets]
+verify_jwt = false
+
+[functions.bot-execute-trades]
+verify_jwt = false
