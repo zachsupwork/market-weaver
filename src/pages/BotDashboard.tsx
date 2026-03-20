@@ -464,7 +464,7 @@ export default function BotDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to={botMarketLink(opp)}><ArrowUpRight className="h-4 w-4" /></Link>
+                          <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
                         </Button>
                       </TableCell>
                     </TableRow>
