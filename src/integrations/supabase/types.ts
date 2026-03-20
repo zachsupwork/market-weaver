@@ -19,10 +19,14 @@ export type Database = {
           created_at: string
           enabled: boolean
           enabled_categories: string[]
+          exit_before_resolution_hours: number
           id: string
           max_bet_percent: number
+          max_markets_to_scan: number
           min_edge: number
           simulation_mode: boolean
+          stop_loss_percent: number
+          take_profit_percent: number
           updated_at: string
           user_address: string
         }
@@ -30,10 +34,14 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           enabled_categories?: string[]
+          exit_before_resolution_hours?: number
           id?: string
           max_bet_percent?: number
+          max_markets_to_scan?: number
           min_edge?: number
           simulation_mode?: boolean
+          stop_loss_percent?: number
+          take_profit_percent?: number
           updated_at?: string
           user_address: string
         }
@@ -41,12 +49,34 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           enabled_categories?: string[]
+          exit_before_resolution_hours?: number
           id?: string
           max_bet_percent?: number
+          max_markets_to_scan?: number
           min_edge?: number
           simulation_mode?: boolean
+          stop_loss_percent?: number
+          take_profit_percent?: number
           updated_at?: string
           user_address?: string
+        }
+        Relationships: []
+      }
+      bot_external_data_cache: {
+        Row: {
+          data: Json
+          fetched_at: string
+          market_id: string
+        }
+        Insert: {
+          data?: Json
+          fetched_at?: string
+          market_id: string
+        }
+        Update: {
+          data?: Json
+          fetched_at?: string
+          market_id?: string
         }
         Relationships: []
       }
@@ -60,12 +90,14 @@ export type Database = {
           edge: number
           executed: boolean
           expires_at: string
+          external_data: Json | null
           id: string
           market_id: string
           market_price: number
           outcome: string
           question: string
           status: string
+          token_id: string | null
           user_address: string
         }
         Insert: {
@@ -77,12 +109,14 @@ export type Database = {
           edge: number
           executed?: boolean
           expires_at?: string
+          external_data?: Json | null
           id?: string
           market_id: string
           market_price: number
           outcome?: string
           question: string
           status?: string
+          token_id?: string | null
           user_address: string
         }
         Update: {
@@ -94,12 +128,14 @@ export type Database = {
           edge?: number
           executed?: boolean
           expires_at?: string
+          external_data?: Json | null
           id?: string
           market_id?: string
           market_price?: number
           outcome?: string
           question?: string
           status?: string
+          token_id?: string | null
           user_address?: string
         }
         Relationships: []
@@ -111,6 +147,9 @@ export type Database = {
           current_price: number | null
           entry_price: number
           error_message: string | null
+          exit_price: number | null
+          exit_reason: string | null
+          exited: boolean
           id: string
           market_id: string
           opportunity_id: string | null
@@ -122,6 +161,7 @@ export type Database = {
           simulation: boolean
           size: number
           status: string
+          token_id: string | null
           updated_at: string
           user_address: string
         }
@@ -131,6 +171,9 @@ export type Database = {
           current_price?: number | null
           entry_price: number
           error_message?: string | null
+          exit_price?: number | null
+          exit_reason?: string | null
+          exited?: boolean
           id?: string
           market_id: string
           opportunity_id?: string | null
@@ -142,6 +185,7 @@ export type Database = {
           simulation?: boolean
           size: number
           status?: string
+          token_id?: string | null
           updated_at?: string
           user_address: string
         }
@@ -151,6 +195,9 @@ export type Database = {
           current_price?: number | null
           entry_price?: number
           error_message?: string | null
+          exit_price?: number | null
+          exit_reason?: string | null
+          exited?: boolean
           id?: string
           market_id?: string
           opportunity_id?: string | null
@@ -162,6 +209,7 @@ export type Database = {
           simulation?: boolean
           size?: number
           status?: string
+          token_id?: string | null
           updated_at?: string
           user_address?: string
         }

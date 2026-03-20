@@ -21,12 +21,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) return jsonResp({ error: "LOVABLE_API_KEY not configured" }, 500);
 
-    const { market } = await req.json();
+    const { market, externalData } = await req.json();
     if (!market || !market.question) return jsonResp({ error: "market with question required" }, 400);
 
     const category = detectCategory(market);
     const systemPrompt = buildSystemPrompt(category);
-    const userPrompt = buildUserPrompt(market, category);
+    const userPrompt = buildUserPrompt(market, category, externalData);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -102,6 +102,7 @@ serve(async (req) => {
       prediction,
       market_id: market.condition_id || market.id,
       category,
+      has_external_data: !!externalData,
     });
   } catch (err) {
     console.error("[ai-analyze-market] error:", err);
@@ -118,24 +119,28 @@ function detectCategory(market: any): string {
   if (/president|election|democrat|republican|senate|congress|governor|poll|vote|nominee|cabinet|party|legislation|impeach|primary/i.test(allText)) return "Politics";
   if (/bitcoin|btc|ethereum|eth|crypto|solana|sol|token|defi|nft|blockchain|price.*\$|above|below.*price/i.test(allText)) return "Crypto";
   if (/stock|s&p|nasdaq|fed|interest rate|gdp|inflation|earnings|ipo|market cap|dow|treasury/i.test(allText)) return "Finance";
+  if (/oscar|grammy|emmy|box office|album|movie|tv show|celebrity|viral|tiktok|youtube|instagram|twitter/i.test(allText)) return "Pop Culture";
   return "General";
 }
 
 function buildSystemPrompt(category: string): string {
-  const base = `You are an expert prediction market analyst. Your job is to estimate the TRUE probability of an event occurring, based on all available knowledge up to your training cutoff. Be calibrated: if you think something has a 30% chance, say 0.30. Do not be biased toward 50%. Consider base rates, recent trends, and domain-specific factors.`;
+  const base = `You are an expert prediction market analyst. Your job is to estimate the TRUE probability of an event occurring, based on all available knowledge up to your training cutoff AND any external data provided. Be calibrated: if you think something has a 30% chance, say 0.30. Do not be biased toward 50%. Consider base rates, recent trends, and domain-specific factors.
+
+CRITICAL: When external data is provided (recent results, stats, polling, prices), you MUST incorporate it into your analysis. Do not ignore it. Weight it heavily as it represents the most current information available.`;
 
   const categoryGuides: Record<string, string> = {
-    Sports: `For sports markets: consider team/player form, injuries, head-to-head records, home/away advantage, motivation, and recent performance trends. Use historical base rates for similar events.`,
-    Politics: `For political markets: consider polling data, historical patterns, incumbent advantage, fundraising, endorsements, demographic trends, and prediction market consensus. Be aware of polling biases.`,
-    Crypto: `For crypto markets: consider current price trends, market sentiment, technical analysis patterns, regulatory news, macro conditions, and historical volatility. Crypto markets are highly volatile.`,
+    Sports: `For sports markets: consider team/player form, injuries, head-to-head records, home/away advantage, motivation, and recent performance trends. Use historical base rates for similar events. If external data includes recent match results, weigh them heavily.`,
+    Politics: `For political markets: consider polling data, historical patterns, incumbent advantage, fundraising, endorsements, demographic trends, and prediction market consensus. Be aware of polling biases. If external data includes polling or context, incorporate it directly.`,
+    Crypto: `For crypto markets: consider current price trends, market sentiment, technical analysis patterns, regulatory news, macro conditions, and historical volatility. If external data includes current prices and trends, use them to calibrate your prediction.`,
     Finance: `For financial markets: consider economic indicators, Fed policy, earnings trends, historical patterns, and macro conditions. Be conservative with extreme predictions.`,
+    "Pop Culture": `For pop culture markets: consider social media trends, recent news, public sentiment, and historical patterns for similar events. If external data includes sentiment analysis, weight it in your prediction.`,
     General: `Consider all available evidence and base rates. Be well-calibrated.`,
   };
 
   return base + "\n\n" + (categoryGuides[category] || categoryGuides.General);
 }
 
-function buildUserPrompt(market: any, category: string): string {
+function buildUserPrompt(market: any, category: string, externalData?: any): string {
   const parts = [`Market Question: "${market.question}"`];
 
   if (market.description) parts.push(`Description: ${market.description.substring(0, 500)}`);
@@ -147,7 +152,15 @@ function buildUserPrompt(market: any, category: string): string {
   if (market.volume) parts.push(`Total volume: $${Number(market.volume).toLocaleString()}`);
 
   parts.push(`\nCategory: ${category}`);
-  parts.push(`\nAnalyze this market and predict the probability of the YES outcome. Consider all relevant factors.`);
+
+  // Add external data if available
+  if (externalData && Object.keys(externalData).length > 0) {
+    parts.push(`\n--- EXTERNAL DATA (use this to improve your prediction) ---`);
+    parts.push(JSON.stringify(externalData, null, 2).substring(0, 3000));
+    parts.push(`--- END EXTERNAL DATA ---`);
+  }
+
+  parts.push(`\nAnalyze this market and predict the probability of the YES outcome. Consider all relevant factors including any external data provided.`);
 
   return parts.join("\n");
 }
