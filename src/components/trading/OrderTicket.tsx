@@ -266,7 +266,7 @@ export function OrderTicket({
         }
       }
 
-      const credsStatus = await checkUserCredsStatus();
+      const credsStatus = await checkUserCredsStatus(address);
       if (!credsStatus.hasCreds || !credsStatus.address) {
         toast.error("Trading credentials missing. Re-enable trading in Setup below.");
         await readiness.refreshCreds();
