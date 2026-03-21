@@ -391,33 +391,52 @@ async function readEdgeBody(ctxBody: unknown): Promise<string | null> {
 /** Submit a signed order to Polymarket via backend L2 auth proxy */
 export async function postSignedOrder(
   signedOrder: any,
-  orderType: "GTC" | "FOK" | "GTD" | "FAK" = "GTC"
+  orderType: "GTC" | "FOK" | "GTD" | "FAK" = "GTC",
+  walletAddress?: string
 ): Promise<{
   ok: boolean;
   order?: any;
   error?: string;
   code?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke("polymarket-post-signed-order", {
-    body: { signedOrder, orderType },
-  });
-  if (error) {
-    const ctxBody = (error as any)?.context?.body;
-    const bodyText = await readEdgeBody(ctxBody);
-    if (bodyText) {
-      try {
-        const parsed = JSON.parse(bodyText);
-        console.error("[postSignedOrder] edge function error body:", parsed);
-        const msg = parsed.error || parsed.message || parsed.details || bodyText;
-        return { ok: false, error: msg, code: parsed.code, ...(parsed.order ? { order: parsed.order } : {}) };
-      } catch {
-        console.error("[postSignedOrder] edge function raw error:", bodyText);
-        return { ok: false, error: bodyText.slice(0, 500) };
-      }
-    }
-    return { ok: false, error: error.message };
+  console.log("[postSignedOrder] Submitting order via edge function", { orderType, walletAddress: walletAddress || "none" });
+
+  // Use direct fetch with wallet address so auth is optional
+  const url = fnUrl("polymarket-post-signed-order");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "apikey": ANON_KEY,
+  };
+
+  // Attach Supabase session if available
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
   }
-  return data;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ signedOrder, orderType, walletAddress }),
+    });
+
+    const text = await res.text();
+    console.log("[postSignedOrder] Response status:", res.status, "body:", text.substring(0, 500));
+
+    try {
+      const parsed = JSON.parse(text);
+      if (!res.ok || !parsed.ok) {
+        return { ok: false, error: parsed.error || `Order failed (${res.status})`, code: parsed.code };
+      }
+      return parsed;
+    } catch {
+      return { ok: false, error: text.slice(0, 500) };
+    }
+  } catch (fetchErr: any) {
+    console.error("[postSignedOrder] Fetch error:", fetchErr);
+    return { ok: false, error: fetchErr.message };
+  }
 }
 
 /** Cancel an order via backend */

@@ -9,12 +9,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/**
- * Canonical L2 HMAC signature — matches official Polymarket Python client exactly:
- *   1. urlsafe_b64decode(secret) → key bytes
- *   2. HMAC-SHA256(key, message)
- *   3. urlsafe_b64encode(digest) → signature (with padding)
- */
 async function buildL2Signature(secret: string, message: string): Promise<string> {
   const trimmed = secret.trim();
   const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
@@ -32,7 +26,7 @@ async function buildL2Signature(secret: string, message: string): Promise<string
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message).buffer as ArrayBuffer);
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return b64.replace(/\+/g, "-").replace(/\//g, "_"); // URL-safe with padding
+  return b64.replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function jsonResp(body: Record<string, unknown>, status = 200) {
@@ -62,34 +56,72 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Trading is not available in your jurisdiction.", code: "GEOBLOCKED" }, 403);
     }
 
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return jsonResp({ ok: false, error: "Authorization required" }, 401);
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return jsonResp({ ok: false, error: "Invalid auth token" }, 401);
-    }
-
     const masterKey = Deno.env.get("MASTER_KEY");
     if (!masterKey) {
+      console.error("[post-order] MASTER_KEY not configured");
       return jsonResp({ ok: false, error: "MASTER_KEY not configured" }, 500);
     }
 
     const adminClient = getServiceClient();
-    const { data: credRow, error: credError } = await adminClient
-      .from("polymarket_user_creds")
-      .select("value_encrypted, iv, auth_tag, address")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const body = await req.json();
+    const { signedOrder, orderType: rawOrderType, walletAddress } = body;
 
-    if (credError || !credRow) {
+    if (!signedOrder) {
+      return jsonResp({ ok: false, error: "signedOrder is required" }, 400);
+    }
+
+    console.log("[post-order] Received order request, walletAddress=", walletAddress || "none");
+
+    // ── Resolve credentials: try Supabase auth first, then wallet address fallback ──
+    let credRow: any = null;
+    let resolvedUserId: string | null = null;
+
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      if (user && !userError) {
+        resolvedUserId = user.id;
+        console.log("[post-order] Authenticated via Supabase session, user=", user.id);
+        const { data, error: credError } = await adminClient
+          .from("polymarket_user_creds")
+          .select("value_encrypted, iv, auth_tag, address, user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!credError && data) credRow = data;
+      } else {
+        console.log("[post-order] Supabase auth failed or no session, trying wallet fallback");
+      }
+    }
+
+    // Fallback: look up by wallet address from the signed order or explicit param
+    if (!credRow) {
+      const orderSigner = (signedOrder?.order?.signer ?? signedOrder?.signer ?? "").toLowerCase();
+      const lookupAddr = (walletAddress || orderSigner || "").toLowerCase();
+
+      if (lookupAddr) {
+        console.log("[post-order] Looking up creds by wallet address:", lookupAddr);
+        const { data, error: credError } = await adminClient
+          .from("polymarket_user_creds")
+          .select("value_encrypted, iv, auth_tag, address, user_id")
+          .eq("address", lookupAddr)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+
+        if (!credError && data && data.length > 0) {
+          credRow = data[0];
+          resolvedUserId = credRow.user_id;
+          console.log("[post-order] Found creds via wallet address lookup, user_id=", resolvedUserId);
+        }
+      }
+    }
+
+    if (!credRow) {
+      console.error("[post-order] No credentials found for user");
       return jsonResp({ ok: false, error: "No trading credentials found. Enable trading first.", code: "NO_CREDS" }, 400);
     }
 
@@ -98,6 +130,7 @@ serve(async (req) => {
       const credsJson = await decrypt(credRow.value_encrypted, credRow.iv, credRow.auth_tag, masterKey);
       creds = JSON.parse(credsJson);
     } catch (e) {
+      console.error("[post-order] Decryption failed:", (e as any).message);
       return jsonResp({ ok: false, error: `Failed to decrypt credentials: ${(e as any).message}` }, 500);
     }
 
@@ -105,12 +138,7 @@ serve(async (req) => {
       return jsonResp({ ok: false, error: "Incomplete credentials. Re-derive in Settings." }, 500);
     }
 
-    const body = await req.json();
-    const { signedOrder, orderType: rawOrderType } = body;
-
-    if (!signedOrder) {
-      return jsonResp({ ok: false, error: "signedOrder is required" }, 400);
-    }
+    console.log("[post-order] Credentials decrypted successfully, apiKey=…" + creds.apiKey.slice(-6));
 
     const orderType = ["GTC", "FOK", "GTD", "FAK"].includes(String(rawOrderType))
       ? String(rawOrderType)
@@ -159,7 +187,7 @@ serve(async (req) => {
       }, 400);
     }
 
-    // ── Build L2 HMAC signature (single canonical method) ───────
+    // ── Build L2 HMAC signature ───────
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const method = "POST";
@@ -171,8 +199,8 @@ serve(async (req) => {
     const polyAddress = (credRow.address || "").toLowerCase();
 
     const orderParsed = JSON.parse(orderBody);
-    console.log(`[post-order] user=${user.id}, apiKey=…${creds.apiKey.slice(-6)}, addr=${polyAddress}, bodyLen=${orderBody.length}`);
-    console.log(`[post-order] order.maker=${orderParsed?.order?.maker}, order.signer=${orderParsed?.order?.signer}, signatureType=${orderParsed?.order?.signatureType}`);
+    console.log(`[post-order] Submitting to CLOB: addr=${polyAddress}, maker=${orderParsed?.order?.maker}, signer=${orderParsed?.order?.signer}, signatureType=${orderParsed?.order?.signatureType}, orderType=${orderType}`);
+    console.log(`[post-order] Order details: tokenId=${orderParsed?.order?.tokenId}, side=${orderParsed?.order?.side}, makerAmount=${orderParsed?.order?.makerAmount}, takerAmount=${orderParsed?.order?.takerAmount}`);
 
     // ── Build builder attribution headers ──────────────────────
     const builderHeaders: Record<string, string> = {};
@@ -189,12 +217,10 @@ serve(async (req) => {
         builderHeaders["POLY_BUILDER_PASSPHRASE"] = builderPassphrase;
         builderHeaders["POLY_BUILDER_TIMESTAMP"] = builderTimestamp;
         builderHeaders["POLY_BUILDER_SIGNATURE"] = builderSig;
-        console.log(`[post-order] Builder headers attached (key=…${builderKey.slice(-6)})`);
+        console.log(`[post-order] Builder headers attached`);
       } catch (builderErr) {
-        console.warn("[post-order] Builder header signing failed, proceeding without:", (builderErr as any).message);
+        console.warn("[post-order] Builder header signing failed:", (builderErr as any).message);
       }
-    } else {
-      console.log("[post-order] Builder credentials not configured, skipping attribution headers");
     }
 
     const res = await fetch(`${clobHost}${requestPath}`, {
@@ -212,7 +238,7 @@ serve(async (req) => {
     });
 
     const resBody = await res.text();
-    console.log(`[post-order] CLOB status=${res.status} body=${resBody.substring(0, 500)}`);
+    console.log(`[post-order] CLOB response: status=${res.status} body=${resBody.substring(0, 800)}`);
 
     if (res.ok) {
       let parsed;
@@ -220,10 +246,10 @@ serve(async (req) => {
       return jsonResp({ ok: true, order: parsed });
     }
 
-    // Handle invalid API key: delete stale creds so user can re-derive
+    // Handle invalid API key: delete stale creds
     const invalidKey = res.status === 401 && /invalid api key|unauthorized|invalid authorization/i.test(resBody);
-    if (invalidKey) {
-      await adminClient.from("polymarket_user_creds").delete().eq("user_id", user.id);
+    if (invalidKey && resolvedUserId) {
+      await adminClient.from("polymarket_user_creds").delete().eq("user_id", resolvedUserId);
       return jsonResp({
         ok: false,
         code: "INVALID_API_KEY",
@@ -241,7 +267,7 @@ serve(async (req) => {
       upstreamBody: resBody.substring(0, 500),
     });
   } catch (err) {
-    console.error("[post-order] error:", err);
+    console.error("[post-order] Unhandled error:", err);
     return jsonResp({ ok: false, error: (err as any).message }, 500);
   }
 });
