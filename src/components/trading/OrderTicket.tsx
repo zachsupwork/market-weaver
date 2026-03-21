@@ -306,6 +306,7 @@ export function OrderTicket({
         expiration: orderExpiration,
       });
 
+      console.log("[OrderTicket] Creating signed order via ClobClient…");
       const signedOrder = await clobClient.createOrder({
         tokenID: tokenId,
         side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
@@ -315,12 +316,15 @@ export function OrderTicket({
         expiration: orderExpiration,
       });
 
+      console.log("[OrderTicket] Signed order created:", JSON.stringify(signedOrder).substring(0, 500));
+
       const orderSigner = ((signedOrder as any)?.order?.signer ?? (signedOrder as any)?.signer ?? "").toLowerCase();
       if (orderSigner && orderSigner !== eoaAddr) {
         throw new Error(`Signer mismatch: order signed by ${orderSigner} but your wallet is ${eoaAddr}. Re-enable trading with the same wallet.`);
       }
 
-      const result = await postSignedOrder(signedOrder, effectiveOrderType);
+      console.log("[OrderTicket] Submitting order to backend…");
+      const result = await postSignedOrder(signedOrder, effectiveOrderType, eoaAddr);
 
       if (result.ok) {
         const modeLabel = isLimitMode ? "Limit" : "Market";
