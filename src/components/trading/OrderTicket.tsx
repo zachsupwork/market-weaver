@@ -222,11 +222,10 @@ export function OrderTicket({
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      toast.error("Please sign in first to place orders");
-      return;
-    }
+      if (!readiness.credsReady) {
+        toast.error("Enable trading first — complete the setup steps below.");
+        return;
+      }
 
     if (!showConfirm) { setShowConfirm(true); return; }
 
