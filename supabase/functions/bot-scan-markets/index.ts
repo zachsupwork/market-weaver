@@ -171,6 +171,7 @@ serve(async (req) => {
             ? `https://polymarket.com/event/${eventSlug}`
             : `https://polymarket.com/market/${market.condition_id}`;
 
+          const pred = aiData.prediction;
           opportunities.push({
             user_address: userAddress.toLowerCase(),
             market_id: market.id || market.condition_id,
@@ -180,13 +181,17 @@ serve(async (req) => {
             ai_probability: aiProb,
             market_price: yesPrice,
             edge: Math.abs(edge),
-            ai_reasoning: aiData.prediction.reasoning,
+            ai_reasoning: pred.reasoning,
             category: aiData.category,
             status: "pending",
             executed: false,
             token_id: tokenId || null,
             event_slug: eventSlug || null,
             external_url: externalUrl,
+            suggested_action: pred.suggested_action || (edge > 0 ? "BUY_YES" : "BUY_NO"),
+            suggested_entry: pred.suggested_entry || null,
+            suggested_take_profit: pred.take_profit || null,
+            suggested_stop_loss: pred.stop_loss || null,
           });
 
           console.log(`[bot-scan] ✓ Opportunity: ${market.question?.substring(0, 50)} edge=${Math.abs(edge).toFixed(3)}`);

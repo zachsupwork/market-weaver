@@ -43,7 +43,7 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const userAddress = url.searchParams.get("address") || (req.method === "POST" ? (await req.json().catch(() => ({}))).address : null);
-
+    const singleOppId = url.searchParams.get("opp_id") || null;
     if (!userAddress) return jsonResp({ error: "address required" }, 400);
 
     const adminClient = getServiceClient();
@@ -65,16 +65,24 @@ serve(async (req) => {
     const minEdge = config.min_edge || 0.05;
 
     // Get pending opportunities
-    const { data: opportunities } = await adminClient
+    let oppQuery = adminClient
       .from("bot_opportunities")
       .select("*")
       .eq("user_address", userAddress.toLowerCase())
-      .eq("status", "pending")
-      .eq("executed", false)
-      .gt("expires_at", new Date().toISOString())
-      .gte("edge", minEdge)
-      .order("edge", { ascending: false })
-      .limit(10);
+      .eq("executed", false);
+
+    if (singleOppId) {
+      oppQuery = oppQuery.eq("id", singleOppId);
+    } else {
+      oppQuery = oppQuery
+        .eq("status", "pending")
+        .gt("expires_at", new Date().toISOString())
+        .gte("edge", minEdge)
+        .order("edge", { ascending: false })
+        .limit(10);
+    }
+
+    const { data: opportunities } = await oppQuery;
 
     if (!opportunities || opportunities.length === 0) {
       return jsonResp({ ok: true, message: "No pending opportunities", trades: [] });
