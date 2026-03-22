@@ -640,7 +640,7 @@ export default function BotDashboard() {
                     <TableBody>
                       {closed.slice(0, 20).map((t) => (
                         <TableRow key={t.id}>
-                          <TableCell className="text-sm truncate max-w-[200px]">{t.question}</TableCell>
+                          <TableCell className="text-sm max-w-[250px] whitespace-normal break-words">{t.question}</TableCell>
                           <TableCell className="text-right font-mono text-sm">{(t.entry_price * 100).toFixed(0)}¢</TableCell>
                           <TableCell className="text-right font-mono text-sm">{((t.exit_price || 0) * 100).toFixed(0)}¢</TableCell>
                           <TableCell className={cn("text-right font-mono text-sm", (t.pnl || 0) > 0 && "text-yes", (t.pnl || 0) < 0 && "text-no")}>
