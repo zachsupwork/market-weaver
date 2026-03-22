@@ -256,13 +256,13 @@ export default function BotDashboard() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Target className="h-3.5 w-3.5" />
-              Opportunities
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
+              <Target className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+              <span className="truncate">Opportunities</span>
             </div>
-            <p className="text-2xl font-bold font-mono">{stats.pendingOpps}</p>
-            <p className="text-xs text-muted-foreground">avg edge {(stats.avgEdge * 100).toFixed(1)}%</p>
+            <p className="text-xl sm:text-2xl font-bold font-mono">{stats.pendingOpps}</p>
+            <p className="text-xs text-muted-foreground truncate">avg edge {(stats.avgEdge * 100).toFixed(1)}%</p>
           </CardContent>
         </Card>
         <Card>
