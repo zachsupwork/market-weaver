@@ -153,6 +153,30 @@ export default function BotDashboard() {
     }
   };
 
+  const queryClient = useQueryClient();
+  const [executingOppId, setExecutingOppId] = useState<string | null>(null);
+  const handleExecuteSingle = async (oppId: string) => {
+    if (!address) return;
+    setExecutingOppId(oppId);
+    try {
+      const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(
+        `https://${PROJECT_ID}.supabase.co/functions/v1/bot-execute-trades?address=${encodeURIComponent(address)}&opp_id=${encodeURIComponent(oppId)}`,
+        { headers: { apikey: ANON_KEY } }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Execute failed: ${res.status}`);
+      toast.success(data.simulation ? "Trade simulated" : "Trade placed!");
+      queryClient.invalidateQueries({ queryKey: ["bot-trades", address.toLowerCase()] });
+      queryClient.invalidateQueries({ queryKey: ["bot-opportunities", address.toLowerCase()] });
+    } catch (err: any) {
+      toast.error(err.message || "Execution failed");
+    } finally {
+      setExecutingOppId(null);
+    }
+  };
+
   const handleMonitor = async () => {
     try {
       const result = await monitor();
