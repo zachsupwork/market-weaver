@@ -390,7 +390,24 @@ export default function BotDashboard() {
                 ) : (
                   <div className="space-y-2">
                     {pendingOpps.slice(0, 5).map((opp) => (
-                      <OpportunityRow key={opp.id} opp={opp} />
+                      <div key={opp.id} className="flex items-start justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <BotLink item={opp} className="text-sm hover:text-primary break-words leading-snug block">
+                            {opp.question}
+                          </BotLink>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                            {opp.suggested_action && (
+                              <Badge variant="outline" className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "border-yes/50 text-yes" : "border-no/50 text-no")}>
+                                {opp.suggested_action === "BUY_YES" ? "Buy YES" : "Buy NO"}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Badge variant="outline" className={cn("font-mono text-xs shrink-0 mt-0.5", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+                          +{(opp.edge * 100).toFixed(1)}%
+                        </Badge>
+                      </div>
                     ))}
                   </div>
                 )}
