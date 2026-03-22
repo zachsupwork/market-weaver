@@ -638,7 +638,7 @@ export default function BotDashboard() {
             return (
               <>
                 <h3 className="text-sm font-medium text-muted-foreground mt-6">Closed Positions ({closed.length})</h3>
-                <Card>
+                <Card className="hidden md:block overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -666,6 +666,19 @@ export default function BotDashboard() {
                     </TableBody>
                   </Table>
                 </Card>
+                <div className="md:hidden space-y-2">
+                  {closed.slice(0, 20).map((t) => (
+                    <Card key={t.id} className="p-3">
+                      <p className="text-sm break-words leading-snug">{t.question}</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(t.entry_price * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">Exit: <span className="font-mono text-foreground">{((t.exit_price || 0) * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">P&L: <span className={cn("font-mono", (t.pnl || 0) > 0 && "text-yes", (t.pnl || 0) < 0 && "text-no")}>{(t.pnl || 0) >= 0 ? "+" : ""}${(t.pnl || 0).toFixed(2)}</span></span>
+                        <span className="text-muted-foreground">Reason: <Badge variant="outline" className="text-xs">{t.exit_reason || "manual"}</Badge></span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </>
             );
           })()}
