@@ -305,7 +305,7 @@ const EventDetail = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="container py-6 max-w-7xl">
+      <div className="container px-3 sm:px-4 py-4 sm:py-6 max-w-7xl">
         <div className="flex items-center justify-between mb-5">
           <Link
             to="/events"
