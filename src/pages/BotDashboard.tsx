@@ -395,7 +395,6 @@ export default function BotDashboard() {
           )}
         </TabsContent>
 
-        {/* ── Opportunities Tab ────────────────────── */}
         <TabsContent value="opportunities" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Market Opportunities</h2>
@@ -413,60 +412,95 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead className="text-right">AI Prob</TableHead>
-                    <TableHead className="text-right">Market</TableHead>
-                    <TableHead className="text-right">Edge</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingOpps.map((opp) => (
-                    <TableRow key={opp.id}>
-                      <TableCell className="max-w-[200px]">
-                        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-                          {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
-                        </BotLink>
-                        {opp.ai_reasoning && (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-                          +{(opp.edge * 100).toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {opp.external_data ? (
-                          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                            <Globe className="h-3 w-3 mr-1" />
-                            Yes
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" asChild>
-                          <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
-                        </Button>
-                      </TableCell>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead className="text-right">AI Prob</TableHead>
+                      <TableHead className="text-right">Market</TableHead>
+                      <TableHead className="text-right">Edge</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingOpps.map((opp) => (
+                      <TableRow key={opp.id}>
+                        <TableCell className="max-w-[200px]">
+                          <BotLink item={opp} className="text-sm hover:text-primary truncate block">
+                            {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
+                          </BotLink>
+                          {opp.ai_reasoning && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+                            +{(opp.edge * 100).toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {opp.external_data ? (
+                            <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                              <Globe className="h-3 w-3 mr-1" />
+                              Yes
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" asChild>
+                            <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {pendingOpps.map((opp) => (
+                  <Card key={opp.id} className="p-3">
+                    <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                      {opp.question}
+                    </BotLink>
+                    {opp.ai_reasoning && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{opp.ai_reasoning}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                      {opp.external_data && (
+                        <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                          <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+                        +{(opp.edge * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                      <span>AI: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
+                      <span>Mkt: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
+                      <Button size="sm" variant="ghost" className="h-7 px-2" asChild>
+                        <BotLink item={opp}><ArrowUpRight className="h-3.5 w-3.5" /></BotLink>
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
           {executedOpps.length > 0 && (
