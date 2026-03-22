@@ -488,7 +488,7 @@ export default function BotDashboard() {
           {executedOpps.length > 0 && (
             <>
               <h3 className="text-sm font-medium text-muted-foreground mt-6">Previously Executed ({executedOpps.length})</h3>
-              <Card>
+              <Card className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -510,6 +510,18 @@ export default function BotDashboard() {
                   </TableBody>
                 </Table>
               </Card>
+              <div className="md:hidden space-y-2">
+                {executedOpps.slice(0, 20).map((opp) => (
+                  <Card key={opp.id} className="p-3 opacity-70">
+                    <p className="text-sm break-words leading-snug">{opp.question}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant="outline" className="text-xs font-mono">+{(opp.edge * 100).toFixed(1)}%</Badge>
+                      <Badge variant="secondary" className="text-xs">{opp.status}</Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">{new Date(opp.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </>
           )}
         </TabsContent>
