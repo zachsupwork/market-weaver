@@ -499,7 +499,7 @@ export default function BotDashboard() {
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
                     ))}
                   </TableBody>
                 </Table>
@@ -508,7 +508,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {pendingOpps.map((opp) => (
-                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
+                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
                 ))}
               </div>
             </>
