@@ -17,7 +17,7 @@ export function useBotLivePrices(opportunities: BotOpportunity[]) {
   // Subscribe to WS for each token_id
   useEffect(() => {
     if (tokenIds.length === 0) return;
-    const unsubs = tokenIds.map((id) => wsService.subscribe(id, () => {}));
+    const unsubs = tokenIds.map((id) => orderbookWsService.subscribe(id, () => {}));
     return () => unsubs.forEach((u) => u());
   }, [tokenIds]);
 
