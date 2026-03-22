@@ -1072,7 +1072,7 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
   );
 }
 
-function MobileOppCard({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id: string) => void }) {
+function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <Card className="p-3 space-y-2">
@@ -1127,8 +1127,8 @@ function MobileOppCard({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id
 
       {/* Action buttons */}
       <div className="flex gap-2 pt-1">
-        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)}>
-          <Zap className="h-4 w-4 mr-1.5" />
+        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
+          {isExecuting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Zap className="h-4 w-4 mr-1.5" />}
           AI Trade
         </Button>
         <Button size="sm" variant="outline" className="flex-1 min-h-[44px] text-sm" asChild>
