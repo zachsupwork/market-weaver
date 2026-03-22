@@ -99,6 +99,10 @@ export type Database = {
           outcome: string
           question: string
           status: string
+          suggested_action: string | null
+          suggested_entry: number | null
+          suggested_stop_loss: number | null
+          suggested_take_profit: number | null
           token_id: string | null
           user_address: string
         }
@@ -120,6 +124,10 @@ export type Database = {
           outcome?: string
           question: string
           status?: string
+          suggested_action?: string | null
+          suggested_entry?: number | null
+          suggested_stop_loss?: number | null
+          suggested_take_profit?: number | null
           token_id?: string | null
           user_address: string
         }
@@ -141,6 +149,10 @@ export type Database = {
           outcome?: string
           question?: string
           status?: string
+          suggested_action?: string | null
+          suggested_entry?: number | null
+          suggested_stop_loss?: number | null
+          suggested_take_profit?: number | null
           token_id?: string | null
           user_address?: string
         }
