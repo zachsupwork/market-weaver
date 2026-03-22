@@ -414,15 +414,16 @@ export default function BotDashboard() {
           ) : (
             <>
               {/* Desktop table */}
-              <Card className="hidden md:block">
+              <Card className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Market</TableHead>
-                      <TableHead className="text-right">AI Prob</TableHead>
-                      <TableHead className="text-right">Market</TableHead>
+                      <TableHead className="min-w-[220px]">Market</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">AI Prob</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Mkt Price</TableHead>
                       <TableHead className="text-right">Edge</TableHead>
                       <TableHead>Category</TableHead>
+                      <TableHead className="min-w-[180px]">Reasoning</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -430,13 +431,10 @@ export default function BotDashboard() {
                   <TableBody>
                     {pendingOpps.map((opp) => (
                       <TableRow key={opp.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-                            {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
+                        <TableCell className="max-w-[280px]">
+                          <BotLink item={opp} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
+                            {opp.question}
                           </BotLink>
-                          {opp.ai_reasoning && (
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
-                          )}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
                         <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
@@ -447,6 +445,15 @@ export default function BotDashboard() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          {opp.ai_reasoning ? (
+                            <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-3" title={opp.ai_reasoning}>
+                              {opp.ai_reasoning}
+                            </p>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {opp.external_data ? (
