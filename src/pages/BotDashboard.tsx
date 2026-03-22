@@ -1001,12 +1001,12 @@ export default function BotDashboard() {
 
 function OpportunityRow({ opp }: { opp: BotOpportunity }) {
   return (
-    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+    <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-          {opp.question.length > 50 ? opp.question.substring(0, 50) + "…" : opp.question}
+        <BotLink item={opp} className="text-sm hover:text-primary break-words leading-snug block">
+          {opp.question}
         </BotLink>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
           <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
           {opp.external_data && (
             <Badge variant="outline" className="text-xs border-primary/50 text-primary">
@@ -1016,7 +1016,7 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
           )}
         </div>
       </div>
-      <Badge variant="outline" className={cn("font-mono text-xs shrink-0", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+      <Badge variant="outline" className={cn("font-mono text-xs shrink-0 mt-0.5", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
         +{(opp.edge * 100).toFixed(1)}%
       </Badge>
     </div>
