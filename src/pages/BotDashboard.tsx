@@ -1044,14 +1044,15 @@ interface OppRowProps {
   isRefreshing: boolean;
 }
 
-function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing }: OppRowProps) {
+function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing, minEdge = 0.05 }: OppRowProps & { minEdge?: number }) {
   const [showReasoning, setShowReasoning] = useState(false);
   const mktPrice = liveData?.livePrice ?? opp.market_price;
   const edge = liveData?.liveEdge ?? opp.edge;
   const isLive = !!liveData;
+  const isExpired = edge < minEdge;
 
   return (
-    <TableRow>
+    <TableRow className={isExpired ? "opacity-50" : ""}>
       <TableCell className="max-w-[280px]">
         <BotLink item={opp} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
           {opp.question}
@@ -1060,12 +1061,16 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRef
       <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
       <TableCell className="text-right font-mono text-sm">
         <span className={isLive ? "text-primary" : ""}>{(mktPrice * 100).toFixed(1)}¢</span>
+        <span className="text-muted-foreground ml-1 text-xs">({(mktPrice * 100).toFixed(1)}%)</span>
         {isLive && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />}
       </TableCell>
       <TableCell className="text-right">
-        <Badge variant="outline" className={cn("font-mono", edge >= 0.1 ? "border-yes text-yes" : edge > 0 ? "border-warning text-warning" : "border-no text-no")}>
-          {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%
-        </Badge>
+        <div className="flex items-center gap-1 justify-end">
+          {isExpired && <AlertTriangle className="h-3 w-3 text-no shrink-0" />}
+          <Badge variant="outline" className={cn("font-mono", edge >= 0.1 ? "border-yes text-yes" : edge > 0 ? "border-warning text-warning" : "border-no text-no")}>
+            {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%
+          </Badge>
+        </div>
       </TableCell>
       <TableCell>
         <Badge variant={opp.suggested_action === "BUY_YES" ? "default" : "secondary"} className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "bg-yes/15 text-yes border-yes/30" : "bg-no/15 text-no border-no/30")}>
@@ -1100,7 +1105,7 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRef
           <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onRefresh(opp)} disabled={isRefreshing}>
             <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
           </Button>
-          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
+          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)} disabled={isExecuting || isExpired} title={isExpired ? "Edge below threshold" : ""}>
             {isExecuting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Zap className="h-3 w-3 mr-1" />}AI
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
