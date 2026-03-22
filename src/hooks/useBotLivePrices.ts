@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { wsService } from "@/services/orderbook-ws.service";
+import { orderbookWsService } from "@/services/orderbook-ws.service";
 import { useMarketStore } from "@/stores/useMarketStore";
 import type { BotOpportunity } from "@/hooks/useBot";
 
