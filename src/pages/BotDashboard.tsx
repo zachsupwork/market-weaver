@@ -474,7 +474,7 @@ export default function BotDashboard() {
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} />
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
                     ))}
                   </TableBody>
                 </Table>
@@ -483,7 +483,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {pendingOpps.map((opp) => (
-                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} />
+                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
                 ))}
               </div>
             </>
@@ -1010,7 +1010,7 @@ export default function BotDashboard() {
   );
 }
 
-function DesktopOppRow({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id: string) => void }) {
+function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
   const [showReasoning, setShowReasoning] = useState(false);
   return (
     <TableRow>
@@ -1045,11 +1045,14 @@ function DesktopOppRow({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id
       <TableCell className="max-w-[220px]">
         {opp.ai_reasoning ? (
           <div>
-            <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-2">{opp.ai_reasoning}</p>
+            {showReasoning ? (
+              <p className="text-xs text-muted-foreground whitespace-normal break-words">{opp.ai_reasoning}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-2">{opp.ai_reasoning}</p>
+            )}
             <button onClick={() => setShowReasoning(!showReasoning)} className="text-xs text-primary hover:underline mt-0.5">
               {showReasoning ? "Less" : "More"}
             </button>
-            {showReasoning && <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">{opp.ai_reasoning}</p>}
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -1057,8 +1060,8 @@ function DesktopOppRow({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id
       </TableCell>
       <TableCell className="text-right">
         <div className="flex gap-1 justify-end">
-          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)}>
-            <Zap className="h-3 w-3 mr-1" />AI
+          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
+            {isExecuting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Zap className="h-3 w-3 mr-1" />}AI
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
             <BotLink item={opp}><ArrowUpRight className="h-3 w-3" /></BotLink>
@@ -1069,7 +1072,7 @@ function DesktopOppRow({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id
   );
 }
 
-function MobileOppCard({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id: string) => void }) {
+function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <Card className="p-3 space-y-2">
@@ -1124,8 +1127,8 @@ function MobileOppCard({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id
 
       {/* Action buttons */}
       <div className="flex gap-2 pt-1">
-        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)}>
-          <Zap className="h-4 w-4 mr-1.5" />
+        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
+          {isExecuting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Zap className="h-4 w-4 mr-1.5" />}
           AI Trade
         </Button>
         <Button size="sm" variant="outline" className="flex-1 min-h-[44px] text-sm" asChild>
