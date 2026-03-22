@@ -474,7 +474,7 @@ export default function BotDashboard() {
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} />
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
                     ))}
                   </TableBody>
                 </Table>
