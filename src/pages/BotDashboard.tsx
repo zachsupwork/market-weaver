@@ -64,6 +64,7 @@ import {
   type BotTrade,
 } from "@/hooks/useBot";
 import { useQueryClient } from "@tanstack/react-query";
+import { useBotLivePrices } from "@/hooks/useBotLivePrices";
 import {
   XAxis,
   YAxis,
