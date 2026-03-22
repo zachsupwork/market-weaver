@@ -220,7 +220,7 @@ export default function BotDashboard() {
   const executedOpps = opportunities.filter((o) => o.executed);
 
   return (
-    <div className="container max-w-7xl mx-auto p-4 pt-20 space-y-6">
+    <div className="container max-w-7xl mx-auto px-3 sm:px-4 pt-20 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -254,15 +254,15 @@ export default function BotDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Target className="h-3.5 w-3.5" />
-              Opportunities
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
+              <Target className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+              <span className="truncate">Opportunities</span>
             </div>
-            <p className="text-2xl font-bold font-mono">{stats.pendingOpps}</p>
-            <p className="text-xs text-muted-foreground">avg edge {(stats.avgEdge * 100).toFixed(1)}%</p>
+            <p className="text-xl sm:text-2xl font-bold font-mono">{stats.pendingOpps}</p>
+            <p className="text-xs text-muted-foreground truncate">avg edge {(stats.avgEdge * 100).toFixed(1)}%</p>
           </CardContent>
         </Card>
         <Card>
@@ -308,7 +308,7 @@ export default function BotDashboard() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap no-scrollbar">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities ({pendingOpps.length})</TabsTrigger>
           <TabsTrigger value="positions">Open Positions ({openPositions.length})</TabsTrigger>
@@ -395,7 +395,6 @@ export default function BotDashboard() {
           )}
         </TabsContent>
 
-        {/* ── Opportunities Tab ────────────────────── */}
         <TabsContent value="opportunities" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Market Opportunities</h2>
@@ -413,60 +412,95 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead className="text-right">AI Prob</TableHead>
-                    <TableHead className="text-right">Market</TableHead>
-                    <TableHead className="text-right">Edge</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingOpps.map((opp) => (
-                    <TableRow key={opp.id}>
-                      <TableCell className="max-w-[200px]">
-                        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-                          {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
-                        </BotLink>
-                        {opp.ai_reasoning && (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-                          +{(opp.edge * 100).toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {opp.external_data ? (
-                          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                            <Globe className="h-3 w-3 mr-1" />
-                            Yes
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" asChild>
-                          <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
-                        </Button>
-                      </TableCell>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead className="text-right">AI Prob</TableHead>
+                      <TableHead className="text-right">Market</TableHead>
+                      <TableHead className="text-right">Edge</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingOpps.map((opp) => (
+                      <TableRow key={opp.id}>
+                        <TableCell className="max-w-[200px]">
+                          <BotLink item={opp} className="text-sm hover:text-primary truncate block">
+                            {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
+                          </BotLink>
+                          {opp.ai_reasoning && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+                            +{(opp.edge * 100).toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {opp.external_data ? (
+                            <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                              <Globe className="h-3 w-3 mr-1" />
+                              Yes
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" asChild>
+                            <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {pendingOpps.map((opp) => (
+                  <Card key={opp.id} className="p-3">
+                    <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                      {opp.question}
+                    </BotLink>
+                    {opp.ai_reasoning && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{opp.ai_reasoning}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                      {opp.external_data && (
+                        <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                          <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+                        +{(opp.edge * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                      <span>AI: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
+                      <span>Mkt: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
+                      <Button size="sm" variant="ghost" className="h-7 px-2" asChild>
+                        <BotLink item={opp}><ArrowUpRight className="h-3.5 w-3.5" /></BotLink>
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
           {executedOpps.length > 0 && (
@@ -516,56 +550,91 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead className="text-right">Entry</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                    <TableHead className="text-right">TP / SL</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {openPositions.map((trade) => {
-                    const currentPrice = trade.current_price || trade.entry_price;
-                    const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
-                    const tp = config?.take_profit_percent || 20;
-                    const sl = config?.stop_loss_percent || 10;
-                    return (
-                      <TableRow key={trade.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                          </BotLink>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
-                            {trade.side} {trade.outcome}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(currentPrice * 100).toFixed(0)}¢</TableCell>
-                        <TableCell className={cn("text-right font-mono text-sm", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>
-                          {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-mono">
-                          <span className="text-yes">+{tp}%</span> / <span className="text-no">-{sl}%</span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-xs">Active</Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead>Side</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
+                      <TableHead className="text-right">Entry</TableHead>
+                      <TableHead className="text-right">Current</TableHead>
+                      <TableHead className="text-right">P&L</TableHead>
+                      <TableHead className="text-right">TP / SL</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {openPositions.map((trade) => {
+                      const currentPrice = trade.current_price || trade.entry_price;
+                      const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
+                      const tp = config?.take_profit_percent || 20;
+                      const sl = config?.stop_loss_percent || 10;
+                      return (
+                        <TableRow key={trade.id}>
+                          <TableCell className="max-w-[200px]">
+                            <BotLink item={trade} className="text-sm hover:text-primary truncate block">
+                              {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                            </BotLink>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                              {trade.side} {trade.outcome}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{(currentPrice * 100).toFixed(0)}¢</TableCell>
+                          <TableCell className={cn("text-right font-mono text-sm", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>
+                            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono">
+                            <span className="text-yes">+{tp}%</span> / <span className="text-no">-{sl}%</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">Active</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {openPositions.map((trade) => {
+                  const currentPrice = trade.current_price || trade.entry_price;
+                  const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
+                  const tp = config?.take_profit_percent || 20;
+                  const sl = config?.stop_loss_percent || 10;
+                  return (
+                    <Card key={trade.id} className="p-3">
+                      <BotLink item={trade} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                        {trade.question}
+                      </BotLink>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                          {trade.side} {trade.outcome}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">Active</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                        <span className="text-muted-foreground">Size: <span className="font-mono text-foreground">${trade.size.toFixed(2)}</span></span>
+                        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(trade.entry_price * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">Current: <span className="font-mono text-foreground">{(currentPrice * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">P&L: <span className={cn("font-mono", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</span></span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        TP: <span className="text-yes font-mono">+{tp}%</span> · SL: <span className="text-no font-mono">-{sl}%</span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {/* Closed positions */}
@@ -623,54 +692,83 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead className="text-right">Entry</TableHead>
-                    <TableHead className="text-right">Exit</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {trades.map((trade) => (
-                    <TableRow key={trade.id}>
-                      <TableCell className="max-w-[200px]">
-                        <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                          {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                        </BotLink>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
-                          {trade.side} {trade.outcome}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}
-                      </TableCell>
-                      <TableCell className={cn("text-right font-mono text-sm", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>
-                        {(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
-                          {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        {new Date(trade.created_at).toLocaleDateString()}
-                      </TableCell>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead>Side</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
+                      <TableHead className="text-right">Entry</TableHead>
+                      <TableHead className="text-right">Exit</TableHead>
+                      <TableHead className="text-right">P&L</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Date</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {trades.map((trade) => (
+                      <TableRow key={trade.id}>
+                        <TableCell className="max-w-[200px]">
+                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
+                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                          </BotLink>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                            {trade.side} {trade.outcome}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}
+                        </TableCell>
+                        <TableCell className={cn("text-right font-mono text-sm", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>
+                          {(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
+                            {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {new Date(trade.created_at).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {trades.map((trade) => (
+                  <Card key={trade.id} className="p-3">
+                    <BotLink item={trade} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                      {trade.question}
+                    </BotLink>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                        {trade.side} {trade.outcome}
+                      </Badge>
+                      <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
+                        {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">{new Date(trade.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                      <span className="text-muted-foreground">Size: <span className="font-mono text-foreground">${trade.size.toFixed(2)}</span></span>
+                      <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(trade.entry_price * 100).toFixed(0)}¢</span></span>
+                      <span className="text-muted-foreground">Exit: <span className="font-mono text-foreground">{trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}</span></span>
+                      <span className="text-muted-foreground">P&L: <span className={cn("font-mono", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>{(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}</span></span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
         </TabsContent>
 
@@ -903,12 +1001,12 @@ export default function BotDashboard() {
 
 function OpportunityRow({ opp }: { opp: BotOpportunity }) {
   return (
-    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+    <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-          {opp.question.length > 50 ? opp.question.substring(0, 50) + "…" : opp.question}
+        <BotLink item={opp} className="text-sm hover:text-primary break-words leading-snug block">
+          {opp.question}
         </BotLink>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
           <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
           {opp.external_data && (
             <Badge variant="outline" className="text-xs border-primary/50 text-primary">
@@ -918,7 +1016,7 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
           )}
         </div>
       </div>
-      <Badge variant="outline" className={cn("font-mono text-xs shrink-0", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+      <Badge variant="outline" className={cn("font-mono text-xs shrink-0 mt-0.5", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
         +{(opp.edge * 100).toFixed(1)}%
       </Badge>
     </div>
