@@ -1117,14 +1117,23 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRef
   );
 }
 
-function MobileOppCard({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing }: OppRowProps) {
+function MobileOppCard({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing, minEdge = 0.05 }: OppRowProps & { minEdge?: number }) {
   const [expanded, setExpanded] = useState(false);
   const mktPrice = liveData?.livePrice ?? opp.market_price;
   const edge = liveData?.liveEdge ?? opp.edge;
   const isLive = !!liveData;
+  const isExpired = edge < minEdge;
 
   return (
-    <Card className="p-3 space-y-2.5">
+    <Card className={cn("p-3 space-y-2.5", isExpired && "opacity-60 border-no/30")}>
+      {/* Expiry warning */}
+      {isExpired && (
+        <div className="flex items-center gap-1.5 text-no text-xs bg-no/10 rounded px-2 py-1">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          Edge below threshold – opportunity may be gone
+        </div>
+      )}
+
       {/* Title + refresh */}
       <div className="flex items-start gap-2">
         <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block flex-1">
@@ -1160,10 +1169,10 @@ function MobileOppCard({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRef
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
         <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground font-semibold">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
         <span className="text-muted-foreground">Mkt Price: <span className={cn("font-mono font-semibold", isLive ? "text-primary" : "text-foreground")}>{(mktPrice * 100).toFixed(1)}¢</span>{isLive && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />}</span>
-        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `Limit ${Math.round(opp.suggested_entry * 100)}¢` : "Market order"}</span></span>
+        <span className="text-muted-foreground">Implied: <span className="font-mono text-foreground font-semibold">{(mktPrice * 100).toFixed(1)}%</span></span>
         <span className="text-muted-foreground">Edge: <span className={cn("font-mono font-semibold", edge >= 0.1 ? "text-yes" : edge > 0 ? "text-warning" : "text-no")}>{edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%</span></span>
-        <span className="text-muted-foreground">Take Profit: <span className="font-mono text-yes">{opp.suggested_take_profit ? `${Math.round(opp.suggested_take_profit * 100)}¢` : "—"}</span></span>
-        <span className="text-muted-foreground">Stop Loss: <span className="font-mono text-no">{opp.suggested_stop_loss ? `${Math.round(opp.suggested_stop_loss * 100)}¢` : "—"}</span></span>
+        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `Limit ${Math.round(opp.suggested_entry * 100)}¢` : "Market order"}</span></span>
+        <span className="text-muted-foreground">TP / SL: <span className="font-mono text-yes">{opp.suggested_take_profit ? `${Math.round(opp.suggested_take_profit * 100)}¢` : "—"}</span> / <span className="font-mono text-no">{opp.suggested_stop_loss ? `${Math.round(opp.suggested_stop_loss * 100)}¢` : "—"}</span></span>
       </div>
 
       {/* Reasoning */}
@@ -1184,9 +1193,9 @@ function MobileOppCard({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRef
 
       {/* Action buttons */}
       <div className="flex gap-2 pt-0.5">
-        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
+        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)} disabled={isExecuting || isExpired}>
           {isExecuting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Zap className="h-4 w-4 mr-1.5" />}
-          AI Trade
+          {isExpired ? "Expired" : "AI Trade"}
         </Button>
         <Button size="sm" variant="outline" className="flex-1 min-h-[44px] text-sm" asChild>
           <BotLink item={opp}>
