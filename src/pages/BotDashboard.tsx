@@ -479,32 +479,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-2">
                 {pendingOpps.map((opp) => (
-                  <Card key={opp.id} className="p-3">
-                    <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug">
-                      {opp.question}
-                    </BotLink>
-                    {opp.ai_reasoning && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{opp.ai_reasoning}</p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-                      {opp.external_data && (
-                        <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                          <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-                        +{(opp.edge * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                      <span>AI: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
-                      <span>Mkt: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
-                      <Button size="sm" variant="ghost" className="h-7 px-2" asChild>
-                        <BotLink item={opp}><ArrowUpRight className="h-3.5 w-3.5" /></BotLink>
-                      </Button>
-                    </div>
-                  </Card>
+                  <MobileOppCard key={opp.id} opp={opp} />
                 ))}
               </div>
             </>
