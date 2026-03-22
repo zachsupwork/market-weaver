@@ -43,7 +43,7 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const userAddress = url.searchParams.get("address") || (req.method === "POST" ? (await req.json().catch(() => ({}))).address : null);
-
+    const singleOppId = url.searchParams.get("opp_id") || null;
     if (!userAddress) return jsonResp({ error: "address required" }, 400);
 
     const adminClient = getServiceClient();
