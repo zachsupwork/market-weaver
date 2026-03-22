@@ -308,7 +308,7 @@ export default function BotDashboard() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap no-scrollbar">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities ({pendingOpps.length})</TabsTrigger>
           <TabsTrigger value="positions">Open Positions ({openPositions.length})</TabsTrigger>
