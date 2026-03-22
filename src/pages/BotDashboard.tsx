@@ -423,55 +423,17 @@ export default function BotDashboard() {
                       <TableHead className="text-right whitespace-nowrap">AI Prob</TableHead>
                       <TableHead className="text-right whitespace-nowrap">Mkt Price</TableHead>
                       <TableHead className="text-right">Edge</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead className="text-right">Entry</TableHead>
+                      <TableHead className="text-right">TP / SL</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead className="min-w-[180px]">Reasoning</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="text-right">Trade</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <TableRow key={opp.id}>
-                        <TableCell className="max-w-[280px]">
-                          <BotLink item={opp} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
-                            {opp.question}
-                          </BotLink>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-                            +{(opp.edge * 100).toFixed(1)}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[220px]">
-                          {opp.ai_reasoning ? (
-                            <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-3" title={opp.ai_reasoning}>
-                              {opp.ai_reasoning}
-                            </p>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {opp.external_data ? (
-                            <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                              <Globe className="h-3 w-3 mr-1" />
-                              Yes
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant="ghost" asChild>
-                            <BotLink item={opp}><ArrowUpRight className="h-4 w-4" /></BotLink>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} />
                     ))}
                   </TableBody>
                 </Table>
