@@ -692,54 +692,83 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead className="text-right">Entry</TableHead>
-                    <TableHead className="text-right">Exit</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {trades.map((trade) => (
-                    <TableRow key={trade.id}>
-                      <TableCell className="max-w-[200px]">
-                        <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                          {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                        </BotLink>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
-                          {trade.side} {trade.outcome}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}
-                      </TableCell>
-                      <TableCell className={cn("text-right font-mono text-sm", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>
-                        {(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
-                          {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        {new Date(trade.created_at).toLocaleDateString()}
-                      </TableCell>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead>Side</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
+                      <TableHead className="text-right">Entry</TableHead>
+                      <TableHead className="text-right">Exit</TableHead>
+                      <TableHead className="text-right">P&L</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Date</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {trades.map((trade) => (
+                      <TableRow key={trade.id}>
+                        <TableCell className="max-w-[200px]">
+                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
+                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                          </BotLink>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                            {trade.side} {trade.outcome}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}
+                        </TableCell>
+                        <TableCell className={cn("text-right font-mono text-sm", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>
+                          {(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
+                            {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {new Date(trade.created_at).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {trades.map((trade) => (
+                  <Card key={trade.id} className="p-3">
+                    <BotLink item={trade} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                      {trade.question}
+                    </BotLink>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                        {trade.side} {trade.outcome}
+                      </Badge>
+                      <Badge variant="secondary" className={cn("text-xs", trade.simulation && "border-warning text-warning")}>
+                        {trade.simulation ? "SIM" : trade.exited ? "Closed" : trade.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">{new Date(trade.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                      <span className="text-muted-foreground">Size: <span className="font-mono text-foreground">${trade.size.toFixed(2)}</span></span>
+                      <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(trade.entry_price * 100).toFixed(0)}¢</span></span>
+                      <span className="text-muted-foreground">Exit: <span className="font-mono text-foreground">{trade.exit_price ? `${(trade.exit_price * 100).toFixed(0)}¢` : "—"}</span></span>
+                      <span className="text-muted-foreground">P&L: <span className={cn("font-mono", (trade.pnl || 0) > 0 && "text-yes", (trade.pnl || 0) < 0 && "text-no")}>{(trade.pnl || 0) >= 0 ? "+" : ""}${(trade.pnl || 0).toFixed(2)}</span></span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
         </TabsContent>
 
