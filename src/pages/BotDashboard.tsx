@@ -550,56 +550,91 @@ export default function BotDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead className="text-right">Entry</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                    <TableHead className="text-right">TP / SL</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {openPositions.map((trade) => {
-                    const currentPrice = trade.current_price || trade.entry_price;
-                    const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
-                    const tp = config?.take_profit_percent || 20;
-                    const sl = config?.stop_loss_percent || 10;
-                    return (
-                      <TableRow key={trade.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
-                          </BotLink>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
-                            {trade.side} {trade.outcome}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{(currentPrice * 100).toFixed(0)}¢</TableCell>
-                        <TableCell className={cn("text-right font-mono text-sm", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>
-                          {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-mono">
-                          <span className="text-yes">+{tp}%</span> / <span className="text-no">-{sl}%</span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-xs">Active</Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
+            <>
+              {/* Desktop table */}
+              <Card className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Market</TableHead>
+                      <TableHead>Side</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
+                      <TableHead className="text-right">Entry</TableHead>
+                      <TableHead className="text-right">Current</TableHead>
+                      <TableHead className="text-right">P&L</TableHead>
+                      <TableHead className="text-right">TP / SL</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {openPositions.map((trade) => {
+                      const currentPrice = trade.current_price || trade.entry_price;
+                      const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
+                      const tp = config?.take_profit_percent || 20;
+                      const sl = config?.stop_loss_percent || 10;
+                      return (
+                        <TableRow key={trade.id}>
+                          <TableCell className="max-w-[200px]">
+                            <BotLink item={trade} className="text-sm hover:text-primary truncate block">
+                              {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                            </BotLink>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                              {trade.side} {trade.outcome}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">${trade.size.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{(trade.entry_price * 100).toFixed(0)}¢</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{(currentPrice * 100).toFixed(0)}¢</TableCell>
+                          <TableCell className={cn("text-right font-mono text-sm", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>
+                            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono">
+                            <span className="text-yes">+{tp}%</span> / <span className="text-no">-{sl}%</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">Active</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {openPositions.map((trade) => {
+                  const currentPrice = trade.current_price || trade.entry_price;
+                  const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100;
+                  const tp = config?.take_profit_percent || 20;
+                  const sl = config?.stop_loss_percent || 10;
+                  return (
+                    <Card key={trade.id} className="p-3">
+                      <BotLink item={trade} className="text-sm font-medium hover:text-primary break-words leading-snug">
+                        {trade.question}
+                      </BotLink>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <Badge variant="outline" className={cn("text-xs", trade.side === "BUY" ? "border-yes text-yes" : "border-no text-no")}>
+                          {trade.side} {trade.outcome}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">Active</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                        <span className="text-muted-foreground">Size: <span className="font-mono text-foreground">${trade.size.toFixed(2)}</span></span>
+                        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(trade.entry_price * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">Current: <span className="font-mono text-foreground">{(currentPrice * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">P&L: <span className={cn("font-mono", pnlPct > 0 && "text-yes", pnlPct < 0 && "text-no")}>{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</span></span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        TP: <span className="text-yes font-mono">+{tp}%</span> · SL: <span className="text-no font-mono">-{sl}%</span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {/* Closed positions */}
