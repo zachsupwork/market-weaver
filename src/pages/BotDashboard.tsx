@@ -414,15 +414,16 @@ export default function BotDashboard() {
           ) : (
             <>
               {/* Desktop table */}
-              <Card className="hidden md:block">
+              <Card className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Market</TableHead>
-                      <TableHead className="text-right">AI Prob</TableHead>
-                      <TableHead className="text-right">Market</TableHead>
+                      <TableHead className="min-w-[220px]">Market</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">AI Prob</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Mkt Price</TableHead>
                       <TableHead className="text-right">Edge</TableHead>
                       <TableHead>Category</TableHead>
+                      <TableHead className="min-w-[180px]">Reasoning</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -430,13 +431,10 @@ export default function BotDashboard() {
                   <TableBody>
                     {pendingOpps.map((opp) => (
                       <TableRow key={opp.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={opp} className="text-sm hover:text-primary truncate block">
-                            {opp.question.length > 60 ? opp.question.substring(0, 60) + "…" : opp.question}
+                        <TableCell className="max-w-[280px]">
+                          <BotLink item={opp} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
+                            {opp.question}
                           </BotLink>
-                          {opp.ai_reasoning && (
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{opp.ai_reasoning.substring(0, 80)}…</p>
-                          )}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
                         <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
@@ -447,6 +445,15 @@ export default function BotDashboard() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          {opp.ai_reasoning ? (
+                            <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-3" title={opp.ai_reasoning}>
+                              {opp.ai_reasoning}
+                            </p>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {opp.external_data ? (
@@ -472,32 +479,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-2">
                 {pendingOpps.map((opp) => (
-                  <Card key={opp.id} className="p-3">
-                    <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug">
-                      {opp.question}
-                    </BotLink>
-                    {opp.ai_reasoning && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{opp.ai_reasoning}</p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-                      {opp.external_data && (
-                        <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                          <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-                        +{(opp.edge * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                      <span>AI: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
-                      <span>Mkt: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
-                      <Button size="sm" variant="ghost" className="h-7 px-2" asChild>
-                        <BotLink item={opp}><ArrowUpRight className="h-3.5 w-3.5" /></BotLink>
-                      </Button>
-                    </div>
-                  </Card>
+                  <MobileOppCard key={opp.id} opp={opp} />
                 ))}
               </div>
             </>
@@ -1020,5 +1002,51 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
         +{(opp.edge * 100).toFixed(1)}%
       </Badge>
     </div>
+  );
+}
+
+function MobileOppCard({ opp }: { opp: BotOpportunity }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Card className="p-3">
+      <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block">
+        {opp.question}
+      </BotLink>
+      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+        <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+        {opp.external_data && (
+          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+            <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
+          </Badge>
+        )}
+        <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+          +{(opp.edge * 100).toFixed(1)}%
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+        <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
+      </div>
+      {opp.ai_reasoning && (
+        <div className="mt-2">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            {expanded ? "Hide" : "Show"} reasoning
+          </button>
+          {expanded && (
+            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">{opp.ai_reasoning}</p>
+          )}
+        </div>
+      )}
+      <div className="flex justify-end mt-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+          <BotLink item={opp}>
+            Trade <ArrowUpRight className="h-3 w-3 ml-1" />
+          </BotLink>
+        </Button>
+      </div>
+    </Card>
   );
 }
