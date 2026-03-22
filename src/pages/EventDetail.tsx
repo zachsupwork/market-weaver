@@ -92,7 +92,7 @@ function CandidateRow({
     <button
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 text-left transition-all rounded-xl group",
+        "w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 text-left transition-all rounded-xl group",
         selected
           ? "bg-primary/8 border border-primary/30 shadow-sm shadow-primary/5"
           : "hover:bg-muted/60 border border-transparent hover:border-border/50"
@@ -140,11 +140,11 @@ function CandidateRow({
         )}
       </AnimatePresence>
 
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="rounded-md bg-yes/15 border border-yes/25 px-2 py-1 text-xs font-mono font-bold text-yes min-w-[56px] text-center">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <span className="rounded-md bg-yes/15 border border-yes/25 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-mono font-bold text-yes min-w-[44px] sm:min-w-[56px] text-center">
           {pct !== null ? `${Math.round(price * 100)}¢` : "—"}
         </span>
-        <span className="rounded-md bg-no/15 border border-no/25 px-2 py-1 text-xs font-mono font-bold text-no hidden sm:block min-w-[56px] text-center">
+        <span className="rounded-md bg-no/15 border border-no/25 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-mono font-bold text-no min-w-[44px] sm:min-w-[56px] text-center">
           {noPct !== null ? `${Math.round((noPrice ?? 0) * 100)}¢` : "—"}
         </span>
       </div>
