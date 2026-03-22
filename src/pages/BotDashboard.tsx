@@ -499,7 +499,7 @@ export default function BotDashboard() {
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} minEdge={config?.min_edge ?? 0.05} />
                     ))}
                   </TableBody>
                 </Table>
