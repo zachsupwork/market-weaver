@@ -615,7 +615,7 @@ export function OrderTicket({
         type="submit"
         disabled={submitting || !isTradable || !hasMarketPrice || (!isConnected && isBuy)}
         className={cn(
-          "w-full rounded-md py-2.5 text-sm font-semibold transition-all",
+          "w-full rounded-md py-2.5 min-h-[44px] text-sm font-semibold transition-all",
           isYes ? "bg-yes text-yes-foreground hover:bg-yes/90" : "bg-no text-no-foreground hover:bg-no/90",
           (submitting || !isTradable || !hasMarketPrice) && "opacity-50 cursor-not-allowed"
         )}

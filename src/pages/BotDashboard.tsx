@@ -693,9 +693,9 @@ export default function BotDashboard() {
                   <TableBody>
                     {trades.map((trade) => (
                       <TableRow key={trade.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                         <TableCell className="max-w-[280px]">
+                          <BotLink item={trade} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
+                            {trade.question}
                           </BotLink>
                         </TableCell>
                         <TableCell>
