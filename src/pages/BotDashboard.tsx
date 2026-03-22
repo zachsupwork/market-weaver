@@ -993,39 +993,79 @@ export default function BotDashboard() {
   );
 }
 
-function OpportunityRow({ opp }: { opp: BotOpportunity }) {
+function DesktopOppRow({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id: string) => void }) {
+  const [showReasoning, setShowReasoning] = useState(false);
   return (
-    <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
-      <div className="min-w-0 flex-1">
-        <BotLink item={opp} className="text-sm hover:text-primary break-words leading-snug block">
+    <TableRow>
+      <TableCell className="max-w-[280px]">
+        <BotLink item={opp} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
           {opp.question}
         </BotLink>
-        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-          <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
-          {opp.external_data && (
-            <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-              <Globe className="h-2.5 w-2.5 mr-0.5" />
-              Ext
-            </Badge>
-          )}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
+      <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
+      <TableCell className="text-right">
+        <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+          +{(opp.edge * 100).toFixed(1)}%
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant={opp.suggested_action === "BUY_YES" ? "default" : "secondary"} className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "bg-yes/15 text-yes border-yes/30" : "bg-no/15 text-no border-no/30")}>
+          {opp.suggested_action === "BUY_YES" ? "Buy YES" : "Buy NO"}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {opp.suggested_entry ? `${Math.round(opp.suggested_entry * 100)}¢` : "Mkt"}
+      </TableCell>
+      <TableCell className="text-right text-xs font-mono whitespace-nowrap">
+        {opp.suggested_take_profit ? <span className="text-yes">+{Math.round(opp.suggested_take_profit * 100)}¢</span> : "—"}
+        {" / "}
+        {opp.suggested_stop_loss ? <span className="text-no">{Math.round(opp.suggested_stop_loss * 100)}¢</span> : "—"}
+      </TableCell>
+      <TableCell>
+        <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+      </TableCell>
+      <TableCell className="max-w-[220px]">
+        {opp.ai_reasoning ? (
+          <div>
+            <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-2">{opp.ai_reasoning}</p>
+            <button onClick={() => setShowReasoning(!showReasoning)} className="text-xs text-primary hover:underline mt-0.5">
+              {showReasoning ? "Less" : "More"}
+            </button>
+            {showReasoning && <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">{opp.ai_reasoning}</p>}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex gap-1 justify-end">
+          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)}>
+            <Zap className="h-3 w-3 mr-1" />AI
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+            <BotLink item={opp}><ArrowUpRight className="h-3 w-3" /></BotLink>
+          </Button>
         </div>
-      </div>
-      <Badge variant="outline" className={cn("font-mono text-xs shrink-0 mt-0.5", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-        +{(opp.edge * 100).toFixed(1)}%
-      </Badge>
-    </div>
+      </TableCell>
+    </TableRow>
   );
 }
 
-function MobileOppCard({ opp }: { opp: BotOpportunity }) {
+function MobileOppCard({ opp, onAiTrade }: { opp: BotOpportunity; onAiTrade: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <Card className="p-3">
+    <Card className="p-3 space-y-2">
       <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block">
         {opp.question}
       </BotLink>
-      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+
+      {/* Badges row */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+        <Badge variant="outline" className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "border-yes/50 text-yes" : "border-no/50 text-no")}>
+          {opp.suggested_action === "BUY_YES" ? "Buy YES" : "Buy NO"}
+        </Badge>
         {opp.external_data && (
           <Badge variant="outline" className="text-xs border-primary/50 text-primary">
             <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
@@ -1035,12 +1075,24 @@ function MobileOppCard({ opp }: { opp: BotOpportunity }) {
           +{(opp.edge * 100).toFixed(1)}%
         </Badge>
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
         <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `${Math.round(opp.suggested_entry * 100)}¢` : "Market"}</span></span>
+        <span className="text-muted-foreground">Edge: <span className={cn("font-mono", opp.edge >= 0.1 ? "text-yes" : "text-warning")}>+{(opp.edge * 100).toFixed(1)}%</span></span>
+        {opp.suggested_take_profit && (
+          <span className="text-muted-foreground">TP: <span className="font-mono text-yes">{Math.round(opp.suggested_take_profit * 100)}¢</span></span>
+        )}
+        {opp.suggested_stop_loss && (
+          <span className="text-muted-foreground">SL: <span className="font-mono text-no">{Math.round(opp.suggested_stop_loss * 100)}¢</span></span>
+        )}
       </div>
+
+      {/* Reasoning */}
       {opp.ai_reasoning && (
-        <div className="mt-2">
+        <div>
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-xs text-primary hover:underline flex items-center gap-1"
@@ -1048,14 +1100,20 @@ function MobileOppCard({ opp }: { opp: BotOpportunity }) {
             {expanded ? "Hide" : "Show"} reasoning
           </button>
           {expanded && (
-            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">{opp.ai_reasoning}</p>
+            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">{opp.ai_reasoning}</p>
           )}
         </div>
       )}
-      <div className="flex justify-end mt-2">
-        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)}>
+          <Zap className="h-4 w-4 mr-1.5" />
+          AI Trade
+        </Button>
+        <Button size="sm" variant="outline" className="flex-1 min-h-[44px] text-sm" asChild>
           <BotLink item={opp}>
-            Trade <ArrowUpRight className="h-3 w-3 ml-1" />
+            Manual Trade <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
           </BotLink>
         </Button>
       </div>
