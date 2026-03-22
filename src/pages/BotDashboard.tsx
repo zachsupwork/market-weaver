@@ -501,7 +501,7 @@ export default function BotDashboard() {
                   <TableBody>
                     {executedOpps.slice(0, 20).map((opp) => (
                       <TableRow key={opp.id} className="opacity-60">
-                        <TableCell className="text-sm truncate max-w-[250px]">{opp.question}</TableCell>
+                        <TableCell className="text-sm max-w-[250px] whitespace-normal break-words">{opp.question}</TableCell>
                         <TableCell className="text-right font-mono text-sm">+{(opp.edge * 100).toFixed(1)}%</TableCell>
                         <TableCell><Badge variant="secondary" className="text-xs">{opp.status}</Badge></TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">{new Date(opp.created_at).toLocaleDateString()}</TableCell>
