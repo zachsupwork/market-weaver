@@ -1075,12 +1075,13 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
 function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <Card className="p-3 space-y-2">
+    <Card className="p-3 space-y-2.5">
+      {/* Title */}
       <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block">
         {opp.question}
       </BotLink>
 
-      {/* Badges row */}
+      {/* Badges */}
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
         <Badge variant="outline" className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "border-yes/50 text-yes" : "border-no/50 text-no")}>
@@ -1096,37 +1097,34 @@ function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
         </Badge>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
-        <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
-        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `${Math.round(opp.suggested_entry * 100)}¢` : "Market"}</span></span>
-        <span className="text-muted-foreground">Edge: <span className={cn("font-mono", opp.edge >= 0.1 ? "text-yes" : "text-warning")}>+{(opp.edge * 100).toFixed(1)}%</span></span>
-        {opp.suggested_take_profit && (
-          <span className="text-muted-foreground">TP: <span className="font-mono text-yes">{Math.round(opp.suggested_take_profit * 100)}¢</span></span>
-        )}
-        {opp.suggested_stop_loss && (
-          <span className="text-muted-foreground">SL: <span className="font-mono text-no">{Math.round(opp.suggested_stop_loss * 100)}¢</span></span>
-        )}
+      {/* All stats – always visible */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+        <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground font-semibold">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground font-semibold">{(opp.market_price * 100).toFixed(1)}¢</span></span>
+        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `Limit ${Math.round(opp.suggested_entry * 100)}¢` : "Market order"}</span></span>
+        <span className="text-muted-foreground">Edge: <span className={cn("font-mono font-semibold", opp.edge >= 0.1 ? "text-yes" : "text-warning")}>+{(opp.edge * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Take Profit: <span className="font-mono text-yes">{opp.suggested_take_profit ? `${Math.round(opp.suggested_take_profit * 100)}¢` : "—"}</span></span>
+        <span className="text-muted-foreground">Stop Loss: <span className="font-mono text-no">{opp.suggested_stop_loss ? `${Math.round(opp.suggested_stop_loss * 100)}¢` : "—"}</span></span>
       </div>
 
-      {/* Reasoning */}
-      {opp.ai_reasoning && (
-        <div>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-primary hover:underline flex items-center gap-1"
-          >
-            {expanded ? "Hide" : "Show"} reasoning
-          </button>
-          {expanded && (
-            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">{opp.ai_reasoning}</p>
+      {/* Reasoning – show preview by default */}
+      {opp.ai_reasoning ? (
+        <div className="bg-secondary/30 rounded-md p-2">
+          <p className={cn("text-xs text-muted-foreground whitespace-normal break-words leading-relaxed", !expanded && "line-clamp-3")}>
+            {opp.ai_reasoning}
+          </p>
+          {opp.ai_reasoning.length > 120 && (
+            <button onClick={() => setExpanded(!expanded)} className="text-xs text-primary hover:underline mt-1">
+              {expanded ? "Show less" : "Show more"}
+            </button>
           )}
         </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">No reasoning available</p>
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2 pt-1">
+      <div className="flex gap-2 pt-0.5">
         <Button size="sm" className="flex-1 min-h-[44px] text-sm" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
           {isExecuting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Zap className="h-4 w-4 mr-1.5" />}
           AI Trade
