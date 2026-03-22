@@ -1004,3 +1004,49 @@ function OpportunityRow({ opp }: { opp: BotOpportunity }) {
     </div>
   );
 }
+
+function MobileOppCard({ opp }: { opp: BotOpportunity }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Card className="p-3">
+      <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block">
+        {opp.question}
+      </BotLink>
+      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+        <Badge variant="secondary" className="text-xs">{opp.category || "General"}</Badge>
+        {opp.external_data && (
+          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+            <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
+          </Badge>
+        )}
+        <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
+          +{(opp.edge * 100).toFixed(1)}%
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+        <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground">{(opp.market_price * 100).toFixed(1)}%</span></span>
+      </div>
+      {opp.ai_reasoning && (
+        <div className="mt-2">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            {expanded ? "Hide" : "Show"} reasoning
+          </button>
+          {expanded && (
+            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">{opp.ai_reasoning}</p>
+          )}
+        </div>
+      )}
+      <div className="flex justify-end mt-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+          <BotLink item={opp}>
+            Trade <ArrowUpRight className="h-3 w-3 ml-1" />
+          </BotLink>
+        </Button>
+      </div>
+    </Card>
+  );
+}
