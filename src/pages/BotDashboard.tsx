@@ -86,7 +86,10 @@ export default function BotDashboard() {
   const { execute, isExecuting } = useBotExecutor(address);
   const { monitor, isMonitoring } = useBotMonitor(address);
   const livePrices = useBotLivePrices(opportunities);
+  const queryClient = useQueryClient();
   const [refreshingOppId, setRefreshingOppId] = useState<string | null>(null);
+  const [executingOppId, setExecutingOppId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const handleRefreshOpp = useCallback(async (opp: BotOpportunity) => {
     if (!address) return;
@@ -108,8 +111,6 @@ export default function BotDashboard() {
       setRefreshingOppId(null);
     }
   }, [address, queryClient]);
-
-  const [activeTab, setActiveTab] = useState("overview");
 
   // Computed stats
   const stats = useMemo(() => {
