@@ -108,7 +108,7 @@ function CandidateRow({
       </span>
 
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate block">{displayLabel}</span>
+        <span className="text-sm font-medium break-words leading-snug block">{displayLabel}</span>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 max-w-[200px]">
           {pct !== null ? (
             <motion.div
