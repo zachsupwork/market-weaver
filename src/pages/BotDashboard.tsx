@@ -488,7 +488,7 @@ export default function BotDashboard() {
           {executedOpps.length > 0 && (
             <>
               <h3 className="text-sm font-medium text-muted-foreground mt-6">Previously Executed ({executedOpps.length})</h3>
-              <Card>
+              <Card className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -501,7 +501,7 @@ export default function BotDashboard() {
                   <TableBody>
                     {executedOpps.slice(0, 20).map((opp) => (
                       <TableRow key={opp.id} className="opacity-60">
-                        <TableCell className="text-sm truncate max-w-[250px]">{opp.question}</TableCell>
+                        <TableCell className="text-sm max-w-[250px] whitespace-normal break-words">{opp.question}</TableCell>
                         <TableCell className="text-right font-mono text-sm">+{(opp.edge * 100).toFixed(1)}%</TableCell>
                         <TableCell><Badge variant="secondary" className="text-xs">{opp.status}</Badge></TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">{new Date(opp.created_at).toLocaleDateString()}</TableCell>
@@ -510,6 +510,18 @@ export default function BotDashboard() {
                   </TableBody>
                 </Table>
               </Card>
+              <div className="md:hidden space-y-2">
+                {executedOpps.slice(0, 20).map((opp) => (
+                  <Card key={opp.id} className="p-3 opacity-70">
+                    <p className="text-sm break-words leading-snug">{opp.question}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant="outline" className="text-xs font-mono">+{(opp.edge * 100).toFixed(1)}%</Badge>
+                      <Badge variant="secondary" className="text-xs">{opp.status}</Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">{new Date(opp.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </>
           )}
         </TabsContent>
@@ -556,9 +568,9 @@ export default function BotDashboard() {
                       const sl = config?.stop_loss_percent || 10;
                       return (
                         <TableRow key={trade.id}>
-                          <TableCell className="max-w-[200px]">
-                            <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                              {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                          <TableCell className="max-w-[280px]">
+                            <BotLink item={trade} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
+                              {trade.question}
                             </BotLink>
                           </TableCell>
                           <TableCell>
@@ -626,7 +638,7 @@ export default function BotDashboard() {
             return (
               <>
                 <h3 className="text-sm font-medium text-muted-foreground mt-6">Closed Positions ({closed.length})</h3>
-                <Card>
+                <Card className="hidden md:block overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -640,7 +652,7 @@ export default function BotDashboard() {
                     <TableBody>
                       {closed.slice(0, 20).map((t) => (
                         <TableRow key={t.id}>
-                          <TableCell className="text-sm truncate max-w-[200px]">{t.question}</TableCell>
+                          <TableCell className="text-sm max-w-[250px] whitespace-normal break-words">{t.question}</TableCell>
                           <TableCell className="text-right font-mono text-sm">{(t.entry_price * 100).toFixed(0)}¢</TableCell>
                           <TableCell className="text-right font-mono text-sm">{((t.exit_price || 0) * 100).toFixed(0)}¢</TableCell>
                           <TableCell className={cn("text-right font-mono text-sm", (t.pnl || 0) > 0 && "text-yes", (t.pnl || 0) < 0 && "text-no")}>
@@ -654,6 +666,19 @@ export default function BotDashboard() {
                     </TableBody>
                   </Table>
                 </Card>
+                <div className="md:hidden space-y-2">
+                  {closed.slice(0, 20).map((t) => (
+                    <Card key={t.id} className="p-3">
+                      <p className="text-sm break-words leading-snug">{t.question}</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
+                        <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{(t.entry_price * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">Exit: <span className="font-mono text-foreground">{((t.exit_price || 0) * 100).toFixed(0)}¢</span></span>
+                        <span className="text-muted-foreground">P&L: <span className={cn("font-mono", (t.pnl || 0) > 0 && "text-yes", (t.pnl || 0) < 0 && "text-no")}>{(t.pnl || 0) >= 0 ? "+" : ""}${(t.pnl || 0).toFixed(2)}</span></span>
+                        <span className="text-muted-foreground">Reason: <Badge variant="outline" className="text-xs">{t.exit_reason || "manual"}</Badge></span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </>
             );
           })()}
@@ -693,9 +718,9 @@ export default function BotDashboard() {
                   <TableBody>
                     {trades.map((trade) => (
                       <TableRow key={trade.id}>
-                        <TableCell className="max-w-[200px]">
-                          <BotLink item={trade} className="text-sm hover:text-primary truncate block">
-                            {trade.question.length > 50 ? trade.question.substring(0, 50) + "…" : trade.question}
+                         <TableCell className="max-w-[280px]">
+                          <BotLink item={trade} className="text-sm hover:text-primary whitespace-normal break-words leading-snug block">
+                            {trade.question}
                           </BotLink>
                         </TableCell>
                         <TableCell>

@@ -108,7 +108,7 @@ function CandidateRow({
       </span>
 
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate block">{displayLabel}</span>
+        <span className="text-sm font-medium break-words leading-snug block">{displayLabel}</span>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 max-w-[200px]">
           {pct !== null ? (
             <motion.div
@@ -305,7 +305,7 @@ const EventDetail = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="container py-6 max-w-7xl">
+      <div className="container px-3 sm:px-4 py-4 sm:py-6 max-w-7xl">
         <div className="flex items-center justify-between mb-5">
           <Link
             to="/events"
@@ -344,7 +344,7 @@ const EventDetail = () => {
               />
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold leading-snug">{title}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold leading-snug break-words">{title}</h1>
 
               <div className="flex flex-wrap items-center gap-2.5 mt-2">
                 {gameStartTime && (
@@ -456,7 +456,7 @@ const EventDetail = () => {
           )}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           <div className="flex-1 min-w-0 space-y-5">
             {selected && (
               <EventPriceChart
@@ -588,7 +588,7 @@ const EventDetail = () => {
             )}
           </div>
 
-          <div className="lg:w-[340px] shrink-0">
+          <div className="w-full lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
                 <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
