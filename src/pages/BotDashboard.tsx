@@ -85,6 +85,30 @@ export default function BotDashboard() {
   const { scan, isScanning } = useBotScanner(address);
   const { execute, isExecuting } = useBotExecutor(address);
   const { monitor, isMonitoring } = useBotMonitor(address);
+  const livePrices = useBotLivePrices(opportunities);
+  const [refreshingOppId, setRefreshingOppId] = useState<string | null>(null);
+
+  const handleRefreshOpp = useCallback(async (opp: BotOpportunity) => {
+    if (!address) return;
+    setRefreshingOppId(opp.id);
+    try {
+      const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(
+        `https://${PROJECT_ID}.supabase.co/functions/v1/bot-scan-markets?address=${encodeURIComponent(address)}&market_id=${encodeURIComponent(opp.market_id)}`,
+        { headers: { apikey: ANON_KEY } }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Refresh failed");
+      toast.success("AI analysis refreshed");
+      queryClient.invalidateQueries({ queryKey: ["bot-opportunities", address.toLowerCase()] });
+    } catch (err: any) {
+      toast.error(err.message || "Refresh failed");
+    } finally {
+      setRefreshingOppId(null);
+    }
+  }, [address, queryClient]);
+
   const [activeTab, setActiveTab] = useState("overview");
 
   // Computed stats
