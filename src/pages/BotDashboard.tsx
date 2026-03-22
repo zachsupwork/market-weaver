@@ -508,7 +508,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {pendingOpps.map((opp) => (
-                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
+                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} minEdge={config?.min_edge ?? 0.05} />
                 ))}
               </div>
             </>
