@@ -440,9 +440,9 @@ export default function BotDashboard() {
               </Card>
 
               {/* Mobile cards */}
-              <div className="md:hidden space-y-2">
+              <div className="md:hidden space-y-3">
                 {pendingOpps.map((opp) => (
-                  <MobileOppCard key={opp.id} opp={opp} />
+                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} />
                 ))}
               </div>
             </>
