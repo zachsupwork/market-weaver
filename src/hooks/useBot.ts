@@ -45,6 +45,10 @@ export interface BotOpportunity {
   external_data: any;
   event_slug: string | null;
   external_url: string | null;
+  suggested_action: string | null;
+  suggested_entry: number | null;
+  suggested_take_profit: number | null;
+  suggested_stop_loss: number | null;
 }
 
 export interface BotTrade {
