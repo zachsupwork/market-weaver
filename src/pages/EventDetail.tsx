@@ -344,7 +344,7 @@ const EventDetail = () => {
               />
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold leading-snug">{title}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold leading-snug break-words">{title}</h1>
 
               <div className="flex flex-wrap items-center gap-2.5 mt-2">
                 {gameStartTime && (
