@@ -588,7 +588,7 @@ const EventDetail = () => {
             )}
           </div>
 
-          <div className="lg:w-[340px] shrink-0">
+          <div className="w-full lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
                 <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
