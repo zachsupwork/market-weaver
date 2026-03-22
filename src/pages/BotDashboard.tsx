@@ -220,7 +220,7 @@ export default function BotDashboard() {
   const executedOpps = opportunities.filter((o) => o.executed);
 
   return (
-    <div className="container max-w-7xl mx-auto p-4 pt-20 space-y-6">
+    <div className="container max-w-7xl mx-auto px-3 sm:px-4 pt-20 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
