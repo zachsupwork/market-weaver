@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Link } from "react-router-dom";
@@ -22,6 +22,7 @@ import {
   XCircle,
   Database,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ import {
   type BotTrade,
 } from "@/hooks/useBot";
 import { useQueryClient } from "@tanstack/react-query";
+import { useBotLivePrices } from "@/hooks/useBotLivePrices";
 import {
   XAxis,
   YAxis,
@@ -83,7 +85,32 @@ export default function BotDashboard() {
   const { scan, isScanning } = useBotScanner(address);
   const { execute, isExecuting } = useBotExecutor(address);
   const { monitor, isMonitoring } = useBotMonitor(address);
+  const livePrices = useBotLivePrices(opportunities);
+  const queryClient = useQueryClient();
+  const [refreshingOppId, setRefreshingOppId] = useState<string | null>(null);
+  const [executingOppId, setExecutingOppId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+
+  const handleRefreshOpp = useCallback(async (opp: BotOpportunity) => {
+    if (!address) return;
+    setRefreshingOppId(opp.id);
+    try {
+      const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(
+        `https://${PROJECT_ID}.supabase.co/functions/v1/bot-scan-markets?address=${encodeURIComponent(address)}&market_id=${encodeURIComponent(opp.market_id)}`,
+        { headers: { apikey: ANON_KEY } }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Refresh failed");
+      toast.success("AI analysis refreshed");
+      queryClient.invalidateQueries({ queryKey: ["bot-opportunities", address.toLowerCase()] });
+    } catch (err: any) {
+      toast.error(err.message || "Refresh failed");
+    } finally {
+      setRefreshingOppId(null);
+    }
+  }, [address, queryClient]);
 
   // Computed stats
   const stats = useMemo(() => {
@@ -153,8 +180,6 @@ export default function BotDashboard() {
     }
   };
 
-  const queryClient = useQueryClient();
-  const [executingOppId, setExecutingOppId] = useState<string | null>(null);
   const handleExecuteSingle = async (oppId: string) => {
     if (!address) return;
     setExecutingOppId(oppId);
@@ -474,7 +499,7 @@ export default function BotDashboard() {
                   </TableHeader>
                   <TableBody>
                     {pendingOpps.map((opp) => (
-                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
+                      <DesktopOppRow key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
                     ))}
                   </TableBody>
                 </Table>
@@ -483,7 +508,7 @@ export default function BotDashboard() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {pendingOpps.map((opp) => (
-                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} />
+                  <MobileOppCard key={opp.id} opp={opp} onAiTrade={handleExecuteSingle} isExecuting={executingOppId === opp.id} liveData={livePrices[opp.id]} onRefresh={handleRefreshOpp} isRefreshing={refreshingOppId === opp.id} />
                 ))}
               </div>
             </>
@@ -1010,8 +1035,21 @@ export default function BotDashboard() {
   );
 }
 
-function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
+interface OppRowProps {
+  opp: BotOpportunity;
+  onAiTrade: (id: string) => void;
+  isExecuting: boolean;
+  liveData?: { livePrice: number; liveEdge: number };
+  onRefresh: (opp: BotOpportunity) => void;
+  isRefreshing: boolean;
+}
+
+function DesktopOppRow({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing }: OppRowProps) {
   const [showReasoning, setShowReasoning] = useState(false);
+  const mktPrice = liveData?.livePrice ?? opp.market_price;
+  const edge = liveData?.liveEdge ?? opp.edge;
+  const isLive = !!liveData;
+
   return (
     <TableRow>
       <TableCell className="max-w-[280px]">
@@ -1020,10 +1058,13 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
         </BotLink>
       </TableCell>
       <TableCell className="text-right font-mono text-sm">{(opp.ai_probability * 100).toFixed(1)}%</TableCell>
-      <TableCell className="text-right font-mono text-sm">{(opp.market_price * 100).toFixed(1)}%</TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        <span className={isLive ? "text-primary" : ""}>{(mktPrice * 100).toFixed(1)}¢</span>
+        {isLive && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />}
+      </TableCell>
       <TableCell className="text-right">
-        <Badge variant="outline" className={cn("font-mono", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-          +{(opp.edge * 100).toFixed(1)}%
+        <Badge variant="outline" className={cn("font-mono", edge >= 0.1 ? "border-yes text-yes" : edge > 0 ? "border-warning text-warning" : "border-no text-no")}>
+          {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%
         </Badge>
       </TableCell>
       <TableCell>
@@ -1045,11 +1086,7 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
       <TableCell className="max-w-[220px]">
         {opp.ai_reasoning ? (
           <div>
-            {showReasoning ? (
-              <p className="text-xs text-muted-foreground whitespace-normal break-words">{opp.ai_reasoning}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground whitespace-normal break-words line-clamp-2">{opp.ai_reasoning}</p>
-            )}
+            <p className={cn("text-xs text-muted-foreground whitespace-normal break-words", !showReasoning && "line-clamp-2")}>{opp.ai_reasoning}</p>
             <button onClick={() => setShowReasoning(!showReasoning)} className="text-xs text-primary hover:underline mt-0.5">
               {showReasoning ? "Less" : "More"}
             </button>
@@ -1060,6 +1097,9 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
       </TableCell>
       <TableCell className="text-right">
         <div className="flex gap-1 justify-end">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onRefresh(opp)} disabled={isRefreshing}>
+            <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+          </Button>
           <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onAiTrade(opp.id)} disabled={isExecuting}>
             {isExecuting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Zap className="h-3 w-3 mr-1" />}AI
           </Button>
@@ -1072,14 +1112,23 @@ function DesktopOppRow({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
   );
 }
 
-function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; onAiTrade: (id: string) => void; isExecuting: boolean }) {
+function MobileOppCard({ opp, onAiTrade, isExecuting, liveData, onRefresh, isRefreshing }: OppRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const mktPrice = liveData?.livePrice ?? opp.market_price;
+  const edge = liveData?.liveEdge ?? opp.edge;
+  const isLive = !!liveData;
+
   return (
     <Card className="p-3 space-y-2.5">
-      {/* Title */}
-      <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block">
-        {opp.question}
-      </BotLink>
+      {/* Title + refresh */}
+      <div className="flex items-start gap-2">
+        <BotLink item={opp} className="text-sm font-medium hover:text-primary break-words leading-snug block flex-1">
+          {opp.question}
+        </BotLink>
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => onRefresh(opp)} disabled={isRefreshing}>
+          <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+        </Button>
+      </div>
 
       {/* Badges */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -1087,27 +1136,32 @@ function MobileOppCard({ opp, onAiTrade, isExecuting }: { opp: BotOpportunity; o
         <Badge variant="outline" className={cn("text-xs", opp.suggested_action === "BUY_YES" ? "border-yes/50 text-yes" : "border-no/50 text-no")}>
           {opp.suggested_action === "BUY_YES" ? "Buy YES" : "Buy NO"}
         </Badge>
+        {isLive && (
+          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse mr-1" />Live
+          </Badge>
+        )}
         {opp.external_data && (
           <Badge variant="outline" className="text-xs border-primary/50 text-primary">
             <Globe className="h-2.5 w-2.5 mr-0.5" />Ext
           </Badge>
         )}
-        <Badge variant="outline" className={cn("font-mono text-xs ml-auto", opp.edge >= 0.1 ? "border-yes text-yes" : "border-warning text-warning")}>
-          +{(opp.edge * 100).toFixed(1)}%
+        <Badge variant="outline" className={cn("font-mono text-xs ml-auto", edge >= 0.1 ? "border-yes text-yes" : edge > 0 ? "border-warning text-warning" : "border-no text-no")}>
+          {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%
         </Badge>
       </div>
 
-      {/* All stats – always visible */}
+      {/* All stats */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
         <span className="text-muted-foreground">AI Prob: <span className="font-mono text-foreground font-semibold">{(opp.ai_probability * 100).toFixed(1)}%</span></span>
-        <span className="text-muted-foreground">Mkt Price: <span className="font-mono text-foreground font-semibold">{(opp.market_price * 100).toFixed(1)}¢</span></span>
+        <span className="text-muted-foreground">Mkt Price: <span className={cn("font-mono font-semibold", isLive ? "text-primary" : "text-foreground")}>{(mktPrice * 100).toFixed(1)}¢</span>{isLive && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />}</span>
         <span className="text-muted-foreground">Entry: <span className="font-mono text-foreground">{opp.suggested_entry ? `Limit ${Math.round(opp.suggested_entry * 100)}¢` : "Market order"}</span></span>
-        <span className="text-muted-foreground">Edge: <span className={cn("font-mono font-semibold", opp.edge >= 0.1 ? "text-yes" : "text-warning")}>+{(opp.edge * 100).toFixed(1)}%</span></span>
+        <span className="text-muted-foreground">Edge: <span className={cn("font-mono font-semibold", edge >= 0.1 ? "text-yes" : edge > 0 ? "text-warning" : "text-no")}>{edge >= 0 ? "+" : ""}{(edge * 100).toFixed(1)}%</span></span>
         <span className="text-muted-foreground">Take Profit: <span className="font-mono text-yes">{opp.suggested_take_profit ? `${Math.round(opp.suggested_take_profit * 100)}¢` : "—"}</span></span>
         <span className="text-muted-foreground">Stop Loss: <span className="font-mono text-no">{opp.suggested_stop_loss ? `${Math.round(opp.suggested_stop_loss * 100)}¢` : "—"}</span></span>
       </div>
 
-      {/* Reasoning – show preview by default */}
+      {/* Reasoning */}
       {opp.ai_reasoning ? (
         <div className="bg-secondary/30 rounded-md p-2">
           <p className={cn("text-xs text-muted-foreground whitespace-normal break-words leading-relaxed", !expanded && "line-clamp-3")}>
