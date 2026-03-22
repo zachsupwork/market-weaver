@@ -45,7 +45,7 @@ serve(async (req) => {
             type: "function",
             function: {
               name: "predict_outcome",
-              description: "Return a probability prediction for a prediction market outcome",
+              description: "Return a probability prediction and trading strategy for a prediction market outcome",
               parameters: {
                 type: "object",
                 properties: {
@@ -60,15 +60,32 @@ serve(async (req) => {
                   },
                   reasoning: {
                     type: "string",
-                    description: "Brief reasoning for the prediction (2-3 sentences)",
+                    description: "Detailed reasoning for the prediction (3-5 sentences). Explain why there is an edge, what factors you considered, and any risks.",
                   },
                   key_factors: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Top 3 factors influencing the prediction",
+                    description: "Top 3-5 factors influencing the prediction",
+                  },
+                  suggested_action: {
+                    type: "string",
+                    enum: ["BUY_YES", "BUY_NO"],
+                    description: "Whether the edge favors buying YES or NO tokens",
+                  },
+                  suggested_entry: {
+                    type: "number",
+                    description: "Suggested entry price (0.01-0.99). Use current market price for immediate execution, or a slightly better price for a limit order.",
+                  },
+                  take_profit: {
+                    type: "number",
+                    description: "Suggested take-profit price (0.01-0.99). The price at which to exit for profit.",
+                  },
+                  stop_loss: {
+                    type: "number",
+                    description: "Suggested stop-loss price (0.01-0.99). The price at which to exit to limit loss.",
                   },
                 },
-                required: ["probability", "confidence", "reasoning", "key_factors"],
+                required: ["probability", "confidence", "reasoning", "key_factors", "suggested_action", "suggested_entry", "take_profit", "stop_loss"],
                 additionalProperties: false,
               },
             },
@@ -96,6 +113,10 @@ serve(async (req) => {
 
     // Clamp probability
     prediction.probability = Math.max(0.01, Math.min(0.99, prediction.probability));
+    // Clamp strategy fields
+    if (prediction.suggested_entry != null) prediction.suggested_entry = Math.max(0.01, Math.min(0.99, prediction.suggested_entry));
+    if (prediction.take_profit != null) prediction.take_profit = Math.max(0.01, Math.min(0.99, prediction.take_profit));
+    if (prediction.stop_loss != null) prediction.stop_loss = Math.max(0.01, Math.min(0.99, prediction.stop_loss));
 
     return jsonResp({
       ok: true,
@@ -124,9 +145,15 @@ function detectCategory(market: any): string {
 }
 
 function buildSystemPrompt(category: string): string {
-  const base = `You are an expert prediction market analyst. Your job is to estimate the TRUE probability of an event occurring, based on all available knowledge up to your training cutoff AND any external data provided. Be calibrated: if you think something has a 30% chance, say 0.30. Do not be biased toward 50%. Consider base rates, recent trends, and domain-specific factors.
+  const base = `You are an expert prediction market analyst and trader. Your job is to estimate the TRUE probability of an event occurring AND provide a concrete trading strategy. Be calibrated: if you think something has a 30% chance, say 0.30. Do not be biased toward 50%. Consider base rates, recent trends, and domain-specific factors.
 
-CRITICAL: When external data is provided (recent results, stats, polling, prices), you MUST incorporate it into your analysis. Do not ignore it. Weight it heavily as it represents the most current information available.`;
+CRITICAL: When external data is provided (recent results, stats, polling, prices), you MUST incorporate it into your analysis. Do not ignore it. Weight it heavily as it represents the most current information available.
+
+TRADING STRATEGY: You must also provide:
+- suggested_action: BUY_YES if the market underprices YES, BUY_NO if it underprices NO
+- suggested_entry: the price to enter at (use current market price for market orders, or a slightly better price for limits)
+- take_profit: the price target to exit with profit
+- stop_loss: the price level to cut losses`;
 
   const categoryGuides: Record<string, string> = {
     Sports: `For sports markets: consider team/player form, injuries, head-to-head records, home/away advantage, motivation, and recent performance trends. Use historical base rates for similar events. If external data includes recent match results, weigh them heavily.`,
@@ -147,20 +174,19 @@ function buildUserPrompt(market: any, category: string, externalData?: any): str
   if (market.end_date_iso) parts.push(`Resolution date: ${market.end_date_iso}`);
   if (market.outcomePrices) {
     const yesPrice = parseFloat(market.outcomePrices[0]);
-    if (!isNaN(yesPrice)) parts.push(`Current market YES price: ${(yesPrice * 100).toFixed(1)}%`);
+    if (!isNaN(yesPrice)) parts.push(`Current market YES price: ${(yesPrice * 100).toFixed(1)}% (${Math.round(yesPrice * 100)}¢)`);
   }
   if (market.volume) parts.push(`Total volume: $${Number(market.volume).toLocaleString()}`);
 
   parts.push(`\nCategory: ${category}`);
 
-  // Add external data if available
   if (externalData && Object.keys(externalData).length > 0) {
     parts.push(`\n--- EXTERNAL DATA (use this to improve your prediction) ---`);
     parts.push(JSON.stringify(externalData, null, 2).substring(0, 3000));
     parts.push(`--- END EXTERNAL DATA ---`);
   }
 
-  parts.push(`\nAnalyze this market and predict the probability of the YES outcome. Consider all relevant factors including any external data provided.`);
+  parts.push(`\nAnalyze this market and predict the probability of the YES outcome. Then provide a complete trading strategy including entry price, take-profit, and stop-loss levels.`);
 
   return parts.join("\n");
 }
