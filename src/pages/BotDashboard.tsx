@@ -180,8 +180,6 @@ export default function BotDashboard() {
     }
   };
 
-  const queryClient = useQueryClient();
-  const [executingOppId, setExecutingOppId] = useState<string | null>(null);
   const handleExecuteSingle = async (oppId: string) => {
     if (!address) return;
     setExecutingOppId(oppId);
