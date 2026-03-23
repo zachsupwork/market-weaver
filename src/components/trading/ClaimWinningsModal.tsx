@@ -46,8 +46,21 @@ export function ClaimWinningsModal({ open, onOpenChange, position, onClaimComple
   const profitPct = costBasis > 0 ? ((profit / costBasis) * 100) : 0;
 
   async function handleClaim() {
-    if (!address || !proxyAddress || !position?.condition_id) {
+    if (!address || !proxyAddress) {
       toast.error("Wallet or trading wallet not connected");
+      return;
+    }
+
+    const conditionId = position?.condition_id;
+    if (!conditionId || conditionId.length < 10 || !conditionId.startsWith("0x")) {
+      console.error("[ClaimWinnings] Invalid condition_id:", conditionId, "position:", JSON.stringify(position));
+      toast.error("Missing or invalid condition ID for this market. Please refresh your positions and try again.");
+      return;
+    }
+
+    const size = parseFloat(position?.size || "0");
+    if (size <= 0) {
+      toast.error("No shares to redeem.");
       return;
     }
 
@@ -61,13 +74,29 @@ export function ClaimWinningsModal({ open, onOpenChange, position, onClaimComple
 
     try {
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
+
+      // Ensure user is on Polygon
+      const network = await provider.getNetwork();
+      if (network.chainId !== 137) {
+        toast.error("Please switch to Polygon network to claim winnings.");
+        setClaiming(false);
+        return;
+      }
+
       const signer = provider.getSigner();
+
+      console.log("[ClaimWinnings] Starting redemption:", {
+        safeAddress: proxyAddress,
+        conditionId,
+        shares: size,
+        chainId: network.chainId,
+      });
 
       toast.info("Preparing redemption transaction…");
 
       const receipt = await redeemFromSafe({
         safeAddress: proxyAddress,
-        conditionId: position.condition_id,
+        conditionId,
         signer,
         chainId: 137,
       });
@@ -77,14 +106,18 @@ export function ClaimWinningsModal({ open, onOpenChange, position, onClaimComple
       onClaimComplete?.();
     } catch (err: any) {
       const msg = err.message || "Redemption failed";
+      console.error("[ClaimWinnings] Error:", err);
+      console.error("[ClaimWinnings] Position data:", JSON.stringify(position));
+
       if (err?.code === 4001 || err?.code === "ACTION_REJECTED") {
         toast.error("Transaction rejected by user.");
       } else if (msg.includes("GS026") || msg.includes("Invalid owner")) {
         toast.error("Safe signature error. Make sure you're connected with the correct wallet.");
+      } else if (msg.includes("BigNumber") || msg.includes("invalid")) {
+        toast.error("Invalid redemption data. The market condition ID may be malformed. Please refresh and try again.");
       } else {
         toast.error(`Claim failed: ${msg}`);
       }
-      console.error("[ClaimWinnings] Error:", err);
     } finally {
       setClaiming(false);
     }
