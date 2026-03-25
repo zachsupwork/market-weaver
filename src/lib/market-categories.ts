@@ -15,6 +15,17 @@ export const CATEGORIES = [
 
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
+export const CRYPTO_SUBCATEGORIES = [
+  { id: "all-crypto", label: "All Crypto" },
+  { id: "bitcoin", label: "Bitcoin" },
+  { id: "ethereum", label: "Ethereum" },
+  { id: "solana", label: "Solana" },
+  { id: "altcoins", label: "Altcoins" },
+  { id: "up-down", label: "Up/Down" },
+] as const;
+
+export type CryptoSubId = (typeof CRYPTO_SUBCATEGORIES)[number]["id"];
+
 export const SPORTS_SUBCATEGORIES = [
   { id: "all-sports", label: "All Sports" },
   { id: "nba", label: "NBA" },
