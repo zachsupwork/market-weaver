@@ -303,7 +303,7 @@ const Index = () => {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
+              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setCryptoSubcat("all-crypto"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
                 category === cat.id
