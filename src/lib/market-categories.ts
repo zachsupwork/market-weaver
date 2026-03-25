@@ -15,6 +15,17 @@ export const CATEGORIES = [
 
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
+export const CRYPTO_SUBCATEGORIES = [
+  { id: "all-crypto", label: "All Crypto" },
+  { id: "bitcoin", label: "Bitcoin" },
+  { id: "ethereum", label: "Ethereum" },
+  { id: "solana", label: "Solana" },
+  { id: "altcoins", label: "Altcoins" },
+  { id: "up-down", label: "Up/Down" },
+] as const;
+
+export type CryptoSubId = (typeof CRYPTO_SUBCATEGORIES)[number]["id"];
+
 export const SPORTS_SUBCATEGORIES = [
   { id: "all-sports", label: "All Sports" },
   { id: "nba", label: "NBA" },
@@ -92,6 +103,29 @@ export function inferSportsSubcategory(market: {
     if (keywords.some((kw) => text.includes(kw))) return key as SportsSubId;
   }
   return "all-sports";
+}
+
+const CRYPTO_SUB_KEYWORDS: Record<string, string[]> = {
+  bitcoin: ["bitcoin", "btc"],
+  ethereum: ["ethereum", "eth"],
+  solana: ["solana", "sol"],
+  altcoins: ["dogecoin", "doge", "altcoin", "cardano", "xrp", "ripple", "polkadot", "avalanche", "chainlink"],
+  "up-down": ["up or down", "up/down", "5 minute", "15 minute", "1 minute", "30 minute", "hour"],
+};
+
+export function inferCryptoSubcategory(market: {
+  tags?: string[];
+  question?: string;
+}): CryptoSubId {
+  const text = [
+    ...(market.tags || []),
+    market.question || "",
+  ].join(" ").toLowerCase();
+
+  for (const [key, keywords] of Object.entries(CRYPTO_SUB_KEYWORDS)) {
+    if (keywords.some((kw) => text.includes(kw))) return key as CryptoSubId;
+  }
+  return "all-crypto";
 }
 
 export function sortByTrending<T extends { volume24h?: number; volume_24hr?: number; volume_num?: number; liquidity?: number; liquidity_num?: number }>(markets: T[]): T[] {

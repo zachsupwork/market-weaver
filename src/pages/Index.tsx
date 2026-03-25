@@ -14,9 +14,9 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
-  CATEGORIES, SPORTS_SUBCATEGORIES,
-  type CategoryId, type SportsSubId,
-  inferCategory, inferSportsSubcategory, sortByTrending,
+  CATEGORIES, SPORTS_SUBCATEGORIES, CRYPTO_SUBCATEGORIES,
+  type CategoryId, type SportsSubId, type CryptoSubId,
+  inferCategory, inferSportsSubcategory, inferCryptoSubcategory, sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
@@ -55,6 +55,7 @@ const Index = () => {
 
   const [category, setCategory] = useState<CategoryId>("trending");
   const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
+  const [cryptoSubcat, setCryptoSubcat] = useState<CryptoSubId>("all-crypto");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
@@ -74,11 +75,27 @@ const Index = () => {
     setOffset(0);
     setHasMore(true);
     prevDataRef.current = "";
-  }, [debouncedSearch]);
+  }, [debouncedSearch, category]);
+
+  // Map UI category to Gamma API tag for server-side filtering
+  const apiTag = useMemo(() => {
+    const TAG_MAP: Record<string, string> = {
+      crypto: "Crypto",
+      politics: "Politics",
+      sports: "Sports",
+      finance: "Finance",
+      tech: "Technology",
+      science: "Science",
+      weather: "Weather",
+      culture: "Culture",
+    };
+    return TAG_MAP[category] ?? undefined;
+  }, [category]);
 
   const { data: markets, isLoading, error, isFetching } = useMarkets({
     limit,
     offset,
+    tag: apiTag,
     textQuery: debouncedSearch || undefined,
   });
 
@@ -134,11 +151,12 @@ const Index = () => {
 
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
-    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId; _cryptoSubcat?: CryptoSubId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({ category: m.category, tags: m.tags, question: m.question }),
       _sportsSubcat: inferSportsSubcategory({ tags: m.tags, question: m.question }),
+      _cryptoSubcat: inferCryptoSubcategory({ tags: m.tags, question: m.question }),
     }));
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -154,6 +172,9 @@ const Index = () => {
     }
     if (category === "sports" && sportsSubcat !== "all-sports") {
       list = list.filter(m => m._sportsSubcat === sportsSubcat);
+    }
+    if (category === "crypto" && cryptoSubcat !== "all-crypto") {
+      list = list.filter(m => m._cryptoSubcat === cryptoSubcat);
     }
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
@@ -282,7 +303,7 @@ const Index = () => {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
+              onClick={() => { setCategory(cat.id); setSportsSubcat("all-sports"); setCryptoSubcat("all-crypto"); setOffset(0); setAllMarkets([]); setHasMore(true); prevDataRef.current = ""; }}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
                 category === cat.id
@@ -304,6 +325,25 @@ const Index = () => {
                 className={cn(
                   "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
                   sportsSubcat === sub.id
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                )}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {category === "crypto" && (
+          <div className="flex flex-wrap gap-1 mb-5">
+            {CRYPTO_SUBCATEGORIES.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setCryptoSubcat(sub.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  cryptoSubcat === sub.id
                     ? "bg-primary/20 border-primary/40 text-primary"
                     : "bg-card border-border text-muted-foreground hover:border-primary/30"
                 )}
