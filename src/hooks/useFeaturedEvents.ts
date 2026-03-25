@@ -18,13 +18,40 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
       // Gamma events API ignores the `tag` param, so we fetch a large pool
-      // and filter client-side via the tags array on each event.
-      const fetchLimit = tag ? 100 : limit + 5;
-      const events = await fetchEvents({
+      // and also do a keyword search to catch lower-volume tagged events.
+      const basePromise = fetchEvents({
         active: true,
         closed: false,
-        limit: fetchLimit,
+        limit: 100,
       });
+
+      // When a category is active, also search by keyword to catch events
+      // that may not rank in the top 100 by volume
+      const TAG_KEYWORDS: Record<string, string[]> = {
+        Crypto: ["bitcoin", "ethereum", "crypto", "solana"],
+        Sports: ["nba", "nfl", "soccer", "mlb"],
+        Politics: ["election", "president", "congress"],
+      };
+      const keywords = tag ? TAG_KEYWORDS[tag] || [tag.toLowerCase()] : [];
+      const keywordPromises = keywords.map((kw) =>
+        fetchEvents({ active: true, closed: false, limit: 50, keyword: kw })
+      );
+
+      const [baseEvents, ...keywordResults] = await Promise.all([
+        basePromise,
+        ...keywordPromises,
+      ]);
+
+      // Merge and deduplicate by event id
+      const seen = new Set<string>();
+      const allEvents: any[] = [];
+      for (const e of [...baseEvents, ...keywordResults.flat()]) {
+        const eid = e.id || e.slug || e.ticker;
+        if (eid && !seen.has(eid)) {
+          seen.add(eid);
+          allEvents.push(e);
+        }
+      }
 
       // Client-side tag filtering since the API doesn't support it
       let filtered = events.filter(
