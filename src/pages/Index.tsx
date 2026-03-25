@@ -55,6 +55,7 @@ const Index = () => {
 
   const [category, setCategory] = useState<CategoryId>("trending");
   const [sportsSubcat, setSportsSubcat] = useState<SportsSubId>("all-sports");
+  const [cryptoSubcat, setCryptoSubcat] = useState<CryptoSubId>("all-crypto");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [allMarkets, setAllMarkets] = useState<NormalizedMarket[]>([]);
