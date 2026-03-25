@@ -28,6 +28,7 @@ serve(async (req) => {
       const active = url.searchParams.get("active");
       const closed = url.searchParams.get("closed");
       const keyword = url.searchParams.get("_q");
+      const tag = url.searchParams.get("tag");
       const limit = url.searchParams.get("limit") || "50";
       const offset = url.searchParams.get("offset") || "0";
       const order = url.searchParams.get("order") || "volume";
@@ -40,6 +41,7 @@ serve(async (req) => {
       if (active) qs.set("active", active);
       if (closed !== null) qs.set("closed", closed);
       if (keyword) qs.set("_q", keyword);
+      if (tag) qs.set("tag", tag);
 
       endpoint = `${GAMMA_API}/events?${qs}`;
     }

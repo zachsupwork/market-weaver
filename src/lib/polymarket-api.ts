@@ -252,6 +252,7 @@ export async function fetchEvents(params?: {
   active?: boolean;
   closed?: boolean;
   keyword?: string;
+  tag?: string;
   limit?: number;
   offset?: number;
 }): Promise<any[]> {
@@ -259,6 +260,7 @@ export async function fetchEvents(params?: {
   if (params?.active !== undefined) qs.set("active", String(params.active));
   qs.set("closed", String(params?.closed ?? false));
   if (params?.keyword) qs.set("_q", params.keyword);
+  if (params?.tag) qs.set("tag", params.tag);
   qs.set("limit", String(params?.limit ?? 50));
   qs.set("offset", String(params?.offset ?? 0));
   qs.set("order", "volume");

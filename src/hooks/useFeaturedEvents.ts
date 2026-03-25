@@ -13,14 +13,15 @@ export interface FeaturedEvent {
   markets: NormalizedMarket[];
 }
 
-export function useFeaturedEvents(limit = 10) {
+export function useFeaturedEvents(limit = 10, tag?: string) {
   return useQuery<FeaturedEvent[]>({
-    queryKey: ["featured-events", limit],
+    queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
       const events = await fetchEvents({
         active: true,
         closed: false,
-        limit: limit + 5, // fetch extra to filter
+        limit: limit + 5,
+        tag,
       });
 
       return events
