@@ -335,7 +335,25 @@ const Index = () => {
           </div>
         )}
 
-        {isLoading && (
+        {category === "crypto" && (
+          <div className="flex flex-wrap gap-1 mb-5">
+            {CRYPTO_SUBCATEGORIES.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setCryptoSubcat(sub.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                  cryptoSubcat === sub.id
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                )}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
+
           <div className="flex justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
