@@ -14,9 +14,9 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { RecentTradesPanel } from "@/components/trades/RecentTradesPanel";
 import {
-  CATEGORIES, SPORTS_SUBCATEGORIES,
-  type CategoryId, type SportsSubId,
-  inferCategory, inferSportsSubcategory, sortByTrending,
+  CATEGORIES, SPORTS_SUBCATEGORIES, CRYPTO_SUBCATEGORIES,
+  type CategoryId, type SportsSubId, type CryptoSubId,
+  inferCategory, inferSportsSubcategory, inferCryptoSubcategory, sortByTrending,
 } from "@/lib/market-categories";
 import { isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { QuickTradeModal } from "@/components/markets/QuickTradeModal";
