@@ -151,11 +151,12 @@ const Index = () => {
 
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
-    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId })[];
+    let list = allMarkets as (NormalizedMarket & { _inferredCategory?: CategoryId; _sportsSubcat?: SportsSubId; _cryptoSubcat?: CryptoSubId })[];
     list = list.map((m) => ({
       ...m,
       _inferredCategory: inferCategory({ category: m.category, tags: m.tags, question: m.question }),
       _sportsSubcat: inferSportsSubcategory({ tags: m.tags, question: m.question }),
+      _cryptoSubcat: inferCryptoSubcategory({ tags: m.tags, question: m.question }),
     }));
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -171,6 +172,9 @@ const Index = () => {
     }
     if (category === "sports" && sportsSubcat !== "all-sports") {
       list = list.filter(m => m._sportsSubcat === sportsSubcat);
+    }
+    if (category === "crypto" && cryptoSubcat !== "all-crypto") {
+      list = list.filter(m => m._cryptoSubcat === cryptoSubcat);
     }
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
