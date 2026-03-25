@@ -105,6 +105,29 @@ export function inferSportsSubcategory(market: {
   return "all-sports";
 }
 
+const CRYPTO_SUB_KEYWORDS: Record<string, string[]> = {
+  bitcoin: ["bitcoin", "btc"],
+  ethereum: ["ethereum", "eth"],
+  solana: ["solana", "sol"],
+  altcoins: ["dogecoin", "doge", "altcoin", "cardano", "xrp", "ripple", "polkadot", "avalanche", "chainlink"],
+  "up-down": ["up or down", "up/down", "5 minute", "15 minute", "1 minute", "30 minute", "hour"],
+};
+
+export function inferCryptoSubcategory(market: {
+  tags?: string[];
+  question?: string;
+}): CryptoSubId {
+  const text = [
+    ...(market.tags || []),
+    market.question || "",
+  ].join(" ").toLowerCase();
+
+  for (const [key, keywords] of Object.entries(CRYPTO_SUB_KEYWORDS)) {
+    if (keywords.some((kw) => text.includes(kw))) return key as CryptoSubId;
+  }
+  return "all-crypto";
+}
+
 export function sortByTrending<T extends { volume24h?: number; volume_24hr?: number; volume_num?: number; liquidity?: number; liquidity_num?: number }>(markets: T[]): T[] {
   return [...markets].sort((a, b) => {
     const aVol = a.volume24h ?? a.volume_24hr ?? a.volume_num ?? 0;
