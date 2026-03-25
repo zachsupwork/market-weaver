@@ -1,6 +1,6 @@
 // Featured events hook - fetches top multi-outcome events from Gamma API
 import { useQuery } from "@tanstack/react-query";
-import { fetchEvents } from "@/lib/polymarket-api";
+import { fetchEventBySlug, fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarket, type NormalizedMarket } from "@/lib/normalizePolymarket";
 
 export interface FeaturedEvent {
@@ -17,6 +17,10 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
   return useQuery<FeaturedEvent[]>({
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
+      const pinnedSlugs = (!tag || tag === "Crypto")
+        ? ["bitcoin-above-on-march-28"]
+        : [];
+
       // Gamma events API ignores the `tag` param, so we fetch a large pool
       // and also do a keyword search to catch lower-volume tagged events.
       const basePromise = fetchEvents({
@@ -36,16 +40,22 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
       const keywordPromises = keywords.map((kw) =>
         fetchEvents({ active: true, closed: false, limit: 50, keyword: kw })
       );
+      const pinnedPromises = pinnedSlugs.map((slug) => fetchEventBySlug(slug));
 
-      const [baseEvents, ...keywordResults] = await Promise.all([
+      const results = await Promise.all([
         basePromise,
         ...keywordPromises,
+        ...pinnedPromises,
       ]);
+
+      const baseEvents = results[0] as any[];
+      const keywordResults = results.slice(1, 1 + keywordPromises.length) as any[][];
+      const pinnedEvents = results.slice(1 + keywordPromises.length).filter(Boolean) as any[];
 
       // Merge and deduplicate by event id
       const seen = new Set<string>();
       const allEvents: any[] = [];
-      for (const e of [...baseEvents, ...keywordResults.flat()]) {
+      for (const e of [...baseEvents, ...keywordResults.flat(), ...pinnedEvents]) {
         const eid = e.id || e.slug || e.ticker;
         if (eid && !seen.has(eid)) {
           seen.add(eid);
