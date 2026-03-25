@@ -54,7 +54,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
       }
 
       // Client-side tag filtering since the API doesn't support it
-      let filtered = events.filter(
+      let filtered = allEvents.filter(
         (e: any) => Array.isArray(e.markets) && e.markets.length >= 2
       );
 
