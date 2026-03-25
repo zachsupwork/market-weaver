@@ -277,7 +277,16 @@ export function OrderTicket({
         }
       }
 
-      const credsStatus = await checkUserCredsStatus(address);
+      console.log("[OrderTicket] Fee step complete (feeTxHash=%s). Proceeding to order creation…", feeTxHash || "skipped");
+
+      let credsStatus;
+      try {
+        credsStatus = await checkUserCredsStatus(address);
+      } catch (credErr: any) {
+        console.error("[OrderTicket] Creds status check failed:", credErr);
+        toast.error("Could not verify trading credentials. Try again.");
+        return;
+      }
       if (!credsStatus.hasCreds || !credsStatus.address) {
         toast.error("Trading credentials missing. Re-enable trading in Setup below.");
         await readiness.refreshCreds();
@@ -285,7 +294,8 @@ export function OrderTicket({
       }
 
       if (!(window as any).ethereum) {
-        throw new Error("Wallet provider not found");
+        toast.error("Wallet provider not found");
+        return;
       }
 
       const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
@@ -309,6 +319,7 @@ export function OrderTicket({
         action,
         mode: orderMode,
         signerAddress: eoaAddr,
+        proxyAddress: proxyAddress || "none",
         tokenId,
         side,
         inputAmount: amount,
@@ -320,25 +331,47 @@ export function OrderTicket({
         expiration: orderExpiration,
       });
 
-      console.log("[OrderTicket] Creating signed order via ClobClient…");
-      const signedOrder = await clobClient.createOrder({
-        tokenID: tokenId,
-        side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
-        price: effectivePrice,
-        size: Number(shares.toFixed(6)),
-        feeRateBps: 0,
-        expiration: orderExpiration,
-      });
-
-      console.log("[OrderTicket] Signed order created:", JSON.stringify(signedOrder).substring(0, 500));
+      let signedOrder: any;
+      try {
+        console.log("[OrderTicket] Creating signed order via ClobClient.createOrder()…");
+        signedOrder = await clobClient.createOrder({
+          tokenID: tokenId,
+          side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
+          price: effectivePrice,
+          size: Number(shares.toFixed(6)),
+          feeRateBps: 0,
+          expiration: orderExpiration,
+        });
+        console.log("[OrderTicket] ✓ Signed order created:", JSON.stringify(signedOrder).substring(0, 500));
+      } catch (signErr: any) {
+        console.error("[OrderTicket] ✗ ClobClient.createOrder() failed:", signErr);
+        const msg = signErr?.message || "Unknown signing error";
+        if (msg.includes("UNPREDICTABLE_GAS_LIMIT") || msg.includes("gas")) {
+          toast.error("Order signing failed — gas estimation error. This is a client-side issue, not a blockchain transaction. Please reconnect your wallet and try again.");
+        } else if (signErr?.code === 4001 || signErr?.code === "ACTION_REJECTED") {
+          toast.error("Order signature rejected in wallet.");
+        } else {
+          toast.error(`Order signing failed: ${msg}`);
+        }
+        return;
+      }
 
       const orderSigner = ((signedOrder as any)?.order?.signer ?? (signedOrder as any)?.signer ?? "").toLowerCase();
       if (orderSigner && orderSigner !== eoaAddr) {
-        throw new Error(`Signer mismatch: order signed by ${orderSigner} but your wallet is ${eoaAddr}. Re-enable trading with the same wallet.`);
+        toast.error(`Signer mismatch: order signed by ${orderSigner} but your wallet is ${eoaAddr}. Re-enable trading with the same wallet.`);
+        return;
       }
 
-      console.log("[OrderTicket] Submitting order to backend…");
-      const result = await postSignedOrder(signedOrder, effectiveOrderType, eoaAddr);
+      let result;
+      try {
+        console.log("[OrderTicket] Submitting signed order to backend…");
+        result = await postSignedOrder(signedOrder, effectiveOrderType, eoaAddr);
+        console.log("[OrderTicket] Backend response:", JSON.stringify(result).substring(0, 500));
+      } catch (postErr: any) {
+        console.error("[OrderTicket] ✗ postSignedOrder() fetch failed:", postErr);
+        toast.error(`Order submission failed: ${postErr?.message || "Network error"}`);
+        return;
+      }
 
       if (result.ok) {
         const modeLabel = isLimitMode ? "Limit" : "Market";
@@ -348,13 +381,9 @@ export function OrderTicket({
       } else {
         const errMsg = result.error || "Order failed";
         const errLower = errMsg.toLowerCase();
-        console.error("[OrderTicket] Order submission failed", {
-          action,
-          tokenId,
-          side,
-          marketAmount,
-          price: effectivePrice,
-          result,
+        console.error("[OrderTicket] Order rejected by backend", {
+          action, tokenId, side, marketAmount,
+          price: effectivePrice, result,
         });
         const isAuthError = result.code === "GEOBLOCKED" || result.code === "NO_CREDS" || result.code === "INVALID_API_KEY"
           || errLower.includes("expired") || errLower.includes("unauthorized") || errLower.includes("invalid api key")
@@ -367,6 +396,9 @@ export function OrderTicket({
           toast.error(errMsg);
         }
       }
+    } catch (outerErr: any) {
+      console.error("[OrderTicket] Unhandled error in order flow:", outerErr);
+      toast.error(`Order failed: ${outerErr?.message || "Unknown error"}`);
     } finally {
       setSubmitting(false);
     }
