@@ -235,34 +235,45 @@ export function OrderTicket({
       let feeTxHash: string | null = null;
       if (isBuy && feeEnabled && platformFee > 0) {
         try {
-          toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
           const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
           const feeSigner = provider.getSigner();
+          const eoaAddress = await feeSigner.getAddress();
           const usdcContract = new ethers.Contract(POLYGON_USDCE_ADDRESS, ERC20_TRANSFER_ABI as any, feeSigner);
-          const feeAmountWei = ethers.utils.parseUnits(platformFee.toFixed(6), 6);
-          const feeTx = await usdcContract.transfer(FEE_WALLET_ADDRESS, feeAmountWei);
-          await feeTx.wait();
-          feeTxHash = feeTx.hash;
-          toast.success("Platform fee paid ✓");
 
-          try {
-            await supabase.from("platform_fees").insert({
-              user_address: address?.toLowerCase() ?? "",
-              order_condition_id: conditionId ?? null,
-              fee_amount: platformFee,
-              fee_bps: PLATFORM_FEE_BPS,
-              tx_hash: feeTxHash,
-            } as any);
-          } catch (dbErr) {
-            console.warn("[OrderTicket] Failed to record fee:", dbErr);
+          // Check EOA USDC.e balance before attempting transfer to avoid UNPREDICTABLE_GAS_LIMIT
+          const balanceOfAbi = ["function balanceOf(address) view returns (uint256)"];
+          const readContract = new ethers.Contract(POLYGON_USDCE_ADDRESS, balanceOfAbi, provider);
+          const eoaBalance = await readContract.balanceOf(eoaAddress);
+          const feeAmountWei = ethers.utils.parseUnits(platformFee.toFixed(6), 6);
+
+          if (eoaBalance.lt(feeAmountWei)) {
+            console.log("[OrderTicket] EOA USDC.e balance too low for fee, skipping fee transfer", {
+              eoaBalance: ethers.utils.formatUnits(eoaBalance, 6),
+              feeRequired: platformFee,
+            });
+            // Skip fee — don't block the order
+          } else {
+            toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
+            const feeTx = await usdcContract.transfer(FEE_WALLET_ADDRESS, feeAmountWei);
+            await feeTx.wait();
+            feeTxHash = feeTx.hash;
+            toast.success("Platform fee paid ✓");
+
+            try {
+              await supabase.from("platform_fees").insert({
+                user_address: address?.toLowerCase() ?? "",
+                order_condition_id: conditionId ?? null,
+                fee_amount: platformFee,
+                fee_bps: PLATFORM_FEE_BPS,
+                tx_hash: feeTxHash,
+              } as any);
+            } catch (dbErr) {
+              console.warn("[OrderTicket] Failed to record fee:", dbErr);
+            }
           }
         } catch (feeErr: any) {
-          console.error("[OrderTicket] Platform fee transfer failed, continuing with order submission", feeErr);
-          if (feeErr?.code === 4001 || feeErr?.code === "ACTION_REJECTED") {
-            toast.info("Platform fee transfer was skipped. Continuing with order submission.");
-          } else {
-            toast.info(`Platform fee transfer failed (${feeErr?.message || "unknown error"}). Continuing with order submission.`);
-          }
+          console.warn("[OrderTicket] Platform fee transfer failed, continuing with order", feeErr?.message);
+          // Never block order submission due to fee failure
         }
       }
 
