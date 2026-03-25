@@ -331,15 +331,43 @@ export function OrderTicket({
         expiration: orderExpiration,
       });
 
+      // Fetch the market's fee rate from the CLOB before signing
+      let feeRateBps = 0;
+      try {
+        const feeRes = await fetch(`https://clob.polymarket.com/neg-risk-fee-rate-bps?token_id=${encodeURIComponent(tokenId)}`);
+        if (feeRes.ok) {
+          const feeData = await feeRes.json();
+          // Response can be a number or { fee_rate_bps: number }
+          feeRateBps = typeof feeData === "number" ? feeData : (feeData?.fee_rate_bps ?? feeData?.feeRateBps ?? 0);
+          console.log("[OrderTicket] Fetched fee rate:", feeRateBps, "bps");
+        }
+      } catch (feeRateErr) {
+        console.warn("[OrderTicket] Failed to fetch fee rate, trying standard endpoint", feeRateErr);
+      }
+
+      // Fallback to standard fee-rate endpoint
+      if (feeRateBps === 0) {
+        try {
+          const feeRes2 = await fetch(`https://clob.polymarket.com/fee-rate?token_id=${encodeURIComponent(tokenId)}`);
+          if (feeRes2.ok) {
+            const feeData2 = await feeRes2.json();
+            feeRateBps = typeof feeData2 === "number" ? feeData2 : (feeData2?.fee_rate_bps ?? feeData2?.feeRateBps ?? 0);
+            console.log("[OrderTicket] Fetched fee rate (fallback):", feeRateBps, "bps");
+          }
+        } catch {
+          console.warn("[OrderTicket] Fee rate fallback also failed, using 0");
+        }
+      }
+
       let signedOrder: any;
       try {
-        console.log("[OrderTicket] Creating signed order via ClobClient.createOrder()…");
+        console.log("[OrderTicket] Creating signed order via ClobClient.createOrder() with feeRateBps=%d…", feeRateBps);
         signedOrder = await clobClient.createOrder({
           tokenID: tokenId,
           side: side === "BUY" ? ClobSide.BUY : ClobSide.SELL,
           price: effectivePrice,
           size: Number(shares.toFixed(6)),
-          feeRateBps: 0,
+          feeRateBps: feeRateBps,
           expiration: orderExpiration,
         });
         console.log("[OrderTicket] ✓ Signed order created:", JSON.stringify(signedOrder).substring(0, 500));
