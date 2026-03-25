@@ -113,16 +113,17 @@ export function OrderTicket({
 
   const readiness = useTradingReadiness(isBuy ? amount : 0);
 
-  const shares = useMemo(() => effectivePrice > 0 ? amount / effectivePrice : 0, [amount, effectivePrice]);
   const { fee: platformFee, netAmount } = useMemo(() => calculatePlatformFee(amount), [amount]);
   const feeEnabled = isFeeEnabled();
+  const marketAmount = isBuy && feeEnabled ? netAmount : amount;
+  const shares = useMemo(() => effectivePrice > 0 ? marketAmount / effectivePrice : 0, [marketAmount, effectivePrice]);
   const potentialPayout = shares;
-  const potentialProfit = isBuy ? potentialPayout - amount : shares * effectivePrice;
-  const returnPct = amount > 0 && isBuy ? ((potentialPayout / amount) - 1) * 100 : 0;
+  const potentialProfit = isBuy ? potentialPayout - marketAmount : shares * effectivePrice;
+  const returnPct = marketAmount > 0 && isBuy ? ((potentialPayout / marketAmount) - 1) * 100 : 0;
 
-  const hasInsufficientBalance = isBuy && amount > readiness.usdc.usdcBalance;
+  const hasInsufficientBalance = isBuy && marketAmount > readiness.usdc.usdcBalance;
   const hasInsufficientShares = !isBuy && shares > availableShares;
-  const hasNativeUsdcButNoE = readiness.usdc.usdcNativeBalance > 0 && readiness.usdc.usdcBalance < amount;
+  const hasNativeUsdcButNoE = readiness.usdc.usdcNativeBalance > 0 && readiness.usdc.usdcBalance < marketAmount;
   const ageConfirmed = localStorage.getItem(TRADING_AGE_KEY) === "true";
 
   const limitPriceError = useMemo(() => {
@@ -186,7 +187,7 @@ export function OrderTicket({
       setLimitPrice(hasMarketPrice ? (snappedMarketPrice as number).toFixed(2) : "");
     }
     setShowConfirm(false);
-  }, [hasMarketPrice, marketPrice]);
+  }, [hasMarketPrice, snappedMarketPrice]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -212,7 +213,7 @@ export function OrderTicket({
       if (hasNativeUsdcButNoE) {
         toast.error(`You have $${readiness.usdc.usdcNativeBalance.toFixed(2)} USDC but trading requires USDC.e. Convert USDC → USDC.e first.`);
       } else {
-        toast.error(`Not enough USDC.e. You have $${readiness.usdc.usdcBalance.toFixed(2)} USDC.e on Polygon.`);
+        toast.error(`Not enough USDC.e. You need $${marketAmount.toFixed(2)} in your trading wallet but only have $${readiness.usdc.usdcBalance.toFixed(2)}.`);
       }
       return;
     }
@@ -222,17 +223,17 @@ export function OrderTicket({
       return;
     }
 
-      if (!readiness.credsReady) {
-        toast.error("Enable trading first — complete the setup steps below.");
-        return;
-      }
+    if (!readiness.credsReady) {
+      toast.error("Enable trading first — complete the setup steps below.");
+      return;
+    }
 
     if (!showConfirm) { setShowConfirm(true); return; }
 
     setSubmitting(true);
     try {
       let feeTxHash: string | null = null;
-      if (feeEnabled && platformFee > 0) {
+      if (isBuy && feeEnabled && platformFee > 0) {
         try {
           toast.info(`Requesting platform fee transfer ($${platformFee.toFixed(2)})…`);
           const provider = new ethers.providers.Web3Provider((window as any).ethereum, "any");
@@ -256,13 +257,12 @@ export function OrderTicket({
             console.warn("[OrderTicket] Failed to record fee:", dbErr);
           }
         } catch (feeErr: any) {
+          console.error("[OrderTicket] Platform fee transfer failed, continuing with order submission", feeErr);
           if (feeErr?.code === 4001 || feeErr?.code === "ACTION_REJECTED") {
-            toast.error("Fee transfer rejected. Order cancelled.");
+            toast.info("Platform fee transfer was skipped. Continuing with order submission.");
           } else {
-            toast.error(`Fee transfer failed: ${feeErr.message}`);
+            toast.info(`Platform fee transfer failed (${feeErr?.message || "unknown error"}). Continuing with order submission.`);
           }
-          setSubmitting(false);
-          return;
         }
       }
 
@@ -300,6 +300,9 @@ export function OrderTicket({
         signerAddress: eoaAddr,
         tokenId,
         side,
+        inputAmount: amount,
+        marketAmount,
+        platformFee,
         price: effectivePrice,
         size: Number(shares.toFixed(6)),
         orderType: effectiveOrderType,
@@ -328,12 +331,20 @@ export function OrderTicket({
 
       if (result.ok) {
         const modeLabel = isLimitMode ? "Limit" : "Market";
-        toast.success(`${modeLabel} ${ACTION_LABELS[action].label} order placed — $${amount.toFixed(2)}${isLimitMode ? ` @ ${effectivePrice.toFixed(2)}` : ""}`);
+        toast.success(`${modeLabel} ${ACTION_LABELS[action].label} order placed — $${marketAmount.toFixed(2)}${isLimitMode ? ` @ ${effectivePrice.toFixed(2)}` : ""}`);
         setAmount(0);
         setShowConfirm(false);
       } else {
         const errMsg = result.error || "Order failed";
         const errLower = errMsg.toLowerCase();
+        console.error("[OrderTicket] Order submission failed", {
+          action,
+          tokenId,
+          side,
+          marketAmount,
+          price: effectivePrice,
+          result,
+        });
         const isAuthError = result.code === "GEOBLOCKED" || result.code === "NO_CREDS" || result.code === "INVALID_API_KEY"
           || errLower.includes("expired") || errLower.includes("unauthorized") || errLower.includes("invalid api key")
           || errLower.includes("signature") || errLower.includes("api credentials");
