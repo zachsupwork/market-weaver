@@ -99,7 +99,7 @@ const Index = () => {
     textQuery: debouncedSearch || undefined,
   });
 
-  const { data: events } = useFeaturedEvents(20);
+  const { data: events } = useFeaturedEvents(20, apiTag);
   const { isConnected } = useAccount();
   const [tradeModal, setTradeModal] = useState<{ market: NormalizedMarket; outcome: number } | null>(null);
 

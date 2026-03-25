@@ -49,7 +49,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
               const bPrice = b.outcomePrices?.[0] ?? 0;
               return bPrice - aPrice;
             })
-            .slice(0, 10),
+            .slice(0, 20),
         };
         })
         .filter((e): e is FeaturedEvent => e !== null && !!e.title && !!e.slug)
