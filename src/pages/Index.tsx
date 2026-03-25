@@ -74,11 +74,27 @@ const Index = () => {
     setOffset(0);
     setHasMore(true);
     prevDataRef.current = "";
-  }, [debouncedSearch]);
+  }, [debouncedSearch, category]);
+
+  // Map UI category to Gamma API tag for server-side filtering
+  const apiTag = useMemo(() => {
+    const TAG_MAP: Record<string, string> = {
+      crypto: "Crypto",
+      politics: "Politics",
+      sports: "Sports",
+      finance: "Finance",
+      tech: "Technology",
+      science: "Science",
+      weather: "Weather",
+      culture: "Culture",
+    };
+    return TAG_MAP[category] ?? undefined;
+  }, [category]);
 
   const { data: markets, isLoading, error, isFetching } = useMarkets({
     limit,
     offset,
+    tag: apiTag,
     textQuery: debouncedSearch || undefined,
   });
 
