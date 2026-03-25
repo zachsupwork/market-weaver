@@ -17,11 +17,13 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
   return useQuery<FeaturedEvent[]>({
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
+      // Gamma events API ignores the `tag` param, so we fetch a large pool
+      // and filter client-side via the tags array on each event.
+      const fetchLimit = tag ? 100 : limit + 5;
       const events = await fetchEvents({
         active: true,
         closed: false,
-        limit: limit + 5,
-        tag,
+        limit: fetchLimit,
       });
 
       return events
