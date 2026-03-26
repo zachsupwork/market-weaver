@@ -409,6 +409,11 @@ const EventDetail = () => {
                     UPCOMING
                   </span>
                 )}
+                {eventUIStatus === "CLOSED" && (
+                  <span className="rounded-full bg-muted-foreground/15 border border-muted-foreground/30 px-3 py-1 text-xs font-bold font-mono text-muted-foreground">
+                    CLOSED — No more bets
+                  </span>
+                )}
                 {eventUIStatus === "ENDED" && (
                   <span className="rounded-full bg-destructive/15 border border-destructive/30 px-3 py-1 text-xs font-bold font-mono text-destructive">
                     ENDED
@@ -660,8 +665,21 @@ const EventDetail = () => {
                     yesPrice={selectedYesPrice}
                     noPrice={selectedNoPrice}
                     conditionId={selected.condition_id}
-                    isTradable={selected.statusLabel === "LIVE" && selectedYesPrice !== null && selectedNoPrice !== null}
+                    isTradable={
+                      eventUIStatus === "LIVE" &&
+                      selected.statusLabel === "LIVE" &&
+                      selected.accepting_orders &&
+                      selectedYesPrice !== null &&
+                      selectedNoPrice !== null
+                    }
                   />
+                  {(eventUIStatus === "CLOSED" || eventUIStatus === "ENDED" || !selected.accepting_orders) && (
+                    <div className="mt-3 rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-center">
+                      <p className="text-xs font-semibold text-destructive">
+                        {eventUIStatus === "ENDED" ? "This market has ended" : "This market is closed — no more bets can be placed"}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-border bg-card p-8 text-center">
