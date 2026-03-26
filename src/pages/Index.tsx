@@ -174,7 +174,34 @@ const Index = () => {
       list = list.filter(m => m._sportsSubcat === sportsSubcat);
     }
     if (category === "crypto" && cryptoSubcat !== "all-crypto") {
-      list = list.filter(m => m._cryptoSubcat === cryptoSubcat);
+      // Use direct text matching for better accuracy with time/type filters
+      list = list.filter(m => {
+        const text = [...(m.tags || []), m.question || ""].join(" ").toLowerCase();
+        // Check if market matches any keyword for the selected subcategory
+        const keywords: Record<string, string[]> = {
+          "up-down": ["up or down", "up/down"],
+          "above-below": ["above", "below"],
+          "price-range": ["price range", "price on", "what price"],
+          "hit-price": ["hit price", "hit $", "will hit"],
+          "5min": ["5 minute", "5-minute", "5 min"],
+          "15min": ["15 minute", "15-minute", "15 min"],
+          "1hour": ["1 hour", "hourly", "1-hour"],
+          "4hours": ["4 hour", "4-hour"],
+          daily: ["daily", "one day", "1 day", "24 hour"],
+          weekly: ["weekly", "week", "march 23-29", "march 23–29"],
+          monthly: ["monthly", "in march", "in april"],
+          yearly: ["yearly", "in 2026", "in 2027", "this year"],
+          bitcoin: ["bitcoin", "btc"],
+          ethereum: ["ethereum", "eth"],
+          solana: ["solana", "sol"],
+          xrp: ["xrp", "ripple"],
+          dogecoin: ["dogecoin", "doge"],
+          bnb: ["bnb", "binance coin"],
+          altcoins: ["cardano", "polkadot", "avalanche", "chainlink"],
+        };
+        const kws = keywords[cryptoSubcat] || [];
+        return kws.some(kw => text.includes(kw));
+      });
     }
     if (category === "trending" || category !== "new") {
       list = sortByTrending(list);
@@ -182,7 +209,7 @@ const Index = () => {
     const tradable = list.filter(m => m.statusLabel === "LIVE" || (m.statusLabel === "UNAVAILABLE" && isBytes32Hex(m.condition_id)));
     const ended = list.filter(m => m.statusLabel === "ENDED" || m.statusLabel === "CLOSED" || m.statusLabel === "ARCHIVED");
     return { liveMarkets: tradable, endedMarkets: ended };
-  }, [allMarkets, category, sportsSubcat, search]);
+  }, [allMarkets, category, sportsSubcat, cryptoSubcat, search]);
 
   const combinedGrid = useMemo((): GridItem[] => {
     const items: GridItem[] = [];
