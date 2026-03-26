@@ -363,21 +363,58 @@ const Index = () => {
         )}
 
         {category === "crypto" && (
-          <div className="flex flex-wrap gap-1 mb-5">
-            {CRYPTO_SUBCATEGORIES.map((sub) => (
-              <button
-                key={sub.id}
-                onClick={() => setCryptoSubcat(sub.id)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
-                  cryptoSubcat === sub.id
-                    ? "bg-primary/20 border-primary/40 text-primary"
-                    : "bg-card border-border text-muted-foreground hover:border-primary/30"
-                )}
-              >
-                {sub.label}
-              </button>
-            ))}
+          <div className="mb-5">
+            {/* Market type filters */}
+            <div className="flex flex-wrap gap-1 mb-2">
+              {CRYPTO_SUBCATEGORIES.filter(s => ["all-crypto", "up-down", "above-below", "price-range", "hit-price"].includes(s.id)).map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setCryptoSubcat(sub.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                    cryptoSubcat === sub.id
+                      ? "bg-primary/20 border-primary/40 text-primary"
+                      : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                  )}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            {/* Time interval filters */}
+            <div className="flex flex-wrap gap-1 mb-2">
+              {CRYPTO_SUBCATEGORIES.filter(s => ["5min", "15min", "1hour", "4hours", "daily", "weekly", "monthly", "yearly"].includes(s.id)).map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setCryptoSubcat(sub.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                    cryptoSubcat === sub.id
+                      ? "bg-primary/20 border-primary/40 text-primary"
+                      : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                  )}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            {/* Coin filters */}
+            <div className="flex flex-wrap gap-1">
+              {CRYPTO_SUBCATEGORIES.filter(s => ["bitcoin", "ethereum", "solana", "xrp", "dogecoin", "bnb", "altcoins"].includes(s.id)).map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setCryptoSubcat(sub.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[11px] font-medium transition-all border",
+                    cryptoSubcat === sub.id
+                      ? "bg-primary/20 border-primary/40 text-primary"
+                      : "bg-card border-border text-muted-foreground hover:border-primary/30"
+                  )}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
