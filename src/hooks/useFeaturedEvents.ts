@@ -18,7 +18,11 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
       const pinnedSlugs = (!tag || tag === "Crypto")
-        ? ["bitcoin-above-on-march-26", "bitcoin-above-on-march-28", "bitcoin-above-on-march-29", "bitcoin-above-on-march-30"]
+        ? [
+            "bitcoin-above-on-march-26", "bitcoin-above-on-march-28",
+            "bitcoin-above-on-march-29", "bitcoin-above-on-march-30",
+            "bitcoin-up-or-down-march-26-2026-11am-et",
+          ]
         : [];
 
       // Gamma events API ignores the `tag` param, so we fetch a large pool
@@ -32,7 +36,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
       // When a category is active, also search by keyword to catch events
       // that may not rank in the top 100 by volume
       const TAG_KEYWORDS: Record<string, string[]> = {
-        Crypto: ["bitcoin", "ethereum", "crypto", "solana"],
+        Crypto: ["bitcoin", "ethereum", "crypto", "solana", "up or down"],
         Sports: ["nba", "nfl", "soccer", "mlb"],
         Politics: ["election", "president", "congress"],
       };
@@ -64,8 +68,9 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
       }
 
       // Client-side tag filtering since the API doesn't support it
+      // Allow events with 2+ markets OR binary up/down events (which have exactly 2 outcomes in 1 market)
       let filtered = allEvents.filter(
-        (e: any) => Array.isArray(e.markets) && e.markets.length >= 2
+        (e: any) => Array.isArray(e.markets) && e.markets.length >= 1
       );
 
       if (tag) {

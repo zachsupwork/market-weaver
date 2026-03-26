@@ -205,17 +205,21 @@ const EventDetail = () => {
 
   type EventUIStatus = "LIVE" | "UPCOMING" | "ENDED";
   const eventUIStatus: EventUIStatus = useMemo(() => {
+    // Only trust explicit resolution from Polymarket
     if (event?.resolved === true) return "ENDED";
+    // Check if ALL markets are explicitly closed/resolved (not just by end date)
     if (
       allMarkets.length > 0 &&
-      allMarkets.every(
-        (m) => m.statusLabel === "ENDED" || m.statusLabel === "ARCHIVED" || m.statusLabel === "CLOSED"
-      )
+      allMarkets.every((m) => m.closed || m.archived || (m.statusLabel === "ENDED" && m.ended))
     )
       return "ENDED";
+    // If any market is active or accepting orders, it's LIVE
+    if (allMarkets.some((m) => m.active && !m.closed && !m.archived)) return "LIVE";
     if (tradableMarkets.length > 0) return "LIVE";
     const ed = event?.endDate || event?.end_date_iso;
     if (ed && new Date(ed).getTime() > Date.now()) return "UPCOMING";
+    // If end date hasn't passed and event isn't resolved, show as LIVE
+    if (event?.active !== false && event?.closed !== true) return "LIVE";
     return "ENDED";
   }, [event, allMarkets, tradableMarkets]);
 
