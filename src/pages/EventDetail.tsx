@@ -476,6 +476,9 @@ const EventDetail = () => {
           )}
         </div>
 
+        {/* Time-slot navigation for hourly/periodic events */}
+        {pmSlug && <TimeSlotNav currentSlug={pmSlug} />}
+
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           <div className="flex-1 min-w-0 space-y-5">
             {selected && (
