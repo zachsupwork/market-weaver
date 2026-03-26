@@ -308,13 +308,38 @@ function OrderRow({
       {/* Expanded details */}
       {expanded && (
         <div className="border-t border-border bg-muted/30 px-4 py-3 space-y-3">
+          {/* Market event info */}
+          {order.marketInfo && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1">
+              <div className="text-xs font-semibold text-primary">Market Details</div>
+              <div className="text-sm font-medium text-foreground">{order.marketInfo.question}</div>
+              <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground mt-1">
+                {order.marketInfo.event_slug && (
+                  <span>Event: <span className="text-foreground">{order.marketInfo.event_slug.replace(/-/g, " ")}</span></span>
+                )}
+                {order.marketInfo.outcomes && order.marketInfo.outcomes.length > 0 && (
+                  <span>Outcomes: <span className="text-foreground">{order.marketInfo.outcomes.join(" / ")}</span></span>
+                )}
+                {order.marketInfo.end_date_iso && (
+                  <span>Ends: <span className="text-foreground">{new Date(order.marketInfo.end_date_iso).toLocaleString()}</span></span>
+                )}
+                {order.marketInfo.volume24h != null && (
+                  <span>24h Vol: <span className="text-foreground">${Number(order.marketInfo.volume24h).toLocaleString()}</span></span>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <Detail label="Order ID" value={order.id} mono truncate />
-            <Detail label="Market" value={order.market} mono truncate />
+            <Detail label="Condition ID" value={order.market} mono truncate />
             <Detail label="Token ID" value={order.asset_id} mono truncate />
             <Detail label="Type" value={order.type} />
+            <Detail label="Price" value={`$${order.price}`} />
+            <Detail label="Size" value={`${order.original_size} shares`} />
             <Detail label="Remaining" value={`${order.remainingSize} shares`} />
             <Detail label="Filled" value={`${order.size_matched} shares`} />
+            <Detail label="Total Value" value={`$${order.totalValue}`} />
             <Detail label="Created" value={createdDate?.toLocaleString() || "—"} />
             <Detail label="Expiration" value={order.expiration === "0" || order.expiration === 0 ? "Never" : new Date(Number(order.expiration) * 1000).toLocaleString()} />
             <Detail label="Owner" value={order.owner} mono truncate />
