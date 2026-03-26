@@ -100,7 +100,10 @@ export function OrderTicket({
   const tokenId = isYes ? yesTokenId : noTokenId;
   const marketPrice = isYes ? yesPrice : noPrice;
   // Round market price to tick size (e.g. 0.01) to match Polymarket's displayed price
-  const snappedMarketPrice = marketPrice != null ? snapToTick(marketPrice, tickSize) : null;
+  // For very small prices (< tickSize), use the raw price so it doesn't snap to 0
+  const snappedMarketPrice = marketPrice != null
+    ? (marketPrice < tickSize && marketPrice > 0 ? marketPrice : snapToTick(marketPrice, tickSize))
+    : null;
   const hasMarketPrice = snappedMarketPrice != null && snappedMarketPrice > 0;
 
   const parsedLimitPrice = parseFloat(limitPrice);
