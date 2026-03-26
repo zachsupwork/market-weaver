@@ -46,9 +46,11 @@ function polymarketUrl(market: NormalizedMarket): string {
   return `https://polymarket.com`;
 }
 
+type SortOption = "volume" | "newest" | "ending" | "az";
+
 type GridItem =
-  | { type: "market"; data: NormalizedMarket; volume: number }
-  | { type: "event"; data: FeaturedEvent; volume: number };
+  | { type: "market"; data: NormalizedMarket; volume: number; endDate: string }
+  | { type: "event"; data: FeaturedEvent; volume: number; endDate: string };
 
 const Index = () => {
   useLiveDataFeeds();
@@ -62,6 +64,7 @@ const Index = () => {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [showEnded, setShowEnded] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("volume");
   const limit = 100;
   const prevDataRef = useRef<string>("");
 
@@ -140,14 +143,25 @@ const Index = () => {
 
   const filteredEvents = useMemo(() => {
     if (!events) return [];
-    if (category === "trending" || category === "new" || category === "breaking") return events;
-    return events.filter((e) => {
+    let result = events;
+
+    // Apply search filter to events
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((e) => {
+        const texts = [e.title, e.slug, ...e.markets.map(m => m.question || "")].join(" ").toLowerCase();
+        return texts.includes(q);
+      });
+    }
+
+    if (category === "trending" || category === "new" || category === "breaking") return result;
+    return result.filter((e) => {
       const texts = [e.title, ...e.markets.map(m => m.question || "")].join(" ");
       const tags = e.markets.flatMap(m => m.tags || []);
       const inferred = inferCategory({ question: texts, tags });
       return inferred === category;
     });
-  }, [events, category]);
+  }, [events, category, search]);
 
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
@@ -215,18 +229,48 @@ const Index = () => {
     const items: GridItem[] = [];
     for (const m of liveMarkets) {
       if (!m.condition_id || !isBytes32Hex(m.condition_id)) continue;
-      items.push({ type: "market", data: m, volume: m.volume24h || 0 });
+      items.push({ type: "market", data: m, volume: m.volume24h || 0, endDate: m.end_date_iso || "" });
     }
     const marketConditionIds = new Set(liveMarkets.map(m => m.condition_id));
     for (const e of filteredEvents) {
       const hasUniqueChildren = e.markets.some(m => !marketConditionIds.has(m.condition_id));
       if (hasUniqueChildren || e.markets.length >= 3) {
-        items.push({ type: "event", data: e, volume: e.volume });
+        items.push({ type: "event", data: e, volume: e.volume, endDate: e.endDate || "" });
       }
     }
-    items.sort((a, b) => b.volume - a.volume);
+
+    // Sort based on selected option
+    const getTitle = (item: GridItem) =>
+      item.type === "market" ? (item.data.question || "") : (item.data.title || "");
+
+    switch (sortBy) {
+      case "newest":
+        items.sort((a, b) => {
+          const aDate = a.type === "market"
+            ? (a.data.accepting_order_timestamp || a.data.end_date_iso || "")
+            : (a.data.endDate || "");
+          const bDate = b.type === "market"
+            ? (b.data.accepting_order_timestamp || b.data.end_date_iso || "")
+            : (b.data.endDate || "");
+          return new Date(bDate).getTime() - new Date(aDate).getTime();
+        });
+        break;
+      case "ending":
+        items.sort((a, b) => {
+          const aEnd = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+          const bEnd = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+          return aEnd - bEnd;
+        });
+        break;
+      case "az":
+        items.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
+        break;
+      default: // volume
+        items.sort((a, b) => b.volume - a.volume);
+    }
+
     return items;
-  }, [liveMarkets, filteredEvents]);
+  }, [liveMarkets, filteredEvents, sortBy]);
 
   // Live global stats from edge function
   const { data: globalStats } = useQuery({
@@ -313,16 +357,28 @@ const Index = () => {
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative mb-5 max-w-lg">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search markets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-          />
+        {/* Search + Sort */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-5">
+          <div className="relative flex-1 max-w-lg">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search markets… e.g. 'bitcoin march 27' or 'above 80000'"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+          >
+            <option value="volume">Sort: Volume ↓</option>
+            <option value="newest">Sort: Newest First</option>
+            <option value="ending">Sort: Ending Soon</option>
+            <option value="az">Sort: A → Z</option>
+          </select>
         </div>
 
         {/* Category tabs */}
