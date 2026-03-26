@@ -150,9 +150,24 @@ export function inferCryptoSubcategory(market: {
     market.question || "",
   ].join(" ").toLowerCase();
 
-  for (const [key, keywords] of Object.entries(CRYPTO_SUB_KEYWORDS)) {
-    if (keywords.some((kw) => text.includes(kw))) return key as CryptoSubId;
+  // Time-based filters first (most specific)
+  const timeKeys: CryptoSubId[] = ["5min", "15min", "1hour", "4hours", "daily", "weekly", "monthly", "yearly"];
+  for (const key of timeKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
   }
+
+  // Market type filters
+  const typeKeys: CryptoSubId[] = ["up-down", "above-below", "price-range", "hit-price"];
+  for (const key of typeKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
+  }
+
+  // Coin filters
+  const coinKeys: CryptoSubId[] = ["bitcoin", "ethereum", "solana", "xrp", "dogecoin", "bnb", "altcoins"];
+  for (const key of coinKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
+  }
+
   return "all-crypto";
 }
 
