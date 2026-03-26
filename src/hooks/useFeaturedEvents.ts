@@ -22,13 +22,34 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
   return useQuery<FeaturedEvent[]>({
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
+      // Dynamically generate pinned slugs for the next 7 days so we always
+      // show the most up-to-date Bitcoin / crypto events.
+      const generateDynamicSlugs = (): string[] => {
+        const slugs: string[] = [];
+        const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+        const now = new Date();
+        for (let d = -1; d <= 7; d++) {
+          const dt = new Date(now);
+          dt.setDate(dt.getDate() + d);
+          const month = months[dt.getMonth()];
+          const day = dt.getDate();
+          const year = dt.getFullYear();
+          // "above" events
+          slugs.push(`bitcoin-above-on-${month}-${day}`);
+          // "up or down" hourly events for today & tomorrow
+          if (d >= -1 && d <= 1) {
+            for (const hour of [9,10,11,12,1,2,3,4,5,6,7,8]) {
+              const ampm = hour >= 9 && hour <= 11 ? "am" : "pm";
+              const adjustedHour = hour > 8 && hour <= 11 ? hour : hour;
+              slugs.push(`bitcoin-up-or-down-${month}-${day}-${year}-${adjustedHour}${ampm}-et`);
+            }
+          }
+        }
+        return slugs;
+      };
+
       const pinnedSlugs = (!tag || tag === "Crypto")
-        ? [
-            "bitcoin-above-on-march-26", "bitcoin-above-on-march-27",
-            "bitcoin-above-on-march-28", "bitcoin-above-on-march-29",
-            "bitcoin-above-on-march-30",
-            "bitcoin-up-or-down-march-26-2026-11am-et",
-          ]
+        ? generateDynamicSlugs()
         : [];
 
       // Gamma events API ignores the `tag` param, so we fetch a large pool
