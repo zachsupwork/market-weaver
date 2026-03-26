@@ -56,7 +56,9 @@ export function OrdersPanel() {
       o.market.toLowerCase().includes(q) ||
       o.asset_id.toLowerCase().includes(q) ||
       o.id.toLowerCase().includes(q) ||
-      o.side.toLowerCase().includes(q)
+      o.side.toLowerCase().includes(q) ||
+      (o.marketInfo?.question || "").toLowerCase().includes(q) ||
+      (o.marketInfo?.event_slug || "").toLowerCase().includes(q)
     );
   });
 
