@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchEventBySlug, fetchEvents } from "@/lib/polymarket-api";
 import { normalizeMarket, type NormalizedMarket } from "@/lib/normalizePolymarket";
 
+export type EventStatus = "LIVE" | "CLOSED" | "ENDED";
+
 export interface FeaturedEvent {
   id: string;
   title: string;
@@ -11,6 +13,9 @@ export interface FeaturedEvent {
   volume: number;
   liquidity: number;
   markets: NormalizedMarket[];
+  status: EventStatus;
+  endDate: string;
+  resolved: boolean;
 }
 
 export function useFeaturedEvents(limit = 10, tag?: string) {
@@ -96,12 +101,27 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
 
       return filtered
         .map((e: any): FeaturedEvent | null => {
-          const activeMarkets = (e.markets || []).filter((m: any) => {
-            const active = m.active !== false && m.closed !== true;
-            const accepting = m.accepting_orders !== false && m.acceptingOrders !== false;
-            return active && accepting;
-          });
-          if (activeMarkets.length < 1) return null;
+          const allEventMarkets = (e.markets || [])
+            .map((m: any) => normalizeMarket({ ...m, event_slug: e.slug || e.ticker }));
+          if (allEventMarkets.length < 1) return null;
+
+          // Determine event-level status from the API data
+          const isResolved = e.resolved === true;
+          const allClosed = allEventMarkets.every((m: NormalizedMarket) => m.closed || m.archived || m.ended);
+          const hasActive = allEventMarkets.some((m: NormalizedMarket) => m.active && !m.closed && !m.archived && m.accepting_orders);
+
+          let status: EventStatus = "LIVE";
+          if (isResolved || (allClosed && allEventMarkets.every((m: NormalizedMarket) => m.ended))) {
+            status = "ENDED";
+          } else if (allClosed || !hasActive) {
+            status = "CLOSED";
+          }
+
+          // Get earliest end date from markets
+          const endDate = allEventMarkets
+            .map((m: NormalizedMarket) => m.end_date_iso)
+            .filter(Boolean)
+            .sort()[0] || "";
 
           return {
             id: e.id || "",
@@ -110,8 +130,10 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
             image: e.image || "",
             volume: Number(e.volume ?? e.volume24hr ?? 0),
             liquidity: Number(e.liquidity ?? 0),
-            markets: activeMarkets
-              .map((m: any) => normalizeMarket({ ...m, event_slug: e.slug || e.ticker }))
+            status,
+            endDate,
+            resolved: isResolved,
+            markets: allEventMarkets
               .sort((a: NormalizedMarket, b: NormalizedMarket) => {
                 const aPrice = a.outcomePrices?.[0] ?? 0;
                 const bPrice = b.outcomePrices?.[0] ?? 0;
