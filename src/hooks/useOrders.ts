@@ -19,6 +19,7 @@ export interface PolymarketOrder {
   type: string;
   remainingSize?: string;
   totalValue?: string;
+  marketInfo?: NormalizedMarket | null;
 }
 
 export type OrderFilter = "all" | "live" | "matched" | "cancelled";
