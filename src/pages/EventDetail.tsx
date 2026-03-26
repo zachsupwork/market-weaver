@@ -372,7 +372,11 @@ const EventDetail = () => {
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-lg px-2.5 py-1">
                     <Calendar className="h-3 w-3" />
                     <span>
-                      {eventUIStatus === "ENDED" ? "Ended" : `Ends ${timeUntil(endDate)}`}
+                      {eventUIStatus === "ENDED"
+                        ? "Ended"
+                        : new Date(endDate).getTime() > Date.now()
+                          ? `Ends ${timeUntil(endDate)}`
+                          : "Resolution pending"}
                     </span>
                   </div>
                 )}
