@@ -24,8 +24,9 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
     queryFn: async () => {
       const pinnedSlugs = (!tag || tag === "Crypto")
         ? [
-            "bitcoin-above-on-march-26", "bitcoin-above-on-march-28",
-            "bitcoin-above-on-march-29", "bitcoin-above-on-march-30",
+            "bitcoin-above-on-march-26", "bitcoin-above-on-march-27",
+            "bitcoin-above-on-march-28", "bitcoin-above-on-march-29",
+            "bitcoin-above-on-march-30",
             "bitcoin-up-or-down-march-26-2026-11am-et",
           ]
         : [];
