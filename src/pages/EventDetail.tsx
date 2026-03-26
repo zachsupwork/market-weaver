@@ -7,6 +7,7 @@ import { groupMarkets } from "@/lib/market-grouping";
 import { orderbookWsService } from "@/services/orderbook-ws.service";
 import { useMarketStore } from "@/stores/useMarketStore";
 import { EventMarketCard } from "@/components/markets/EventMarketCard";
+import { TimeSlotNav } from "@/components/markets/TimeSlotNav";
 import { EventPriceChart } from "@/components/markets/EventPriceChart";
 import {
   ArrowLeft,
@@ -474,6 +475,9 @@ const EventDetail = () => {
             </div>
           )}
         </div>
+
+        {/* Time-slot navigation for hourly/periodic events */}
+        {pmSlug && <TimeSlotNav currentSlug={pmSlug} />}
 
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           <div className="flex-1 min-w-0 space-y-5">

@@ -101,7 +101,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
             const accepting = m.accepting_orders !== false && m.acceptingOrders !== false;
             return active && accepting;
           });
-          if (activeMarkets.length < 2) return null;
+          if (activeMarkets.length < 1) return null;
 
           return {
             id: e.id || "",
