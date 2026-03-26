@@ -1,9 +1,11 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { TrendingUp, Layers, ExternalLink, BarChart3 } from "lucide-react";
+import { TrendingUp, Layers, ExternalLink, BarChart3, Clock } from "lucide-react";
 import { CandidatePreviewRow } from "./CandidatePreviewRow";
 import { SportScoreBadge } from "./SportScoreBadge";
 import { CryptoPriceBadge } from "./CryptoPriceBadge";
 import { extractSportsSlug, extractCryptoSymbol } from "@/lib/live-data-utils";
+import { cn } from "@/lib/utils";
 import type { FeaturedEvent } from "@/hooks/useFeaturedEvents";
 
 function formatVol(n: number): string {
@@ -12,15 +14,45 @@ function formatVol(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
+function timeUntilShort(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return "";
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const secs = Math.floor((diff % (1000 * 60)) / 1000);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
 interface Props {
   event: FeaturedEvent;
 }
 
 export function EventGridCard({ event }: Props) {
+  const [, setTick] = useState(0);
+  const hasEndDate = !!event.endDate;
+  const isClosed = event.status === "CLOSED" || event.status === "ENDED";
+
+  // Tick every second if there's an active timer
+  useEffect(() => {
+    if (isClosed || !hasEndDate) return;
+    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, [isClosed, hasEndDate]);
+
+  const countdown = hasEndDate ? timeUntilShort(event.endDate) : "";
+
   return (
     <Link
       to={`/event/${encodeURIComponent(event.slug)}`}
-      className="group block rounded-2xl border border-border bg-card overflow-hidden transition-all hover:border-primary/40 hover:glow-primary"
+      className={cn(
+        "group block rounded-2xl border border-border bg-card overflow-hidden transition-all",
+        isClosed
+          ? "opacity-70 hover:opacity-90"
+          : "hover:border-primary/40 hover:glow-primary"
+      )}
     >
       {/* Header with image */}
       <div className="relative p-4 pb-3">
@@ -75,6 +107,16 @@ export function EventGridCard({ event }: Props) {
         </div>
       </div>
 
+      {/* Timer */}
+      {hasEndDate && !isClosed && countdown && (
+        <div className="px-4 pb-2 flex items-center gap-1.5">
+          <Clock className="h-3 w-3 text-muted-foreground" />
+          <span className="text-[10px] font-mono text-muted-foreground">
+            Ends in {countdown}
+          </span>
+        </div>
+      )}
+
       {/* Live data badge */}
       {(() => {
         const sportsSlug = extractSportsSlug(event.markets[0]?.tags, event.slug);
@@ -94,7 +136,7 @@ export function EventGridCard({ event }: Props) {
             tokenId={m.clobTokenIds?.[0]}
             conditionId={m.condition_id}
             eventSlug={event.slug}
-            showTrade
+            showTrade={!isClosed}
             rank={i + 1}
           />
         ))}
@@ -107,13 +149,33 @@ export function EventGridCard({ event }: Props) {
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer with status */}
       <div className="px-4 py-2.5 border-t border-border bg-muted/30 flex items-center gap-2">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-yes" />
-        </span>
-        <span className="text-[10px] font-medium text-yes">LIVE</span>
+        {event.status === "LIVE" && (
+          <>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yes opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-yes" />
+            </span>
+            <span className="text-[10px] font-medium text-yes">LIVE</span>
+          </>
+        )}
+        {event.status === "CLOSED" && (
+          <>
+            <span className="relative flex h-2 w-2">
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground" />
+            </span>
+            <span className="text-[10px] font-medium text-muted-foreground">CLOSED — No more bets</span>
+          </>
+        )}
+        {event.status === "ENDED" && (
+          <>
+            <span className="relative flex h-2 w-2">
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive" />
+            </span>
+            <span className="text-[10px] font-medium text-destructive">ENDED</span>
+          </>
+        )}
         <span className="ml-auto rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold font-mono text-primary tracking-wide">
           EVENT
         </span>
