@@ -254,27 +254,30 @@ function OrderRow({
       >
         {/* Side badge */}
         <span className={cn(
-          "text-xs font-bold px-2 py-0.5 rounded",
+          "text-xs font-bold px-2 py-0.5 rounded shrink-0",
           order.side === "BUY" ? "bg-yes/15 text-yes" : "bg-no/15 text-no"
         )}>
           {order.side}
         </span>
 
-        {/* Price + size */}
+        {/* Market question + price/size */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">${order.price}</span>
-            <span className="text-xs text-muted-foreground">×</span>
-            <span className="font-mono text-sm">{parseFloat(order.original_size).toFixed(2)} shares</span>
+          <div className="text-sm font-medium truncate">
+            {order.marketInfo?.question || `Market ${order.market.slice(0, 10)}…`}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-            {order.asset_id.slice(0, 12)}...{order.asset_id.slice(-6)}
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="font-mono text-xs text-muted-foreground">${order.price} × {parseFloat(order.original_size).toFixed(2)} shares</span>
+            {order.marketInfo?.event_slug && (
+              <span className="text-[10px] text-primary/70 truncate max-w-[120px]">
+                {order.marketInfo.event_slug.replace(/-/g, " ")}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Fill progress */}
         {fillPct > 0 && fillPct < 100 && (
-          <div className="w-16">
+          <div className="w-16 shrink-0">
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full"
@@ -287,19 +290,19 @@ function OrderRow({
 
         {/* Status */}
         <span className={cn(
-          "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+          "text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0",
           STATUS_COLORS[order.status] || STATUS_COLORS.LIVE
         )}>
           {order.status}
         </span>
 
         {/* Total value */}
-        <span className="font-mono text-sm text-muted-foreground w-16 text-right">
+        <span className="font-mono text-sm text-muted-foreground w-16 text-right shrink-0">
           ${order.totalValue}
         </span>
 
         {/* Expand */}
-        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
       </button>
 
       {/* Expanded details */}
