@@ -42,14 +42,25 @@ function formatVol(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
+/** Format a decimal price (0–1) as cents with proper precision for tiny values */
+function formatCents(price: number): string {
+  const cents = price * 100;
+  if (cents === 0) return "0¢";
+  if (cents >= 1) return `${Math.round(cents)}¢`;
+  // For sub-1¢ prices, show one decimal
+  return `${cents.toFixed(1)}¢`;
+}
+
 function timeUntil(dateStr: string): string {
   const diff = new Date(dateStr).getTime() - Date.now();
   if (diff <= 0) return "Ended";
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  if (days > 0) return `${days}d ${hours}h`;
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  return `${hours}h ${mins}m`;
+  const secs = Math.floor((diff % (1000 * 60)) / 1000);
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  return `${mins}m ${secs}s`;
 }
 
 function formatDate(dateStr: string): string {
@@ -142,10 +153,10 @@ function CandidateRow({
 
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <span className="rounded-md bg-yes/15 border border-yes/25 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-mono font-bold text-yes min-w-[44px] sm:min-w-[56px] text-center">
-          {pct !== null ? `${Math.round(price * 100)}¢` : "—"}
+          {pct !== null ? formatCents(price) : "—"}
         </span>
         <span className="rounded-md bg-no/15 border border-no/25 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-mono font-bold text-no min-w-[44px] sm:min-w-[56px] text-center">
-          {noPct !== null ? `${Math.round((noPrice ?? 0) * 100)}¢` : "—"}
+          {noPct !== null ? formatCents(noPrice ?? 0) : "—"}
         </span>
       </div>
 
@@ -167,7 +178,7 @@ const EventDetail = () => {
 
   const [, setTick] = useState(0);
   useEffect(() => {
-    const iv = setInterval(() => setTick((t) => t + 1), 30_000);
+    const iv = setInterval(() => setTick((t) => t + 1), 1_000);
     return () => clearInterval(iv);
   }, []);
 

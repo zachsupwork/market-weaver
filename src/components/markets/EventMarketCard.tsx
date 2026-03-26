@@ -10,6 +10,13 @@ function formatVol(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
+function formatCents(price: number): string {
+  const cents = price * 100;
+  if (cents === 0) return "0¢";
+  if (cents >= 1) return `${Math.round(cents)}¢`;
+  return `${cents.toFixed(1)}¢`;
+}
+
 interface Props {
   market: NormalizedMarket;
   selected: boolean;
@@ -81,10 +88,10 @@ export function EventMarketCard({ market, selected, onSelect }: Props) {
 
       <div className="flex items-center gap-2">
         <span className="flex-1 rounded-lg bg-yes/15 border border-yes/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-yes">
-          YES {yesCents !== null ? `${yesCents}¢` : "—"}
+          YES {yesPrice !== null ? formatCents(yesPrice) : "—"}
         </span>
         <span className="flex-1 rounded-lg bg-no/15 border border-no/25 px-2.5 py-1.5 text-center text-xs font-mono font-bold text-no">
-          NO {noCents !== null ? `${noCents}¢` : "—"}
+          NO {noPrice !== null ? formatCents(noPrice) : "—"}
         </span>
       </div>
     </button>
