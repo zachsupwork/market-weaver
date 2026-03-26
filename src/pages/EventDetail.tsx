@@ -7,6 +7,7 @@ import { groupMarkets } from "@/lib/market-grouping";
 import { orderbookWsService } from "@/services/orderbook-ws.service";
 import { useMarketStore } from "@/stores/useMarketStore";
 import { EventMarketCard } from "@/components/markets/EventMarketCard";
+import { TimeSlotNav } from "@/components/markets/TimeSlotNav";
 import { EventPriceChart } from "@/components/markets/EventPriceChart";
 import {
   ArrowLeft,
