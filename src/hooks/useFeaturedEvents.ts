@@ -18,7 +18,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
     queryKey: ["featured-events", limit, tag],
     queryFn: async () => {
       const pinnedSlugs = (!tag || tag === "Crypto")
-        ? ["bitcoin-above-on-march-28", "bitcoin-above-on-march-29", "bitcoin-above-on-march-30"]
+        ? ["bitcoin-above-on-march-26", "bitcoin-above-on-march-28", "bitcoin-above-on-march-29", "bitcoin-above-on-march-30"]
         : [];
 
       // Gamma events API ignores the `tag` param, so we fetch a large pool
