@@ -143,14 +143,25 @@ const Index = () => {
 
   const filteredEvents = useMemo(() => {
     if (!events) return [];
-    if (category === "trending" || category === "new" || category === "breaking") return events;
-    return events.filter((e) => {
+    let result = events;
+
+    // Apply search filter to events
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((e) => {
+        const texts = [e.title, e.slug, ...e.markets.map(m => m.question || "")].join(" ").toLowerCase();
+        return texts.includes(q);
+      });
+    }
+
+    if (category === "trending" || category === "new" || category === "breaking") return result;
+    return result.filter((e) => {
       const texts = [e.title, ...e.markets.map(m => m.question || "")].join(" ");
       const tags = e.markets.flatMap(m => m.tags || []);
       const inferred = inferCategory({ question: texts, tags });
       return inferred === category;
     });
-  }, [events, category]);
+  }, [events, category, search]);
 
   const { liveMarkets, endedMarkets } = useMemo(() => {
     if (allMarkets.length === 0 && !markets) return { liveMarkets: [], endedMarkets: [] };
