@@ -36,7 +36,7 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
       // When a category is active, also search by keyword to catch events
       // that may not rank in the top 100 by volume
       const TAG_KEYWORDS: Record<string, string[]> = {
-        Crypto: ["bitcoin", "ethereum", "crypto", "solana", "up or down"],
+        Crypto: ["bitcoin", "ethereum", "crypto", "solana", "up or down", "xrp", "dogecoin", "bnb", "price range", "above", "hit price"],
         Sports: ["nba", "nfl", "soccer", "mlb"],
         Politics: ["election", "president", "congress"],
       };

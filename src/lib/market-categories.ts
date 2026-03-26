@@ -16,12 +16,26 @@ export const CATEGORIES = [
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export const CRYPTO_SUBCATEGORIES = [
-  { id: "all-crypto", label: "All Crypto" },
+  { id: "all-crypto", label: "All" },
+  { id: "up-down", label: "Up / Down" },
+  { id: "above-below", label: "Above / Below" },
+  { id: "price-range", label: "Price Range" },
+  { id: "hit-price", label: "Hit Price" },
+  { id: "5min", label: "5 Min" },
+  { id: "15min", label: "15 Min" },
+  { id: "1hour", label: "1 Hour" },
+  { id: "4hours", label: "4 Hours" },
+  { id: "daily", label: "Daily" },
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+  { id: "yearly", label: "Yearly" },
   { id: "bitcoin", label: "Bitcoin" },
   { id: "ethereum", label: "Ethereum" },
   { id: "solana", label: "Solana" },
-  { id: "altcoins", label: "Altcoins" },
-  { id: "up-down", label: "Up/Down" },
+  { id: "xrp", label: "XRP" },
+  { id: "dogecoin", label: "Dogecoin" },
+  { id: "bnb", label: "BNB" },
+  { id: "altcoins", label: "Other" },
 ] as const;
 
 export type CryptoSubId = (typeof CRYPTO_SUBCATEGORIES)[number]["id"];
@@ -109,8 +123,22 @@ const CRYPTO_SUB_KEYWORDS: Record<string, string[]> = {
   bitcoin: ["bitcoin", "btc"],
   ethereum: ["ethereum", "eth"],
   solana: ["solana", "sol"],
-  altcoins: ["dogecoin", "doge", "altcoin", "cardano", "xrp", "ripple", "polkadot", "avalanche", "chainlink"],
-  "up-down": ["up or down", "up/down", "5 minute", "15 minute", "1 minute", "30 minute", "hour"],
+  xrp: ["xrp", "ripple"],
+  dogecoin: ["dogecoin", "doge"],
+  bnb: ["bnb", "binance coin"],
+  altcoins: ["cardano", "polkadot", "avalanche", "chainlink", "altcoin"],
+  "up-down": ["up or down", "up/down"],
+  "above-below": ["above", "below"],
+  "price-range": ["price range", "price on", "what price"],
+  "hit-price": ["hit price", "hit $", "will hit"],
+  "5min": ["5 minute", "5-minute", "5 min"],
+  "15min": ["15 minute", "15-minute", "15 min"],
+  "1hour": ["1 hour", "hourly", "1-hour", "1h"],
+  "4hours": ["4 hour", "4-hour", "4h"],
+  daily: ["daily", "one day", "1 day", "24 hour"],
+  weekly: ["weekly", "week", "march 23-29", "march 23–29"],
+  monthly: ["monthly", "in march", "in april", "in may", "in june"],
+  yearly: ["yearly", "in 2026", "in 2027", "this year"],
 };
 
 export function inferCryptoSubcategory(market: {
@@ -122,9 +150,24 @@ export function inferCryptoSubcategory(market: {
     market.question || "",
   ].join(" ").toLowerCase();
 
-  for (const [key, keywords] of Object.entries(CRYPTO_SUB_KEYWORDS)) {
-    if (keywords.some((kw) => text.includes(kw))) return key as CryptoSubId;
+  // Time-based filters first (most specific)
+  const timeKeys: CryptoSubId[] = ["5min", "15min", "1hour", "4hours", "daily", "weekly", "monthly", "yearly"];
+  for (const key of timeKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
   }
+
+  // Market type filters
+  const typeKeys: CryptoSubId[] = ["up-down", "above-below", "price-range", "hit-price"];
+  for (const key of typeKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
+  }
+
+  // Coin filters
+  const coinKeys: CryptoSubId[] = ["bitcoin", "ethereum", "solana", "xrp", "dogecoin", "bnb", "altcoins"];
+  for (const key of coinKeys) {
+    if (CRYPTO_SUB_KEYWORDS[key]?.some((kw) => text.includes(kw))) return key;
+  }
+
   return "all-crypto";
 }
 
