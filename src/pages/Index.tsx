@@ -46,9 +46,11 @@ function polymarketUrl(market: NormalizedMarket): string {
   return `https://polymarket.com`;
 }
 
+type SortOption = "volume" | "newest" | "ending" | "az";
+
 type GridItem =
-  | { type: "market"; data: NormalizedMarket; volume: number }
-  | { type: "event"; data: FeaturedEvent; volume: number };
+  | { type: "market"; data: NormalizedMarket; volume: number; endDate: string }
+  | { type: "event"; data: FeaturedEvent; volume: number; endDate: string };
 
 const Index = () => {
   useLiveDataFeeds();
@@ -62,6 +64,7 @@ const Index = () => {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [showEnded, setShowEnded] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("volume");
   const limit = 100;
   const prevDataRef = useRef<string>("");
 
@@ -215,18 +218,48 @@ const Index = () => {
     const items: GridItem[] = [];
     for (const m of liveMarkets) {
       if (!m.condition_id || !isBytes32Hex(m.condition_id)) continue;
-      items.push({ type: "market", data: m, volume: m.volume24h || 0 });
+      items.push({ type: "market", data: m, volume: m.volume24h || 0, endDate: m.end_date_iso || "" });
     }
     const marketConditionIds = new Set(liveMarkets.map(m => m.condition_id));
     for (const e of filteredEvents) {
       const hasUniqueChildren = e.markets.some(m => !marketConditionIds.has(m.condition_id));
       if (hasUniqueChildren || e.markets.length >= 3) {
-        items.push({ type: "event", data: e, volume: e.volume });
+        items.push({ type: "event", data: e, volume: e.volume, endDate: e.endDate || "" });
       }
     }
-    items.sort((a, b) => b.volume - a.volume);
+
+    // Sort based on selected option
+    const getTitle = (item: GridItem) =>
+      item.type === "market" ? (item.data.question || "") : (item.data.title || "");
+
+    switch (sortBy) {
+      case "newest":
+        items.sort((a, b) => {
+          const aDate = a.type === "market"
+            ? (a.data.accepting_order_timestamp || a.data.end_date_iso || "")
+            : (a.data.endDate || "");
+          const bDate = b.type === "market"
+            ? (b.data.accepting_order_timestamp || b.data.end_date_iso || "")
+            : (b.data.endDate || "");
+          return new Date(bDate).getTime() - new Date(aDate).getTime();
+        });
+        break;
+      case "ending":
+        items.sort((a, b) => {
+          const aEnd = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+          const bEnd = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+          return aEnd - bEnd;
+        });
+        break;
+      case "az":
+        items.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
+        break;
+      default: // volume
+        items.sort((a, b) => b.volume - a.volume);
+    }
+
     return items;
-  }, [liveMarkets, filteredEvents]);
+  }, [liveMarkets, filteredEvents, sortBy]);
 
   // Live global stats from edge function
   const { data: globalStats } = useQuery({
