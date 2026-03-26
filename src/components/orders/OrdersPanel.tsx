@@ -56,7 +56,9 @@ export function OrdersPanel() {
       o.market.toLowerCase().includes(q) ||
       o.asset_id.toLowerCase().includes(q) ||
       o.id.toLowerCase().includes(q) ||
-      o.side.toLowerCase().includes(q)
+      o.side.toLowerCase().includes(q) ||
+      (o.marketInfo?.question || "").toLowerCase().includes(q) ||
+      (o.marketInfo?.event_slug || "").toLowerCase().includes(q)
     );
   });
 
@@ -254,27 +256,30 @@ function OrderRow({
       >
         {/* Side badge */}
         <span className={cn(
-          "text-xs font-bold px-2 py-0.5 rounded",
+          "text-xs font-bold px-2 py-0.5 rounded shrink-0",
           order.side === "BUY" ? "bg-yes/15 text-yes" : "bg-no/15 text-no"
         )}>
           {order.side}
         </span>
 
-        {/* Price + size */}
+        {/* Market question + price/size */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">${order.price}</span>
-            <span className="text-xs text-muted-foreground">×</span>
-            <span className="font-mono text-sm">{parseFloat(order.original_size).toFixed(2)} shares</span>
+          <div className="text-sm font-medium truncate">
+            {order.marketInfo?.question || `Market ${order.market.slice(0, 10)}…`}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-            {order.asset_id.slice(0, 12)}...{order.asset_id.slice(-6)}
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="font-mono text-xs text-muted-foreground">${order.price} × {parseFloat(order.original_size).toFixed(2)} shares</span>
+            {order.marketInfo?.event_slug && (
+              <span className="text-[10px] text-primary/70 truncate max-w-[120px]">
+                {order.marketInfo.event_slug.replace(/-/g, " ")}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Fill progress */}
         {fillPct > 0 && fillPct < 100 && (
-          <div className="w-16">
+          <div className="w-16 shrink-0">
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full"
@@ -287,31 +292,56 @@ function OrderRow({
 
         {/* Status */}
         <span className={cn(
-          "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+          "text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0",
           STATUS_COLORS[order.status] || STATUS_COLORS.LIVE
         )}>
           {order.status}
         </span>
 
         {/* Total value */}
-        <span className="font-mono text-sm text-muted-foreground w-16 text-right">
+        <span className="font-mono text-sm text-muted-foreground w-16 text-right shrink-0">
           ${order.totalValue}
         </span>
 
         {/* Expand */}
-        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
       </button>
 
       {/* Expanded details */}
       {expanded && (
         <div className="border-t border-border bg-muted/30 px-4 py-3 space-y-3">
+          {/* Market event info */}
+          {order.marketInfo && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1">
+              <div className="text-xs font-semibold text-primary">Market Details</div>
+              <div className="text-sm font-medium text-foreground">{order.marketInfo.question}</div>
+              <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground mt-1">
+                {order.marketInfo.event_slug && (
+                  <span>Event: <span className="text-foreground">{order.marketInfo.event_slug.replace(/-/g, " ")}</span></span>
+                )}
+                {order.marketInfo.outcomes && order.marketInfo.outcomes.length > 0 && (
+                  <span>Outcomes: <span className="text-foreground">{order.marketInfo.outcomes.join(" / ")}</span></span>
+                )}
+                {order.marketInfo.end_date_iso && (
+                  <span>Ends: <span className="text-foreground">{new Date(order.marketInfo.end_date_iso).toLocaleString()}</span></span>
+                )}
+                {order.marketInfo.volume24h != null && (
+                  <span>24h Vol: <span className="text-foreground">${Number(order.marketInfo.volume24h).toLocaleString()}</span></span>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <Detail label="Order ID" value={order.id} mono truncate />
-            <Detail label="Market" value={order.market} mono truncate />
+            <Detail label="Condition ID" value={order.market} mono truncate />
             <Detail label="Token ID" value={order.asset_id} mono truncate />
             <Detail label="Type" value={order.type} />
+            <Detail label="Price" value={`$${order.price}`} />
+            <Detail label="Size" value={`${order.original_size} shares`} />
             <Detail label="Remaining" value={`${order.remainingSize} shares`} />
             <Detail label="Filled" value={`${order.size_matched} shares`} />
+            <Detail label="Total Value" value={`$${order.totalValue}`} />
             <Detail label="Created" value={createdDate?.toLocaleString() || "—"} />
             <Detail label="Expiration" value={order.expiration === "0" || order.expiration === 0 ? "Never" : new Date(Number(order.expiration) * 1000).toLocaleString()} />
             <Detail label="Owner" value={order.owner} mono truncate />

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchOpenOrders, cancelOrder } from "@/lib/polymarket-api";
+import { fetchOpenOrders, cancelOrder, fetchMarketByConditionId, type NormalizedMarket } from "@/lib/polymarket-api";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -19,6 +19,7 @@ export interface PolymarketOrder {
   type: string;
   remainingSize?: string;
   totalValue?: string;
+  marketInfo?: NormalizedMarket | null;
 }
 
 export type OrderFilter = "all" | "live" | "matched" | "cancelled";
@@ -45,7 +46,23 @@ export function useOrders(enabled = true, statusFilter: OrderFilter = "all") {
         console.error("[useOrders] fetch error:", result);
         throw new Error(result.error || "Failed to fetch orders");
       }
-      return (result.orders || []).map(normalizeOrder);
+      const orders = (result.orders || []).map(normalizeOrder);
+
+      // Batch-fetch market details for unique condition_ids
+      const uniqueConditionIds = [...new Set(orders.map(o => o.market).filter(Boolean))];
+      const marketCache: Record<string, NormalizedMarket | null> = {};
+      await Promise.all(
+        uniqueConditionIds.map(async (cid) => {
+          try {
+            marketCache[cid] = await fetchMarketByConditionId(cid);
+          } catch { marketCache[cid] = null; }
+        })
+      );
+
+      return orders.map(o => ({
+        ...o,
+        marketInfo: marketCache[o.market] || null,
+      }));
     },
     enabled,
     refetchInterval: 30_000,
