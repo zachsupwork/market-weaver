@@ -40,8 +40,16 @@ export function useFeaturedEvents(limit = 10, tag?: string) {
           if (d >= -1 && d <= 1) {
             for (const hour of [9,10,11,12,1,2,3,4,5,6,7,8]) {
               const ampm = hour >= 9 && hour <= 11 ? "am" : "pm";
-              const adjustedHour = hour > 8 && hour <= 11 ? hour : hour;
-              slugs.push(`bitcoin-up-or-down-${month}-${day}-${year}-${adjustedHour}${ampm}-et`);
+              slugs.push(`bitcoin-up-or-down-${month}-${day}-${year}-${hour}${ampm}-et`);
+            }
+          }
+          // 4-hour up/down events: generate Unix timestamps for 4h candles
+          // Candles start at midnight UTC and repeat every 4 hours: 0,4,8,12,16,20
+          if (d >= -1 && d <= 2) {
+            const dayStart = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+            for (const h of [0, 4, 8, 12, 16, 20]) {
+              const candleStart = Math.floor(dayStart.getTime() / 1000) + h * 3600;
+              slugs.push(`btc-updown-4h-${candleStart}`);
             }
           }
         }
