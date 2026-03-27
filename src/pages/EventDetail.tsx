@@ -400,7 +400,7 @@ const EventDetail = () => {
                     <span>{formatDate(gameStartTime)}</span>
                   </div>
                 )}
-                {endDate && (
+                {endDate && !isShortDurationEvent(pmSlug || "") && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-lg px-2.5 py-1">
                     <Calendar className="h-3 w-3" />
                     <span>
@@ -438,6 +438,36 @@ const EventDetail = () => {
                 )}
               </div>
             </div>
+
+            {/* Big countdown for short-duration events (hourly, 15min, etc.) */}
+            {endDate && eventUIStatus === "LIVE" && isShortDurationEvent(pmSlug || "") && (() => {
+              const parts = timeUntilParts(endDate);
+              if (parts.ended) return null;
+              return (
+                <div className="flex items-center gap-3 shrink-0">
+                  {parts.days > 0 && (
+                    <div className="text-center">
+                      <span className="text-3xl sm:text-4xl font-bold font-mono text-yes">{parts.days}</span>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Days</p>
+                    </div>
+                  )}
+                  {(parts.days > 0 || parts.hours > 0) && (
+                    <div className="text-center">
+                      <span className="text-3xl sm:text-4xl font-bold font-mono text-yes">{String(parts.hours).padStart(2, '0')}</span>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Hours</p>
+                    </div>
+                  )}
+                  <div className="text-center">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-yes">{String(parts.mins).padStart(2, '0')}</span>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Mins</p>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-yes">{String(parts.secs).padStart(2, '0')}</span>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Secs</p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {sportsSlug && (
