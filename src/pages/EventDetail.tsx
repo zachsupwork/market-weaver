@@ -76,9 +76,9 @@ function timeUntilParts(dateStr: string): { ended: boolean; days: number; hours:
   };
 }
 
-/** Check if this is a short-duration event (hourly/15min/etc) */
+/** Check if this is a short-duration event (hourly/15min/4h/etc) */
 function isShortDurationEvent(slug: string): boolean {
-  return /up-or-down|5-minute|15-minute|hourly|4-hour/i.test(slug || "");
+  return /up-or-down|5-minute|15-minute|hourly|4-hour|updown-4h|updown-15m|updown-5m/i.test(slug || "");
 }
 
 function formatDate(dateStr: string): string {
