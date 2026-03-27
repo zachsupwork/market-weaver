@@ -64,6 +64,23 @@ function timeUntil(dateStr: string): string {
   return `${mins}m ${secs}s`;
 }
 
+function timeUntilParts(dateStr: string): { ended: boolean; days: number; hours: number; mins: number; secs: number } {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return { ended: true, days: 0, hours: 0, mins: 0, secs: 0 };
+  return {
+    ended: false,
+    days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+    mins: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    secs: Math.floor((diff % (1000 * 60)) / 1000),
+  };
+}
+
+/** Check if this is a short-duration event (hourly/15min/etc) */
+function isShortDurationEvent(slug: string): boolean {
+  return /up-or-down|5-minute|15-minute|hourly|4-hour/i.test(slug || "");
+}
+
 function formatDate(dateStr: string): string {
   try {
     return new Date(dateStr).toLocaleDateString([], {
