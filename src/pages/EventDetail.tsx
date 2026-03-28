@@ -290,7 +290,8 @@ const EventDetail = () => {
     return () => unsubs.forEach((u) => u());
   }, [tradableMarkets]);
 
-  const selected = tradableMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0];
+  // Look up selected market from ALL markets (including closed) so deep-links to ended markets still work
+  const selected = allMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0] ?? allMarkets[0];
   const yesTokenId = selected?.clobTokenIds?.[0] ?? "";
   const noTokenId = selected?.clobTokenIds?.[1] ?? "";
   const selectedYesWs = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
