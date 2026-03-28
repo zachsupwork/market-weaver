@@ -280,15 +280,15 @@ const EventDetail = () => {
   }, [eventId]);
 
   useEffect(() => {
-    if (tradableMarkets.length === 0) return;
+    if (allMarkets.length === 0) return;
     const tokenIds = new Set<string>();
-    tradableMarkets.forEach((m) => {
+    allMarkets.forEach((m) => {
       if (m.clobTokenIds?.[0]) tokenIds.add(m.clobTokenIds[0]);
       if (m.clobTokenIds?.[1]) tokenIds.add(m.clobTokenIds[1]);
     });
     const unsubs = [...tokenIds].map((id) => orderbookWsService.subscribe(id, () => {}));
     return () => unsubs.forEach((u) => u());
-  }, [tradableMarkets]);
+  }, [allMarkets]);
 
   // Look up selected market from ALL markets (including closed) so deep-links to ended markets still work
   const selected = allMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0] ?? allMarkets[0];
