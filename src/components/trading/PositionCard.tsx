@@ -103,7 +103,19 @@ export function PositionCard({ position, showCancel, orderId, compact, onSell, o
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className={cn("font-semibold leading-tight", compact ? "text-xs" : "text-sm")}>
+            <p
+              className={cn(
+                "font-semibold leading-tight cursor-pointer hover:text-primary hover:underline transition-colors",
+                compact ? "text-xs" : "text-sm"
+              )}
+              onClick={() => {
+                if (position.eventSlug) {
+                  navigate(`/events/${position.eventSlug}${position.condition_id ? `?market=${position.condition_id}` : ""}`);
+                } else if (position.condition_id) {
+                  navigate(`/trade/${position.condition_id}`);
+                }
+              }}
+            >
               {position.market || position.condition_id?.substring(0, 20) + "…"}
             </p>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
