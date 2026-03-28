@@ -262,17 +262,17 @@ const EventDetail = () => {
   }, [groups, activeGroupId]);
 
   useEffect(() => {
-    if (tradableMarkets.length > 0 && !selectedConditionId) {
-      setSelectedConditionId(tradableMarkets[0].condition_id);
+    // If preselected market exists in allMarkets (even if closed), keep it selected
+    if (preselectedMarket && allMarkets.find((m) => m.condition_id === preselectedMarket)) {
+      if (selectedConditionId !== preselectedMarket) {
+        setSelectedConditionId(preselectedMarket);
+      }
+      return;
     }
-    if (
-      preselectedMarket &&
-      tradableMarkets.length > 0 &&
-      !tradableMarkets.find((m) => m.condition_id === preselectedMarket)
-    ) {
-      setSelectedConditionId(tradableMarkets[0].condition_id);
+    if (allMarkets.length > 0 && !selectedConditionId) {
+      setSelectedConditionId(tradableMarkets[0]?.condition_id ?? allMarkets[0]?.condition_id);
     }
-  }, [tradableMarkets, selectedConditionId, preselectedMarket]);
+  }, [allMarkets, tradableMarkets, selectedConditionId, preselectedMarket]);
 
   useEffect(() => {
     setSelectedConditionId(null);
@@ -280,17 +280,18 @@ const EventDetail = () => {
   }, [eventId]);
 
   useEffect(() => {
-    if (tradableMarkets.length === 0) return;
+    if (allMarkets.length === 0) return;
     const tokenIds = new Set<string>();
-    tradableMarkets.forEach((m) => {
+    allMarkets.forEach((m) => {
       if (m.clobTokenIds?.[0]) tokenIds.add(m.clobTokenIds[0]);
       if (m.clobTokenIds?.[1]) tokenIds.add(m.clobTokenIds[1]);
     });
     const unsubs = [...tokenIds].map((id) => orderbookWsService.subscribe(id, () => {}));
     return () => unsubs.forEach((u) => u());
-  }, [tradableMarkets]);
+  }, [allMarkets]);
 
-  const selected = tradableMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0];
+  // Look up selected market from ALL markets (including closed) so deep-links to ended markets still work
+  const selected = allMarkets.find((m) => m.condition_id === selectedConditionId) ?? tradableMarkets[0] ?? allMarkets[0];
   const yesTokenId = selected?.clobTokenIds?.[0] ?? "";
   const noTokenId = selected?.clobTokenIds?.[1] ?? "";
   const selectedYesWs = useMarketStore((s) => (yesTokenId ? s.assets[yesTokenId]?.lastTradePrice : null));
@@ -599,9 +600,9 @@ const EventDetail = () => {
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
                 <div className="max-h-[55vh] overflow-y-auto space-y-0.5 pr-1">
-                  {(activeGroupId === "__all__"
-                    ? tradableMarkets
-                    : activeGroup?.markets ?? tradableMarkets
+                  {(activeGroupId === "__all__" || !hasMultipleGroups
+                    ? displayMarkets
+                    : activeGroup?.markets ?? displayMarkets
                   ).map((m, idx) => (
                     <CandidateRow
                       key={m.condition_id}
