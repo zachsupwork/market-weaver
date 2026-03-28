@@ -600,9 +600,9 @@ const EventDetail = () => {
                   <span className="w-14 text-right hidden md:block">24h Vol</span>
                 </div>
                 <div className="max-h-[55vh] overflow-y-auto space-y-0.5 pr-1">
-                  {(activeGroupId === "__all__"
-                    ? tradableMarkets
-                    : activeGroup?.markets ?? tradableMarkets
+                  {(activeGroupId === "__all__" || !hasMultipleGroups
+                    ? displayMarkets
+                    : activeGroup?.markets ?? displayMarkets
                   ).map((m, idx) => (
                     <CandidateRow
                       key={m.condition_id}
