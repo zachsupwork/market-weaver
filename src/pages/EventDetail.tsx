@@ -262,17 +262,17 @@ const EventDetail = () => {
   }, [groups, activeGroupId]);
 
   useEffect(() => {
-    if (tradableMarkets.length > 0 && !selectedConditionId) {
-      setSelectedConditionId(tradableMarkets[0].condition_id);
+    // If preselected market exists in allMarkets (even if closed), keep it selected
+    if (preselectedMarket && allMarkets.find((m) => m.condition_id === preselectedMarket)) {
+      if (selectedConditionId !== preselectedMarket) {
+        setSelectedConditionId(preselectedMarket);
+      }
+      return;
     }
-    if (
-      preselectedMarket &&
-      tradableMarkets.length > 0 &&
-      !tradableMarkets.find((m) => m.condition_id === preselectedMarket)
-    ) {
-      setSelectedConditionId(tradableMarkets[0].condition_id);
+    if (allMarkets.length > 0 && !selectedConditionId) {
+      setSelectedConditionId(tradableMarkets[0]?.condition_id ?? allMarkets[0]?.condition_id);
     }
-  }, [tradableMarkets, selectedConditionId, preselectedMarket]);
+  }, [allMarkets, tradableMarkets, selectedConditionId, preselectedMarket]);
 
   useEffect(() => {
     setSelectedConditionId(null);
