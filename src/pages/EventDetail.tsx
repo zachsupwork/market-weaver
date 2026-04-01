@@ -766,7 +766,7 @@ const EventDetail = () => {
                         return (
                           <button
                             key={m.condition_id}
-                            onClick={() => setSelectedConditionId(m.condition_id)}
+                            onClick={() => handleSelectMarket(m.condition_id)}
                             className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted/60 transition-colors group"
                           >
                             <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{extractEventMarketLabel(m.question)}</span>
