@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEventById, isBytes32Hex, type NormalizedMarket } from "@/lib/polymarket-api";
 import { normalizeMarkets } from "@/lib/normalizePolymarket";
@@ -187,12 +187,25 @@ function CandidateRow({
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedMarket = searchParams.get("market");
   const [selectedConditionId, setSelectedConditionId] = useState<string | null>(preselectedMarket);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
   const [showDescription, setShowDescription] = useState(false);
+  const tradingCardRef = useRef<HTMLDivElement>(null);
+
+  /** Select a market: update state, URL, and scroll trading card into view on mobile */
+  const handleSelectMarket = (conditionId: string) => {
+    setSelectedConditionId(conditionId);
+    // Update URL without full navigation
+    navigate(`/events/${eventId}?market=${encodeURIComponent(conditionId)}`, { replace: true });
+    // On mobile, scroll the trading card into view
+    setTimeout(() => {
+      tradingCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
+  };
 
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -609,7 +622,7 @@ const EventDetail = () => {
                       market={m}
                       rank={idx + 1}
                       selected={m.condition_id === selectedConditionId}
-                      onSelect={() => setSelectedConditionId(m.condition_id)}
+                      onSelect={() => handleSelectMarket(m.condition_id)}
                     />
                   ))}
                 </div>
@@ -630,7 +643,7 @@ const EventDetail = () => {
                           key={m.condition_id}
                           market={m}
                           selected={m.condition_id === selectedConditionId}
-                          onSelect={() => setSelectedConditionId(m.condition_id)}
+                          onSelect={() => handleSelectMarket(m.condition_id)}
                         />
                       ))}
                     </div>
@@ -681,7 +694,7 @@ const EventDetail = () => {
           <div className="w-full lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
-                <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
+                <div ref={tradingCardRef} className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
                   <h3 className="text-sm font-bold mb-2 line-clamp-2">{selectedDisplayLabel}</h3>
 
                   <div className="flex items-center gap-2 mb-4">
@@ -753,7 +766,7 @@ const EventDetail = () => {
                         return (
                           <button
                             key={m.condition_id}
-                            onClick={() => setSelectedConditionId(m.condition_id)}
+                            onClick={() => handleSelectMarket(m.condition_id)}
                             className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted/60 transition-colors group"
                           >
                             <span className="text-xs truncate flex-1 group-hover:text-foreground transition-colors">{extractEventMarketLabel(m.question)}</span>
