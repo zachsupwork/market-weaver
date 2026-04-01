@@ -187,12 +187,25 @@ function CandidateRow({
 
 const EventDetail = () => {
   const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedMarket = searchParams.get("market");
   const [selectedConditionId, setSelectedConditionId] = useState<string | null>(preselectedMarket);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"orderbook" | "trades">("orderbook");
   const [showDescription, setShowDescription] = useState(false);
+  const tradingCardRef = useRef<HTMLDivElement>(null);
+
+  /** Select a market: update state, URL, and scroll trading card into view on mobile */
+  const handleSelectMarket = (conditionId: string) => {
+    setSelectedConditionId(conditionId);
+    // Update URL without full navigation
+    navigate(`/events/${eventId}?market=${encodeURIComponent(conditionId)}`, { replace: true });
+    // On mobile, scroll the trading card into view
+    setTimeout(() => {
+      tradingCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
+  };
 
   const [, setTick] = useState(0);
   useEffect(() => {
