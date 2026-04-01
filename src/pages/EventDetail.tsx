@@ -643,7 +643,7 @@ const EventDetail = () => {
                           key={m.condition_id}
                           market={m}
                           selected={m.condition_id === selectedConditionId}
-                          onSelect={() => setSelectedConditionId(m.condition_id)}
+                          onSelect={() => handleSelectMarket(m.condition_id)}
                         />
                       ))}
                     </div>
