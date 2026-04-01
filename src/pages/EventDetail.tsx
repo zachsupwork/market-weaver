@@ -694,7 +694,7 @@ const EventDetail = () => {
           <div className="w-full lg:w-[340px] shrink-0">
             <div className="lg:sticky lg:top-20 space-y-4">
               {selected ? (
-                <div className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
+                <div ref={tradingCardRef} className="rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/10">
                   <h3 className="text-sm font-bold mb-2 line-clamp-2">{selectedDisplayLabel}</h3>
 
                   <div className="flex items-center gap-2 mb-4">
