@@ -704,56 +704,7 @@ export default function Account() {
 
         {/* ─── Orders Tab ─────────────────────────────── */}
         {tab === "orders" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Open Orders</h2>
-              <Button variant="outline" size="sm" onClick={loadOrders} disabled={ordersLoading} className="gap-1.5">
-                <RefreshCw className={cn("h-3.5 w-3.5", ordersLoading && "animate-spin")} /> Refresh
-              </Button>
-            </div>
-            {ordersLoading && (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            )}
-            {ordersError && (
-              <Card className="border-destructive/30 bg-destructive/5">
-                <CardContent className="p-4">
-                  <p className="text-sm text-destructive">{ordersError}</p>
-                </CardContent>
-              </Card>
-            )}
-            {!ordersLoading && !ordersError && orders.length === 0 && (
-              <div className="text-center py-12">
-                <ClipboardList className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">No open orders</p>
-              </div>
-            )}
-            {orders.length > 0 && (
-              <div className="space-y-2">
-                {orders.map((order: any, i: number) => (
-                  <Card key={order.id || i}>
-                    <CardContent className="p-3 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{order.market || order.asset_id?.substring(0, 16) || "Order"}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                          <Badge variant={order.side === "BUY" ? "default" : "destructive"} className="text-[10px] h-5">
-                            {order.side || "—"}
-                          </Badge>
-                          <span className="font-mono">{order.price ? `${(parseFloat(order.price) * 100).toFixed(1)}¢` : "—"}</span>
-                          <span className="font-mono">×{order.original_size || order.size || "—"}</span>
-                          <Badge variant="outline" className="text-[10px] h-5">{order.status || "open"}</Badge>
-                        </div>
-                      </div>
-                      <Button variant="destructive" size="sm" onClick={() => handleCancelOrder(order.id)} className="shrink-0">
-                        Cancel
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+          <OrdersPanel />
         )}
 
         {/* ─── Trades Tab ─────────────────────────────── */}
