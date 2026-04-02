@@ -26,6 +26,7 @@ import { ClaimWinningsModal, type ClaimablePosition } from "@/components/trading
 import { DepositAddressCard } from "@/components/polymarket/DepositAddressCard";
 import { DepositStatusTracker } from "@/components/polymarket/DepositStatusTracker";
 import { useProxyWallet } from "@/hooks/useProxyWallet";
+import { OrdersPanel } from "@/components/orders/OrdersPanel";
 import { QRCodeSVG } from "qrcode.react";
 import { POLYGON_USDCE_ADDRESS, POLYGON_USDC_ADDRESS } from "@/lib/constants/tokens";
 import { USDC_TO_USDC_E_SWAP_URL } from "@/lib/tokens";
