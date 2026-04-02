@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useOrders, type OrderFilter, type PolymarketOrder } from "@/hooks/useOrders";
 import { cn } from "@/lib/utils";
 import {
   Loader2, RefreshCw, X, Search, ClipboardList,
-  AlertCircle, Filter, ChevronDown, ChevronUp,
+  AlertCircle, ChevronDown, ChevronUp, ExternalLink, ArrowRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect } from "react";
 
 const STATUS_COLORS: Record<string, string> = {
   LIVE: "border-yes/40 bg-yes/10 text-yes",
