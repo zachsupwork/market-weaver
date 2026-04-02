@@ -238,6 +238,7 @@ function OrderRow({
   onCancel: () => void;
   isCancelling: boolean;
 }) {
+  const navigate = useNavigate();
   const isLive = order.status === "LIVE";
   const fillPct = parseFloat(order.original_size) > 0
     ? (parseFloat(order.size_matched) / parseFloat(order.original_size) * 100)
@@ -246,6 +247,21 @@ function OrderRow({
   const createdDate = order.created_at
     ? new Date(typeof order.created_at === "number" ? order.created_at * 1000 : order.created_at)
     : null;
+
+  const marketTitle = order.marketInfo?.question || `Market ${order.market.slice(0, 10)}…`;
+  const eventSlug = order.marketInfo?.event_slug;
+  const polymarketUrl = eventSlug
+    ? `https://polymarket.com/event/${eventSlug}`
+    : `https://polymarket.com/market/${order.market}`;
+
+  const handleInternalNav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (eventSlug) {
+      navigate(`/events/${eventSlug}?market=${encodeURIComponent(order.market)}`);
+    } else {
+      navigate(`/trade/${order.market}`);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -264,14 +280,18 @@ function OrderRow({
 
         {/* Market question + price/size */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">
-            {order.marketInfo?.question || `Market ${order.market.slice(0, 10)}…`}
-          </div>
+          <span
+            onClick={handleInternalNav}
+            className="text-sm font-medium truncate block cursor-pointer hover:underline hover:text-primary transition-colors"
+            title={marketTitle}
+          >
+            {marketTitle}
+          </span>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="font-mono text-xs text-muted-foreground">${order.price} × {parseFloat(order.original_size).toFixed(2)} shares</span>
-            {order.marketInfo?.event_slug && (
+            {eventSlug && (
               <span className="text-[10px] text-primary/70 truncate max-w-[120px]">
-                {order.marketInfo.event_slug.replace(/-/g, " ")}
+                {eventSlug.replace(/-/g, " ")}
               </span>
             )}
           </div>
@@ -310,15 +330,40 @@ function OrderRow({
       {/* Expanded details */}
       {expanded && (
         <div className="border-t border-border bg-muted/30 px-4 py-3 space-y-3">
-          {/* Market event info */}
-          {order.marketInfo && (
-            <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1">
+          {/* Market event info with clickable links */}
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+            <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-primary">Market Details</div>
-              <div className="text-sm font-medium text-foreground">{order.marketInfo.question}</div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[10px] gap-1"
+                  onClick={(e) => { e.stopPropagation(); handleInternalNav(e); }}
+                >
+                  <ArrowRight className="h-3 w-3" />
+                  View on PolyView
+                </Button>
+                <a
+                  href={polymarketUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Polymarket
+                </a>
+              </div>
+            </div>
+            <div
+              className="text-sm font-medium text-foreground cursor-pointer hover:underline hover:text-primary transition-colors"
+              onClick={handleInternalNav}
+            >
+              {marketTitle}
+            </div>
+            {order.marketInfo && (
               <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground mt-1">
-                {order.marketInfo.event_slug && (
-                  <span>Event: <span className="text-foreground">{order.marketInfo.event_slug.replace(/-/g, " ")}</span></span>
-                )}
                 {order.marketInfo.outcomes && order.marketInfo.outcomes.length > 0 && (
                   <span>Outcomes: <span className="text-foreground">{order.marketInfo.outcomes.join(" / ")}</span></span>
                 )}
@@ -329,8 +374,8 @@ function OrderRow({
                   <span>24h Vol: <span className="text-foreground">${Number(order.marketInfo.volume24h).toLocaleString()}</span></span>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <Detail label="Order ID" value={order.id} mono truncate />
@@ -347,11 +392,36 @@ function OrderRow({
             <Detail label="Owner" value={order.owner} mono truncate />
           </div>
 
-          {isLive && (
-            <div className="flex justify-end">
+          {/* Action buttons */}
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={(e) => { e.stopPropagation(); handleInternalNav(e); }}
+              >
+                <ArrowRight className="h-3 w-3" />
+                Trade This Market
+              </Button>
+              <a
+                href={polymarketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                  <ExternalLink className="h-3 w-3" />
+                  Polymarket
+                </Button>
+              </a>
+            </div>
+
+            {isLive && (
               <Button
                 variant="destructive"
                 size="sm"
+                className="h-7 text-xs"
                 disabled={isCancelling}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -361,8 +431,8 @@ function OrderRow({
                 {isCancelling ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <X className="h-3 w-3 mr-1" />}
                 Cancel Order
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
