@@ -43,6 +43,47 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
   });
 }
 
+async function fetchClobOrders(
+  clobHost: string,
+  creds: { apiKey: string; secret: string; passphrase: string },
+  polyAddress: string,
+  state?: string,
+): Promise<any[]> {
+  const clobParams = new URLSearchParams();
+  if (polyAddress) clobParams.set("maker", polyAddress);
+  if (state) clobParams.set("state", state);
+
+  const queryString = clobParams.toString();
+  const requestPath = "/data/orders" + (queryString ? `?${queryString}` : "");
+
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signPath = "/data/orders";
+  const signMessage = timestamp + "GET" + signPath;
+  const signature = toUrlSafeBase64(await hmacSign(creds.secret, signMessage));
+
+  const res = await fetch(`${clobHost}${requestPath}`, {
+    method: "GET",
+    headers: {
+      "POLY_API_KEY": creds.apiKey,
+      "POLY_PASSPHRASE": creds.passphrase,
+      "POLY_TIMESTAMP": timestamp,
+      "POLY_SIGNATURE": signature,
+      "POLY_ADDRESS": polyAddress,
+      "Accept": "application/json",
+    },
+  });
+
+  const resBody = await res.text();
+  if (!res.ok) {
+    console.error(`[orders] CLOB error for state=${state || "none"}: ${res.status} ${resBody.substring(0, 200)}`);
+    return [];
+  }
+
+  let parsed;
+  try { parsed = JSON.parse(resBody); } catch { parsed = {}; }
+  return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : [];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -85,63 +126,37 @@ serve(async (req) => {
 
     // ── Parse query params ──
     const url = new URL(req.url);
-    const statusFilter = url.searchParams.get("status"); // e.g. "ALL", "LIVE", "MATCHED", "CANCELLED"
+    const statusFilter = url.searchParams.get("status"); // "ALL", "LIVE", "MATCHED", "CANCELLED"
 
-    // ── Fetch orders from CLOB ──
     const clobHost = Deno.env.get("CLOB_HOST") || "https://clob.polymarket.com";
-    
-    // Build request path with query params
-    const clobParams = new URLSearchParams();
-    // The maker is the proxy/Safe address stored in creds
-    if (credRow.address) {
-      clobParams.set("maker", credRow.address);
-    }
-    if (statusFilter && statusFilter !== "ALL") {
-      clobParams.set("state", statusFilter);
-    }
-    // Don't filter by state when "ALL" to get everything
-    
-    const queryString = clobParams.toString();
-    const requestPath = "/data/orders" + (queryString ? `?${queryString}` : "");
-    
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    // HMAC signs only the path without query string
-    const signPath = "/data/orders";
-    const signMessage = timestamp + "GET" + signPath;
-    const signature = toUrlSafeBase64(await hmacSign(creds.secret, signMessage));
-
     const polyAddress = (credRow.address || "").toLowerCase();
 
-    console.log(`[orders] user=${user.id} path=${requestPath} ts=${timestamp} addr=${polyAddress} apiKey=…${creds.apiKey.slice(-6)} statusFilter=${statusFilter || "ALL"}`);
+    console.log(`[orders] user=${user.id} addr=${polyAddress} statusFilter=${statusFilter || "ALL"}`);
 
-    const res = await fetch(`${clobHost}${requestPath}`, {
-      method: "GET",
-      headers: {
-        "POLY_API_KEY": creds.apiKey,
-        "POLY_PASSPHRASE": creds.passphrase,
-        "POLY_TIMESTAMP": timestamp,
-        "POLY_SIGNATURE": signature,
-        "POLY_ADDRESS": polyAddress,
-        "Accept": "application/json",
-      },
-    });
+    let orders: any[];
 
-    const resBody = await res.text();
-    console.log(`[orders] user=${user.id} CLOB status=${res.status} bodyLen=${resBody.length} body=${resBody.substring(0, 500)}`);
-
-    if (!res.ok) {
-      return jsonResp({
-        ok: false,
-        error: `CLOB error (${res.status}): ${resBody.substring(0, 300)}`,
-      }, res.status);
+    if (!statusFilter || statusFilter === "ALL") {
+      // Fetch all states in parallel to get complete order history
+      const [live, matched, cancelled] = await Promise.all([
+        fetchClobOrders(clobHost, creds, polyAddress, "LIVE"),
+        fetchClobOrders(clobHost, creds, polyAddress, "MATCHED"),
+        fetchClobOrders(clobHost, creds, polyAddress, "CANCELLED"),
+      ]);
+      // Deduplicate by order id
+      const seen = new Set<string>();
+      orders = [];
+      for (const o of [...live, ...matched, ...cancelled]) {
+        const id = o.id || o.orderID || "";
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          orders.push(o);
+        }
+      }
+      console.log(`[orders] ALL: live=${live.length} matched=${matched.length} cancelled=${cancelled.length} deduped=${orders.length}`);
+    } else {
+      orders = await fetchClobOrders(clobHost, creds, polyAddress, statusFilter);
+      console.log(`[orders] ${statusFilter}: ${orders.length} orders`);
     }
-
-    let parsed;
-    try { parsed = JSON.parse(resBody); } catch { parsed = {}; }
-
-    // CLOB returns { data: [...], next_cursor, limit, count }
-    const orders = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : [];
-    console.log(`[orders] user=${user.id} returning ${orders.length} orders (raw count=${parsed?.count ?? "?"})`);
 
     return jsonResp({ ok: true, orders, rawCount: orders.length });
   } catch (err) {
